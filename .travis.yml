@@ -1,13 +1,23 @@
-language: node_js
-node_js:
-- 8
-os:
-- linux
-- osx
-install:
-- npm install --global esy@latest
-- esy install
+language: objective-c
+osx_image: xcode7.3
+before_install:
+  - brew update
+  - brew install opam
+  - opam init
+  - opam switch "$OCAML_VERSION"
+  - eval `opam config env`
+  - opam update
+  - opam install -y re
+before_script:
+  - opam pin add -y ReasonNativeProject .
 script:
-- esy build
-- esy ./_build/default/bin/Hello.exe
-- esy x Hello.exe
+  - make run
+  - git diff --exit-code
+env:
+  - OCAML_VERSION=4.02.3
+  - OCAML_VERSION=4.03.0
+  - OCAML_VERSION=4.04.0
+notifications:
+  email:
+    - yunxing@fb.com
+    - reason@cloudwalk.me

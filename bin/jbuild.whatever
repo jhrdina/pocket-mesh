@@ -1,6 +1,0 @@
-(jbuild_version 1)
-
-(executable
- ((name server2)
-  (public_name pocket-mesh-signal-server)
-  (libraries (lwt websocket-lwt websocket-lwt.cohttp))))

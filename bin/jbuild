@@ -1,0 +1,6 @@
+(jbuild_version 1)
+
+(executable
+ ((name DreamWSTest)
+  (public_name signal-server)
+  (libraries (reason_websocket lwt websocket-lwt))))

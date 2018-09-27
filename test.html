@@ -12,10 +12,10 @@
       }
 
       document.addEventListener("DOMContentLoaded", () => {
-        window.ws = new WebSocket('ws://localhost:9001');
+        window.ws = new WebSocket('ws://localhost:7777');
         ws.onmessage = (x) => {
           console.log(x.data);
-          sendshit();
+          // sendshit();
         };
       });
     </script>
