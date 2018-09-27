@@ -1,0 +1,26 @@
+{
+  "name": "pocket-mesh-signal-server",
+  "version": "0.1.0",
+  "description": "Signal Server for Pocket Mesh",
+  "license": "MIT",
+  "esy": {
+    "build": "refmterr dune build -p #{self.name}",
+    "NOTE": "Optional release Section. Customizes result of `esy release`",
+    "release": {
+      "releasedBinaries": [ "server" ],
+      "deleteFromBinaryRelease": [ "*esy_ocaml_*", "*refmterr-*", "ocaml-*" ]
+    }
+  },
+  "dependencies": {
+    "@esy-ocaml/reason": "*",
+    "@opam/dune": "*",
+    "@opam/lambda-term": "*",
+    "@opam/lwt": "*",
+    "@opam/websocket": "*",
+    "ocaml": "~4.6.0",
+    "refmterr": "*",
+    "reason-websocket": "jaredly/reason-websocket"
+  },
+  "resolutions": { "@esy-ocaml/esy-installer": "0.0.1", "@opam/re": "1.8.0" },
+  "devDependencies": { "@esy-ocaml/merlin": "*", "ocaml": "~4.6.0" }
+}

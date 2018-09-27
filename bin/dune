@@ -1,0 +1,4 @@
+(executable
+  (name server2)
+  (public_name server)
+  (libraries lib reason-websocket))
