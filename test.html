@@ -3,12 +3,23 @@
   <meta charset="utf-8">
 </head>
 <body>
-    <input id="input" />
+    <div>
+    <div>Any message</div>
+    <input id="input" size="40"/>
     <button onclick="sendshit()">Send</button>
+    </div>
+  <div>
+    <div>Specific messages</div>
+    <button onclick="sendOffer()">Offer</button>
+  </div>
     <div id='msg'></div>
     <script>
       function sendshit() {
         ws.send(document.querySelector('#input').value);
+      }
+
+      function sendOffer() {
+        ws.send("offer");
       }
 
       document.addEventListener("DOMContentLoaded", () => {

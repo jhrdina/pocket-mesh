@@ -51,32 +51,29 @@ let handler =
           )
         | "/ws" =>
           Lwt_io.eprintf("[PATH] /ws\n%!")
+          >>= (() => Cohttp_lwt.Body.drain_body(body))
           >>= (
             () =>
-              Cohttp_lwt.Body.drain_body(body)
-              >>= (
-                () =>
-                  Websocket_cohttp_lwt.upgrade_connection(req, fst(conn), f =>
-                    switch f.opcode {
-                    | Opcode.Close => Printf.eprintf("[RECV] CLOSE\n%!")
-                    | _ => Printf.eprintf("[RECV] %s\n%!", f.content)
-                    }
-                  )
-                  >>= (
-                    ((resp, body, frames_out_fn)) => {
-                      let msg = "Zdarec kliente";
-                      ignore(
-                        Lwt_io.eprintf("[SEND] %s\n%!", msg)
-                        >>= (
-                          () =>
-                            Lwt.wrap1(frames_out_fn) @@
-                            Some(Frame.create(~content=msg, ()))
-                        )
-                      );
-                      Lwt.return((resp, (body :> Cohttp_lwt.Body.t)));
-                    }
-                  )
+              Websocket_cohttp_lwt.upgrade_connection(req, fst(conn), f =>
+                switch f.opcode {
+                | Opcode.Close => Printf.eprintf("[RECV] CLOSE\n%!")
+                | _ => Printf.eprintf("[RECV] %s\n%!", f.content)
+                }
               )
+          )
+          >>= (
+            ((resp, body, frames_out_fn)) => {
+              let msg = "Zdarec kliente +ěščřžýáí";
+              ignore(
+                Lwt_io.eprintf("[SEND] %s\n%!", msg)
+                >>= (
+                  () =>
+                    Lwt.wrap1(frames_out_fn) @@
+                    Some(Frame.create(~content=msg, ()))
+                )
+              );
+              Lwt.return((resp, (body :> Cohttp_lwt.Body.t)));
+            }
           )
         | _ =>
           Lwt_io.eprintf("[PATH] Catch-all\n%!")

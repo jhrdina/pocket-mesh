@@ -1,7 +1,9 @@
-DreamWS.run(
+module WS = DreamWSCohttp;
+
+WS.run(
   ~port=7777,
   ~onConnection=socket => {
-    open DreamWS;
+    open WS;
     ignore(Socket.emit(socket, "asdf"));
     socket
     |> Socket.setOnMessage((from, msg) => {

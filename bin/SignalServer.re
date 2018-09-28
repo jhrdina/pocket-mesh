@@ -1,110 +1,139 @@
-open Lwt;
+module WS: DreamWSType.T = DreamWSCohttp;
 
-open Websocket_cohttp_lwt;
+module Fingerprint = String;
+/* module FingerprintMap = Map.Make(Fingerprint); */
+/* module FingerprintSet = Set.Make(Fingerprint); */
 
-let handler =
-    (
-      conn: (Conduit_lwt_unix.flow, Cohttp.Connection.t),
-      req: Cohttp_lwt_unix.Request.t,
-      body: Cohttp_lwt.Body.t
-    ) =>
-  Frame.(
-    Lwt_io.eprintf("[CONN] %s\n%!", Cohttp.Connection.to_string @@ snd(conn))
-    >>= (
-      (_) => {
-        let uri = Cohttp.Request.uri(req);
-        switch (Uri.path(uri)) {
-        | "/" =>
-          Lwt_io.eprintf("[PATH] /\n%!")
-          >>= (
-            () =>
-              Cohttp_lwt_unix.Server.respond_string(
-                ~status=`OK,
-                ~body=
-                  {|
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <script>
-            function sendshit() {
-              ws.send(document.querySelector('#input').value);
-            }
+type client = {
+  connection: WS.Socket.t,
+  isAuthenticated: bool,
+  protocolVersion: int,
+  /* <<FK>> */
+  fingerprint: Fingerprint.t,
+};
 
-            document.addEventListener("DOMContentLoaded", () => {
-              window.ws = new WebSocket('ws://localhost:7777/ws');
-              ws.onmessage = (x) => {
-                console.log(x.data);
-                sendshit();
-              };
-            });
-          </script>
-        </head>
-        <body>
-            <input id="input">
-            <button onclick="sendshit()">Send</button>
-            <div id='msg'></div>
-        </body>
-        </html>
-        |},
-                ()
-              )
-          )
-        | "/ws" =>
-          Lwt_io.eprintf("[PATH] /ws\n%!")
-          >>= (() => Cohttp_lwt.Body.drain_body(body))
-          >>= (
-            () =>
-              Websocket_cohttp_lwt.upgrade_connection(req, fst(conn), f =>
-                switch f.opcode {
-                | Opcode.Close => Printf.eprintf("[RECV] CLOSE\n%!")
-                | _ => Printf.eprintf("[RECV] %s\n%!", f.content)
-                }
-              )
-          )
-          >>= (
-            ((resp, body, frames_out_fn)) => {
-              let msg = "Zdarec kliente +ěščřžýáí";
-              ignore(
-                Lwt_io.eprintf("[SEND] %s\n%!", msg)
-                >>= (
-                  () =>
-                    Lwt.wrap1(frames_out_fn) @@
-                    Some(Frame.create(~content=msg, ()))
-                )
-              );
-              Lwt.return((resp, (body :> Cohttp_lwt.Body.t)));
-            }
-          )
-        | _ =>
-          Lwt_io.eprintf("[PATH] Catch-all\n%!")
-          >>= (
-            () =>
-              Cohttp_lwt_unix.Server.respond_string(
-                ~status=`Not_found,
-                ~body=
-                  Sexplib.Sexp.to_string_hum(Cohttp.Request.sexp_of_t(req)),
-                ()
-              )
-          )
-        };
-      }
-    )
+module PeerWatching = {
+  type t = {
+    /* <<PK>> */
+    watchedPeer: Fingerprint.t,
+    /* <<FK to activeConnections>>  */
+    watcherPeer: Fingerprint.t,
+  };
+  let compare = (a, b) => {
+    let watchedRes = String.compare(a.watchedPeer, b.watchedPeer);
+    if (watchedRes == 0) {
+      String.compare(a.watcherPeer, b.watcherPeer);
+    } else {
+      watchedRes;
+    };
+  };
+};
+module PeerWatchingSet = Set.Make(PeerWatching);
+
+type serverState = {
+  connectedPeers: Hashtbl.t(Fingerprint.t, client),
+  watcherToWatched: Hashtbl.t(Fingerprint.t, PeerWatchingSet.t),
+  watchedToWatchers: Hashtbl.t(Fingerprint.t, PeerWatchingSet.t),
+};
+
+let init = () => {
+  connectedPeers: Hashtbl.create(10),
+  watcherToWatched: Hashtbl.create(10),
+  watchedToWatchers: Hashtbl.create(10),
+};
+
+let getWatchedByWatcher = (state, watcher) =>
+  Hashtbl.find(state.watcherToWatched, watcher);
+
+let getWatchersByWatched = (state, watched) =>
+  Hashtbl.find(state.watchedToWatchers, watched);
+
+let addWatching = (state, watching: PeerWatching.t) => {
+  Hashtbl.replace(
+    state.watcherToWatched,
+    watching.watcherPeer,
+    Hashtbl.find(state.watcherToWatched, watching.watcherPeer)
+    |> PeerWatchingSet.add(watching),
   );
 
-let start_server = port => {
-  let conn_closed = ((ch, _)) =>
-    Printf.eprintf(
-      "[SERV] connection %s closed\n%!",
-      Sexplib.Sexp.to_string_hum(Conduit_lwt_unix.sexp_of_flow(ch))
-    );
-  Lwt_io.eprintf("[SERV] Listening for HTTP on port %d\n%!", port)
-  >>= (
-    () =>
-      Cohttp_lwt_unix.Server.create(
-        ~mode=`TCP(`Port(port)),
-        Cohttp_lwt_unix.Server.make(~callback=handler, ~conn_closed, ())
-      )
+  Hashtbl.replace(
+    state.watchedToWatchers,
+    watching.watchedPeer,
+    Hashtbl.find(state.watchedToWatchers, watching.watchedPeer)
+    |> PeerWatchingSet.add(watching),
   );
 };
 
-let () = Lwt_main.run(start_server(7777));
+let addPeer = (state, client) =>
+  Hashtbl.replace(state.connectedPeers, client.fingerprint, client);
+
+module Messages = {
+  type offer = {
+    src: string,
+    tg: string,
+    sdp: string,
+    signature: string,
+  };
+
+  type t =
+    | Login
+    | Offer(offer)
+    | Answer
+    | Logoff
+    | Unknown;
+
+  type clientToServer = t;
+  type serverToClient = t;
+
+  let toJSON =
+    fun
+    | Login => "login"
+    | Offer(_) => "offer"
+    | Answer => "answer"
+    | Logoff => "logoff"
+    | Unknown => "unknown";
+
+  let fromJSON =
+    fun
+    | "login" => Login
+    | "offer" => Offer({src: "", tg: "", sdp: "", signature: ""})
+    | "answer" => Answer
+    | "logoff" => Logoff
+    | _ => Unknown;
+};
+
+type effect =
+  | Emit(WS.Socket.t, Messages.t)
+  | Db(serverState);
+
+let handleMessage = (srcSocket, msgStr) => {
+  let message = Messages.fromJSON(msgStr);
+  switch (message) {
+  | Offer(_) =>
+    Printf.eprintf("Got offer... ooooo\n");
+    [Emit(srcSocket, Answer)];
+  | _ =>
+    Printf.eprintf("Unknown message\n");
+    [];
+  }
+};
+
+let state = ref(init());
+let handleEffect =
+  fun
+  | Emit(socket, msg) =>
+    ignore(WS.Socket.emit(socket, msg |> Messages.toJSON))
+  | Db(newState) => state := newState;
+
+WS.run(
+  ~port=7777,
+  ~onConnection=socket => {
+    open WS;
+    Printf.eprintf("Got a connection!\n");
+    socket
+    |> Socket.setOnMessage((_, msg) =>
+         handleMessage(socket, msg) |> List.iter(handleEffect)
+       )
+    |> Socket.setOnDisconnect(() => Printf.eprintf("Disconnected\n%!"));
+  },
+);
