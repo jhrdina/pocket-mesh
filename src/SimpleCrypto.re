@@ -1,28 +1,20 @@
 open WebapiExtra;
 
+type key = Dom.cryptoKey;
+type keyPair = {
+  fingerprint: string,
+  publicKey: key,
+  privateKey: key,
+};
+type jwk = Dom.jsonWebKey;
+
 let algorithm = "RSASSA-PKCS1-v1_5";
 let hash = "SHA-256";
-
-let arrayBufferToBase64 = buffer =>
-  Js.Typed_array.(
-    Uint8Array.fromBuffer(buffer)
-    |> Uint8Array.reduce(
-         (. binary, b) => binary ++ Js.String.fromCharCode(b),
-         "",
-       )
-    |> Webapi.Base64.btoa
-    |> Js.Promise.resolve
-  );
-
-/* let base64ToArrayBuffer = base64string => */
-
-let stringToArrayBuffer = str =>
-  Dom.TextEncoder.create()
-  ->Dom.TextEncoder.encode(str)
-  ->Js.Typed_array.Uint8Array.buffer;
+let subtle = Dom.crypto->Dom.Crypto.subtle;
 
 exception JWKMissingKeys(string);
 exception InternalError(string);
+
 /* https://tools.ietf.org/html/rfc7638 */
 let fingerprintForRSAJWK = (jwk: Dom.jsonWebKey) =>
   switch (jwk##e, jwk##kty, jwk##n) {
@@ -30,10 +22,10 @@ let fingerprintForRSAJWK = (jwk: Dom.jsonWebKey) =>
     switch (Js.Json.stringifyAny({"e": e, "kty": kty, "n": n})) {
     | Some(str) =>
       str
-      |> stringToArrayBuffer
+      |> SimpleEncoding.stringToArrayBuffer
       |> Dom.crypto->Dom.Crypto.subtle->Dom.SubtleCrypto.digest(hash)
-      |> Js.Promise.then_(digestArrayBuffer =>
-           Js.Promise.resolve(arrayBufferToBase64(digestArrayBuffer))
+      |> Js.Promise.then_(hashBuffer =>
+           Js.Promise.resolve(SimpleEncoding.arrayBufferToBase64(hashBuffer))
          )
     | None => Js.Promise.reject @@ InternalError("Stringify failed.")
     }
@@ -42,7 +34,19 @@ let fingerprintForRSAJWK = (jwk: Dom.jsonWebKey) =>
     JWKMissingKeys("JWK must contain all of the following keys: e, kty, n.")
   };
 
-let subtle = Dom.crypto->Dom.Crypto.subtle;
+let jwkToPublicKey = jwk =>
+  subtle
+  ->Dom.SubtleCrypto.importKey(
+      jwk,
+      Dom.RsaHashedImportParams.make(
+        ~name=algorithm,
+        ~hash=Dom.HashAlgorithmIdentifier.make(~name=hash),
+      ),
+      true,
+      [|`Verify|],
+    );
+
+let publicKeyToJwk = key => subtle->Dom.SubtleCrypto.exportKey(key);
 
 let generateKeyPair = () =>
   subtle
@@ -55,64 +59,37 @@ let generateKeyPair = () =>
       ),
       false,
       [|`Sign, `Verify|],
-    );
+    )
+  |> Js.Promise.then_(keyPair =>
+       publicKeyToJwk(keyPair->Dom.CryptoKeyPair.publicKey)
+       |> Js.Promise.then_(fingerprintForRSAJWK)
+       |> Js.Promise.then_(fingerprint =>
+            Js.Promise.resolve({
+              fingerprint,
+              publicKey: keyPair->Dom.CryptoKeyPair.publicKey,
+              privateKey: keyPair->Dom.CryptoKeyPair.privateKey,
+            })
+          )
+     );
 
 let sign = (privateKey, stringToSign) =>
   subtle
   ->Dom.SubtleCrypto.sign(
       algorithm,
       privateKey,
-      stringToArrayBuffer(stringToSign),
+      SimpleEncoding.stringToArrayBuffer(stringToSign),
     )
-  |> Js.Promise.then_(arrayBufferToBase64);
+  |> Js.Promise.then_(signatureBuffer =>
+       Js.Promise.resolve(
+         SimpleEncoding.arrayBufferToBase64(signatureBuffer),
+       )
+     );
 
-let verify = (publicKey, signature, strToVerify) =>
+let verify = (publicKey, signatureBase64, strToVerify) =>
   subtle
   ->Dom.SubtleCrypto.verify(
       algorithm,
       publicKey,
-      signature,
-      stringToArrayBuffer(strToVerify),
+      SimpleEncoding.base64ToArrayBuffer(signatureBase64),
+      SimpleEncoding.stringToArrayBuffer(strToVerify),
     );
-
-let run = () => {
-  let thenl = cb =>
-    Js.Promise.then_(v => {
-      Js.log(v);
-      cb(v);
-    });
-  ();
-  /* |> then_(keyPair =>
-          subtle
-          |> then_(signature =>
-
-             )
-          |> thenl(_ =>
-               fingerprintForRSAJWK(
-                 Dom.JsonWebKey.create(~e="e", ~n="n", ~kty="kty", ()),
-               )
-             )
-          |> thenl(_ =>
-               subtle
-               ->Dom.SubtleCrypto.exportKey(keyPair->Dom.CryptoKeyPair.publicKey)
-             )
-        )
-     |> thenl(jwk =>
-          fingerprintForRSAJWK(jwk)
-          |> thenl(_ =>
-               subtle
-               ->Dom.SubtleCrypto.importKey(
-                   jwk,
-                   Dom.RsaHashedImportParams.make(
-                     ~name=algorithm,
-                     ~hash=Dom.HashAlgorithmIdentifier.make(~name=hash),
-                   ),
-                   true,
-                   [|`Verify|],
-                 )
-             )
-        )
-     |> thenl(subtle->Dom.SubtleCrypto.exportKey)
-     |> thenl(fingerprintForRSAJWK)
-     |> thenl(Js.Promise.resolve); */
-};
