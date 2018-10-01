@@ -3,4 +3,3 @@ let thenl = cb =>
     Js.log(v);
     cb(v);
   });
-();

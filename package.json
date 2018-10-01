@@ -7,7 +7,8 @@
     "build": "bsb -make-world",
     "start": "bsb -make-world -w",
     "clean": "bsb -clean-world",
-    "pack": "webpack example/example.bs.js -o lib/app.js --mode development"
+    "pack": "webpack example/example.bs.js -o lib/app.js --mode development",
+    "prepare": "npm link bs-platform"
   },
   "repository": {
     "type": "git",
@@ -23,7 +24,6 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "bs-platform": "^4.0.2",
     "bs-webapi": "^0.12.2",
     "webpack": "^4.20.2",
     "webpack-cli": "^3.1.1"
