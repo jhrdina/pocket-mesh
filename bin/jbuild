@@ -3,4 +3,4 @@
 (executable
  ((name SignalServer)
   (public_name signal-server)
-  (libraries (reason_websocket lwt websocket-lwt))))
+  (libraries (reason_websocket lwt websocket-lwt yojson))))

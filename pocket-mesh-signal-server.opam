@@ -16,8 +16,9 @@ build: [
 ]
 depends: [
   "jbuilder" {build}
-  "reason"  {= "3.0.4"}
+  "reason"  {>= "3.2.0"}
   "re"
   "websocket-lwt"
+  "yojson"
 ]
 available: [ ocaml-version >= "4.02" & ocaml-version < "4.07" ]

@@ -1,34 +1,77 @@
 <html>
+
 <head>
   <meta charset="utf-8">
 </head>
+
 <body>
-    <div>
+  <div>
     <div>Any message</div>
-    <input id="input" size="40"/>
+    <input id="input" size="40" />
     <button onclick="sendshit()">Send</button>
-    </div>
+  </div>
   <div>
     <div>Specific messages</div>
-    <button onclick="sendOffer()">Offer</button>
+    <div>
+      <input id="src" size="5" placeholder="src" />
+      <input id="tg" size="5" placeholder="tg" />
+    </div>
+    <div>
+      <button onclick="sendLogin()">Login</button>
+      <button onclick="sendOffer()">Offer</button>
+      <button onclick="sendAnswer()">Answer</button>
+    </div>
   </div>
-    <div id='msg'></div>
-    <script>
-      function sendshit() {
-        ws.send(document.querySelector('#input').value);
-      }
+  <div id='msg'></div>
+  <script>
+    function send(type, payload) {
+      ws.send(JSON.stringify(Object.assign({}, payload, {
+        version: 1,
+        type: type
+      })));
+    }
 
-      function sendOffer() {
-        ws.send("offer");
-      }
+    function sendshit() {
+      ws.send(document.querySelector('#input').value);
+    }
 
-      document.addEventListener("DOMContentLoaded", () => {
-        window.ws = new WebSocket('ws://localhost:7777');
-        ws.onmessage = (x) => {
-          console.log(x.data);
-          // sendshit();
-        };
-      });
-    </script>
+    function sendLogin() {
+      send("login", { src: srcEl.value, signature: "", watch: [] });
+    }
+
+    function sendOffer() {
+      send("offer");
+    }
+
+    function sendAnswer() {
+      send("answer");
+    }
+
+    function connect() {
+      window.ws = new WebSocket('ws://localhost:7777');
+      ws.onopen = () => {
+        console.clear();
+        console.log("Connected :)");
+      }
+      ws.onmessage = (x) => {
+        console.log(x.data);
+        // sendshit();
+      };
+      ws.onerror = (e) => { }
+      ws.onclose = () => {
+        console.log("Disconnected... :(");
+        window.ws = null;
+        setTimeout(connect, 3000);
+      };
+    }
+
+    document.addEventListener("DOMContentLoaded", () => {
+      window.srcEl = document.querySelector('#src');
+      window.tgEl = document.querySelector('#tg')
+
+      connect()
+    });
+  </script>
 </body>
+
 </html>
