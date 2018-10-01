@@ -1,4 +1,5 @@
 module WS: DreamWSType.T = DreamWSCohttp;
+open Rex_json;
 
 let t = BlackTea.Cmd.none;
 
@@ -69,12 +70,17 @@ let addWatching = (state, watching: PeerWatching.t) => {
 let addPeer = (state, client) =>
   Hashtbl.replace(state.connectedPeers, client.fingerprint, client);
 
+let removePeer = (state, fingerprint) =>
+  Hashtbl.remove(state.connectedPeers, fingerprint);
+
 let findPeer = (state, fingerprint) =>
   Hashtbl.find_opt(state.connectedPeers, fingerprint);
 
 let latestVersion = 1;
 
 module Messages = {
+  open Json.Infix;
+
   type offerOrAnswer = {
     src: string,
     tg: string,
@@ -83,8 +89,12 @@ module Messages = {
   };
   type login = {
     src: string,
-    signature: string,
     watch: list(string),
+    signature: string,
+  };
+  type logoff = {
+    src: string,
+    signature: string,
   };
   type error =
     | TargetNotOnline
@@ -94,7 +104,8 @@ module Messages = {
     | Offer(offerOrAnswer)
     | Answer(offerOrAnswer)
     | Error(error)
-    | Logoff
+    | Logoff(logoff)
+    | Ok
     | Unknown;
 
   type clientToServer = t;
@@ -119,108 +130,130 @@ module Messages = {
     let keyVal = (key, value) => str(key) ++ ":" ++ value;
     let num = value => Printf.sprintf("%d", value);
   };
-  let encodeErrorMsg = error =>
-    Yojson.Basic.(
-      to_string(
-        `Assoc([
-          ("version", `Int(latestVersion)),
-          ("type", `String("error")),
-          ...switch (error) {
-             | TargetNotOnline => [("code", `String("TargetNotOnline"))]
-             | InvalidMessage(explanation) => [
-                 ("code", `String("InvalidMessage")),
-                 ("explanation", `String(explanation)),
-               ]
-             },
-        ]),
-      )
-    );
 
   let toJSON =
     fun
-    | Login(_msg) => ""
-    | Offer(msg) =>
-      DumbJson.(
-        obj([
-          keyVal("type", str("offer")),
-          keyVal("src", str(msg.src)),
-          keyVal("watch", str(msg.tg)),
-          keyVal("sdp", str(msg.sdp)),
-          keyVal("signature", str(msg.signature)),
-        ])
+    | Offer(msg) as v
+    | Answer(msg) as v => {
+        let typeString =
+          switch (v) {
+          | Offer(_) => "offer"
+          | _ => "answer"
+          };
+        Json.(
+          stringify(
+            Object([
+              ("type", String(typeString)),
+              ("src", String(msg.src)),
+              ("tg", String(msg.tg)),
+              ("sdp", String(msg.sdp)),
+              ("signature", String(msg.signature)),
+            ]),
+          )
+        );
+      }
+    | Error(error) =>
+      Json.(
+        stringify(
+          Object([
+            ("type", String("error")),
+            ...switch (error) {
+               | TargetNotOnline => [("code", String("TargetNotOnline"))]
+               | InvalidMessage(explanation) => [
+                   ("code", String("InvalidMessage")),
+                   ("explanation", String(explanation)),
+                 ]
+               },
+          ]),
+        )
       )
-    | Answer(msg) =>
-      DumbJson.(
-        obj([
-          keyVal("type", str("answer")),
-          keyVal("src", str(msg.src)),
-          keyVal("tg", str(msg.tg)),
-          keyVal("sdp", str(msg.sdp)),
-          keyVal("signature", str(msg.signature)),
-        ])
-      )
-    | Logoff => "logoff"
-    | Error(error) => encodeErrorMsg(error)
-    | Unknown => "unknown";
-  type parsingResult =
-    | Ok(t)
+    | Ok => Json.(stringify(Object([("type", String("ok"))])))
+    | _ => "";
+  type parsingResult('a) =
+    | Ok('a)
     | Error(string);
 
-  let decodeLoginMsg = json =>
-    Yojson.Basic.Util.(
-      try (
-        Ok(
-          Login({
-            src: json |> member("src") |> to_string,
-            signature: json |> member("signature") |> to_string,
-            watch: json |> member("watch") |> to_list |> filter_string,
-          }),
-        )
-      ) {
-      | Type_error(msg, _) => Error(msg)
-      }
+  /* f = i => i |> Json.string */
+  let decodeList = (f, json) =>
+    Json.Infix.(
+      json
+      |> Json.array
+      |?> (
+        items =>
+          List.fold_right(
+            (itemJson, acc) =>
+              switch (f(itemJson), acc) {
+              | (Some(i), Some(list)) => Some([i, ...list])
+              | _ => None
+              },
+            items,
+            Some([]),
+          )
+      )
     );
+  let decodeLoginMsg = json =>
+    switch (
+      json |> Json.get("src") |?> Json.string,
+      json |> Json.get("signature") |?> Json.string,
+      json |> Json.get("watch") |?> decodeList(i => i |> Json.string),
+    ) {
+    | (Some(src), Some(signature), Some(watch)) =>
+      Ok(Login({src, signature, watch}))
+    | _ => Error("Login message invalid format")
+    };
+  let decodeLogoffMsg = json =>
+    switch (
+      json |> Json.get("src") |?> Json.string,
+      json |> Json.get("signature") |?> Json.string,
+    ) {
+    | (Some(src), Some(signature)) => Ok(Logoff({src, signature}))
+    | _ => Error("Logoff message invalid format")
+    };
+
+  let decodeOfferOrAnswer = json =>
+    switch (
+      json |> Json.get("src") |?> Json.string,
+      json |> Json.get("tg") |?> Json.string,
+      json |> Json.get("sdp") |?> Json.string,
+      json |> Json.get("signature") |?> Json.string,
+    ) {
+    | (Some(src), Some(tg), Some(sdp), Some(signature)) =>
+      Ok({src, tg, sdp, signature})
+    | _ => Error("Offer message invalid format")
+    };
 
   let fromJSON = str => {
     let jsonOption =
-      switch (Yojson.Basic.from_string(str)) {
+      switch (Json.parse(str)) {
       | json => Some(json)
       | exception _ => None
       };
-    Yojson.Basic.Util.(
+    Json.Infix.(
       switch (jsonOption) {
       | Some(json) =>
         let version =
-          switch (json |> member("version")) {
-          | `Null => Some(latestVersion)
-          | _ as v => v |> to_int_option
+          switch (json |> Json.get("version")) {
+          | None => Some(latestVersion)
+          | Some(v) => v |> Json.number |?>> int_of_float
           };
         switch (version) {
         | Some(_ver) =>
           /* TODO: Support different versions */
-          switch (json |> member("type") |> to_string_option) {
+          switch (json |> Json.get("type") |?> Json.string) {
           | Some(typeStr) =>
             switch (typeStr) {
             | "login" => decodeLoginMsg(json)
             | "offer" =>
-              Ok(
-                Offer({
-                  src: "aaa",
-                  tg: "bbb",
-                  sdp: "sdp_offer",
-                  signature: "",
-                }),
-              )
+              switch (decodeOfferOrAnswer(json)) {
+              | Ok(offerPayload) => Ok(Offer(offerPayload))
+              | Error(_) as e => e
+              }
             | "answer" =>
-              Ok(
-                Answer({
-                  src: "bbb",
-                  tg: "aaa",
-                  sdp: "sdp_answer",
-                  signature: "",
-                }),
-              )
-            | "logoff" => Ok(Logoff)
+              switch (decodeOfferOrAnswer(json)) {
+              | Ok(answerPayload) => Ok(Answer(answerPayload))
+              | Error(_) as e => e
+              }
+            | "logoff" => decodeLogoffMsg(json)
             | _ => Error("Type: Unknown message type.")
             }
           | None => Error("Type: Missing or not string")
@@ -243,6 +276,7 @@ let handleMessage = (srcSocket, msgStr, state) =>
   | Ok(message) =>
     switch (message) {
     | Login(msg) =>
+      /* TODO: Check fingerprint */
       addPeer(
         state,
         {
@@ -252,14 +286,19 @@ let handleMessage = (srcSocket, msgStr, state) =>
           fingerprint: msg.src,
         },
       );
-      [];
+      [Emit(srcSocket, Ok)];
     | Offer(payload) as msg
     | Answer(payload) as msg =>
+      /* TODO: Check fingerprint */
       Printf.eprintf("Got offer... ooooo\n");
       switch (findPeer(state, payload.tg)) {
       | Some(tgClient) => [Emit(tgClient.socket, msg)]
       | None => [Emit(srcSocket, Error(TargetNotOnline))]
       };
+    | Logoff(msg) =>
+      /* TODO: Check fingerprint */
+      removePeer(state, msg.src);
+      [Emit(srcSocket, Ok)];
     | _ =>
       Printf.eprintf("Unknown message\n");
       [];

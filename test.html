@@ -20,6 +20,7 @@
       <button onclick="sendLogin()">Login</button>
       <button onclick="sendOffer()">Offer</button>
       <button onclick="sendAnswer()">Answer</button>
+      <button onclick="sendLogoff()">Logoff</button>
     </div>
   </div>
   <div id='msg'></div>
@@ -39,12 +40,16 @@
       send("login", { src: srcEl.value, signature: "", watch: [] });
     }
 
+    function sendLogoff() {
+      send("logoff", { src: srcEl.value, signature: "", watch: [] });
+    }
+
     function sendOffer() {
-      send("offer");
+      send("offer", { src: srcEl.value, tg: tgEl.value, sdp: "", signature: "" });
     }
 
     function sendAnswer() {
-      send("answer");
+      send("answer", { src: srcEl.value, tg: tgEl.value, sdp: "", signature: "" });
     }
 
     function connect() {
