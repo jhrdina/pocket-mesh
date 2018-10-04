@@ -1,1 +1,1 @@
-../../../bs-black-tea/bs-black-tea/src/StoreRe.re
+../../../bs-black-tea/bs-black-tea/src/internals/StoreRe.re
