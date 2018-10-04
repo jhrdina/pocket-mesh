@@ -3,7 +3,7 @@
 set -x
 
 function f {
-  newName=`printf "$1" | sed 's/-/_/g'`
+  newName=`printf "$2" | sed 's/-/_/g'`
 
   if [ ! -d "$newName" ]; then
     mkdir "$newName"
@@ -13,7 +13,7 @@ function f {
   if [ ! -f jbuild ]; then
     echo "(library ((name $newName)))" > jbuild
   fi
-  find "../node_modules/$1/src/" \
+  find "../$1/$2/src/" \
     -type f \
     '(' \
     -name '*.re' -or \
@@ -25,5 +25,19 @@ function f {
   cd ..
 }
 
-f rex-json
-f reason-websocket
+# f node_modules rex-json
+# f node_modules reason-websocket
+#f '../../bs-black-tea' bs-black-tea
+
+# cd bin/black_tea_internals
+cd bin
+find "../../../bs-black-tea/bs-black-tea/src/internals" \
+  -type f \
+  '(' \
+  -name '*.re' -or \
+  -name '*.rei' -or \
+  -name '*.ml' -or \
+  -name '*.mli' \
+  ')' \
+  -exec ln -s {} \;
+cd ..
