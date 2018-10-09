@@ -1,8 +1,9 @@
-# Basic Reason Template
+# Pocket Mesh Peer
 
-Hello! This project allows you to quickly get started with Reason and BuckleScript. If you wanted a more sophisticated version, try the `react` template (`bsb -theme react -init .`).
+Peer library for Pocket Mesh framework written in ReasonML and compiled to JavaScript using BuckleScript.
 
 # Build
+
 ```
 npm run build
 ```
@@ -13,6 +14,18 @@ npm run build
 npm run start
 ```
 
+# Run Examples
+
+Examples are compiled during `npm run build`.
+
+Create a single `app.js` file for browser using
+
+```
+npm run pack
+```
+
+Open `example/example.html` in your web browser. You don't need a running web server.
 
 # Editor
+
 If you use `vscode`, Press `Windows + Shift + B` it will build automatically
