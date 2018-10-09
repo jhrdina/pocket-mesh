@@ -44,25 +44,77 @@ let init = () => {
 };
 
 let getWatchedByWatcher = (state, watcher) =>
-  Hashtbl.find(state.watcherToWatched, watcher);
+  Hashtbl.find_opt(state.watcherToWatched, watcher);
 
 let getWatchersByWatched = (state, watched) =>
-  Hashtbl.find(state.watchedToWatchers, watched);
+  Hashtbl.find_opt(state.watchedToWatchers, watched);
 
 let addWatching = (state, watching: PeerWatching.t) => {
   Hashtbl.replace(
     state.watcherToWatched,
     watching.watcherPeer,
-    Hashtbl.find(state.watcherToWatched, watching.watcherPeer)
+    /* TODO: Eliminate this check */
+    (
+      switch (Hashtbl.find_opt(state.watcherToWatched, watching.watcherPeer)) {
+      | Some(watchingSet) => watchingSet
+      | None => PeerWatchingSet.empty
+      }
+    )
     |> PeerWatchingSet.add(watching),
   );
+  /* TODO: remove duplicate code */
   Hashtbl.replace(
     state.watchedToWatchers,
     watching.watchedPeer,
-    Hashtbl.find(state.watchedToWatchers, watching.watchedPeer)
+    /* TODO: Eliminate this check */
+    (
+      switch (Hashtbl.find_opt(state.watchedToWatchers, watching.watchedPeer)) {
+      | Some(watchingSet) => watchingSet
+      | None => PeerWatchingSet.empty
+      }
+    )
     |> PeerWatchingSet.add(watching),
   );
 };
+
+let removeWatching = (state, watching: PeerWatching.t) => {
+  let newWatcherToWatched =
+    Hashtbl.find(state.watcherToWatched, watching.watcherPeer)
+    |> PeerWatchingSet.remove(watching);
+  if (newWatcherToWatched |> PeerWatchingSet.is_empty) {
+    Hashtbl.remove(state.watcherToWatched, watching.watcherPeer);
+  } else {
+    Hashtbl.replace(
+      state.watcherToWatched,
+      watching.watcherPeer,
+      newWatcherToWatched,
+    );
+  };
+
+  /* TODO: Remove duplicate code */
+  let newWatchedToWatcher =
+    Hashtbl.find(state.watchedToWatchers, watching.watchedPeer)
+    |> PeerWatchingSet.remove(watching);
+  if (newWatchedToWatcher |> PeerWatchingSet.is_empty) {
+    Hashtbl.remove(state.watchedToWatchers, watching.watchedPeer);
+  } else {
+    Hashtbl.replace(
+      state.watchedToWatchers,
+      watching.watchedPeer,
+      newWatchedToWatcher,
+    );
+  };
+};
+
+let removeAllWatchings = (state, watcher) =>
+  switch (getWatchedByWatcher(state, watcher)) {
+  | Some(watchedSet) =>
+    watchedSet |> PeerWatchingSet.iter(removeWatching(state))
+  | None =>
+    Printf.eprintf(
+      "Internal error: trying to remove watchings of watcher that doesn't have record in watcherToWatched.",
+    )
+  };
 
 let addPeer = (state, client) =>
   Hashtbl.replace(state.connectedPeers, client.fingerprint, client);
@@ -83,17 +135,60 @@ let handleMessage = (srcSocket, msgStr, state) =>
   | Ok(message) =>
     switch (message) {
     | Login(msg) =>
-      /* TODO: Check fingerprint */
+      /* TODO: Check signature */
       addPeer(
         state,
         {
           socket: srcSocket,
-          isAuthenticated: false, /* TODO */
-          protocolVersion: 1, /* TODO */
+          /* TODO: Check signature */
+          isAuthenticated: false,
+          /* TODO: Support multiple protocol versions */
+          protocolVersion: 1,
           fingerprint: msg.src,
         },
       );
-      [Emit(srcSocket, Ok)];
+      /* Add my watches */
+      msg.watch
+      |> List.iter(peerId =>
+           addWatching(state, {watcherPeer: msg.src, watchedPeer: peerId})
+         );
+      /* Populate states of peers I'm interested in */
+      let onlinePeers =
+        msg.watch
+        |> List.filter(peerId =>
+             switch (findPeer(state, peerId)) {
+             | Some(_) => true
+             | None => false
+             }
+           );
+      /* Notify others that are interested in my arrival */
+      let notifications =
+        switch (getWatchersByWatched(state, msg.src)) {
+        | Some(watchings) =>
+          PeerWatchingSet.fold(
+            ({PeerWatching.watcherPeer, watchedPeer: _}, acc) =>
+              switch (findPeer(state, watcherPeer)) {
+              | Some(peer) => [
+                  Emit(
+                    peer.socket,
+                    WatchedPeersChanged([WentOnline(msg.src)]),
+                  ),
+                  ...acc,
+                ]
+              | None =>
+                Printf.eprintf(
+                  "Internal error: found a watching of watcher %s who is not online though.",
+                  watcherPeer,
+                );
+                acc;
+              },
+            watchings,
+            [],
+          )
+        | None => []
+        };
+
+      [Emit(srcSocket, Ok(onlinePeers)), ...notifications];
     | Offer(payload) as msg
     | Answer(payload) as msg =>
       /* TODO: Check fingerprint */
@@ -105,7 +200,8 @@ let handleMessage = (srcSocket, msgStr, state) =>
     | Logoff(msg) =>
       /* TODO: Check fingerprint */
       removePeer(state, msg.src);
-      [Emit(srcSocket, Ok)];
+      [];
+    /* [Emit(srcSocket, Ok)]; */
     | _ =>
       Printf.eprintf("Unknown message\n");
       [];
