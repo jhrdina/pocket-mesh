@@ -1,27 +1,20 @@
-let simpleCryptoDemo = () => {
-  let strToSign = "Pleeeee";
-  let then_ = Js.Promise.then_;
-  let thenl = cb =>
-    Js.Promise.then_(v => {
-      Js.log(v);
-      cb(v);
-    });
+open Webapi;
+module type Demo = {let run: unit => unit;};
 
-  SimpleCrypto.generateKeyPair()
-  |> then_(keyPair =>
-       SimpleCrypto.sign(keyPair.SimpleCrypto.privateKey, strToSign)
-       |> thenl(signature =>
-            SimpleCrypto.verify(keyPair.publicKey, signature, "hasdf")
-          )
-       |> thenl(_ => SimpleCrypto.publicKeyToJwk(keyPair.publicKey))
-     )
-  |> thenl(jwk =>
-       SimpleCrypto.fingerprintForRSAJWK(jwk)
-       |> thenl(_ => SimpleCrypto.jwkToPublicKey(jwk))
-     )
-  |> thenl(SimpleCrypto.publicKeyToJwk)
-  |> thenl(SimpleCrypto.fingerprintForRSAJWK)
-  |> thenl(_ => Js.Promise.resolve());
-};
+/* ========================================== */
 
-simpleCryptoDemo();
+let demos: list((string, module Demo)) = [
+  ("simple-crypto-example-btn", (module SimpleCryptoDemo)),
+  ("store-example-btn", (module StoreDemo)),
+];
+
+/* ========================================== */
+
+let regDemo: (string, (module Demo)) => unit =
+  (id, (module D)) =>
+    switch (Dom.document |> Dom.Document.getElementById(id)) {
+    | Some(btn) => btn |> Dom.Element.addClickEventListener(_ => D.run())
+    | None => Js.log("Demo button with ID " ++ id ++ " not found")
+    };
+
+demos |> List.iter(((id, demoModule)) => regDemo(id, demoModule));

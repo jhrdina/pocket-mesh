@@ -5,6 +5,8 @@ type keyPair = {
   privateKey: key,
 };
 type jwk;
+let jwkToString: jwk => string;
+let stringToJwk: string => jwk;
 
 exception JWKMissingKeys(string);
 exception InternalError(string);

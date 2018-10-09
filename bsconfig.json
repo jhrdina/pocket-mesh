@@ -13,7 +13,13 @@
     "in-source": true
   },
   "suffix": ".bs.js",
-  "bs-dependencies": ["bs-webapi", "bs-webapi-extra"],
+  "bs-dependencies": [
+    "bs-webapi",
+    "bs-webapi-extra",
+    "bs-black-tea",
+    "bs-automerge",
+    "rex-json"
+  ],
   "warnings": {
     "error": "+101"
   },

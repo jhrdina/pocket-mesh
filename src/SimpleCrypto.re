@@ -48,6 +48,14 @@ let jwkToPublicKey = jwk =>
 
 let publicKeyToJwk = key => subtle->Dom.SubtleCrypto.exportKey(key);
 
+let jwkToString = jwk =>
+  switch (jwk |> Js.Json.stringifyAny) {
+  | Some(str) => str
+  | None => ""
+  };
+
+let stringToJwk: string => jwk = [%bs.raw str => "return JSON.parse(str);"];
+
 let generateKeyPair = () =>
   subtle
   ->Dom.SubtleCrypto.generateKeyPair(
