@@ -48,6 +48,7 @@ type signalServerState =
   | NoNetwork;
 
 type hasIdentity = {
+  db: IDBCmds.t,
   thisPeer: ThisPeer.t,
   signalServerState,
   peerGroups: list(peerGroup),
@@ -55,5 +56,6 @@ type hasIdentity = {
 };
 
 type rootState =
-  | LoadingIdentity
+  | OpeningDB
+  | LoadingIdentity(IDBCmds.t)
   | HasIdentity(hasIdentity);

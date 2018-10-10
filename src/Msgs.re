@@ -1,5 +1,7 @@
 [@bs.deriving accessors]
 type t =
+  | OpenDbSuccess(IDBCmds.t)
+  | LoadIdentityFromDBSuccess(option(ThisPeer.t))
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | LogMyPublicKey(SimpleCrypto.jwk)
   | AddPeerToGroup(string, string)

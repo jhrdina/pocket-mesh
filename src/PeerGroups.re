@@ -1,6 +1,6 @@
 type t = list(Types.peerGroup);
 
-let empty = () => [];
+let empty = [];
 
 let addPeerGroup = (peerGroup, t) => [peerGroup, ...t];
 let getFirstId: t => option(string) =

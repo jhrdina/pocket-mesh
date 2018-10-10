@@ -26,9 +26,22 @@ module Subs = {
 
 let init: unit => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
   () => (
-    LoadingIdentity,
-    CryptoCmds.generateKeyPair(Msgs.myKeyPairGenSuccess, _ => Msgs.noop),
+    OpeningDB,
+    IDBCmds.open_("pocketMesh", "all", Msgs.openDbSuccess, _ => Msgs.noop),
   );
+
+let createDefaultPeerGroups = myId =>
+  PeerGroups.empty
+  |> PeerGroups.addPeerGroup(
+       PeerGroup.make("aaa", myId)
+       |> PeerGroup.addPeer({
+            id: myId,
+            permissions: {
+              content: ReadWrite,
+              membersList: ReadWrite,
+            },
+          }),
+     );
 
 let update:
   (Types.rootState, Msgs.t) => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
@@ -37,8 +50,58 @@ let update:
     /********/
     /* Init */
     /********/
-
-    | MyKeyPairGenSuccess(keyPair) => {
+    | OpenDbSuccess(db) => (
+        LoadingIdentity(db),
+        db
+        |> IDBCmds.getKey("thisPeer", Msgs.loadIdentityFromDBSuccess, _ =>
+             Msgs.noop
+           ),
+      )
+    | LoadIdentityFromDBSuccess(maybeThisPeer) =>
+      switch (model) {
+      | LoadingIdentity(db) =>
+        switch (maybeThisPeer) {
+        | Some(thisPeer) => (
+            HasIdentity({
+              db,
+              thisPeer,
+              signalServerState: Connecting,
+              /* TODO: Also load these from DB */
+              peerGroups: createDefaultPeerGroups(thisPeer.id),
+              /* TODO: Also load these from DB */
+              peers: Peers.empty,
+            }),
+            /* TODO: Remove duplicate code */
+            Cmd.batch([
+              SignalServerCmds.connect(
+                defaultSignalServerUrl,
+                thisPeer,
+                Msgs.connectToSignalServerSuccess,
+                Msgs.signalServerMessage,
+                () =>
+                Msgs.noop
+              ),
+              /* DEBUG */
+              Cmds.log("My ID: " ++ thisPeer.id),
+              CryptoCmds.exportPublicKey(
+                thisPeer.publicKey, Msgs.logMyPublicKey, _ =>
+                Msgs.noop
+              ),
+            ]),
+          )
+        | None => (
+            model,
+            CryptoCmds.generateKeyPair(Msgs.myKeyPairGenSuccess, _ =>
+              Msgs.noop
+            ),
+          )
+        }
+      | OpeningDB
+      | HasIdentity(_) => (model, Cmds.none)
+      }
+    | MyKeyPairGenSuccess(keyPair) =>
+      switch (model) {
+      | LoadingIdentity(db) =>
         let thisPeer = {
           ThisPeer.id: keyPair.fingerprint,
           publicKey: keyPair.publicKey,
@@ -46,20 +109,10 @@ let update:
         };
         (
           HasIdentity({
+            db,
             thisPeer,
             signalServerState: Connecting,
-            peerGroups:
-              PeerGroups.empty()
-              |> PeerGroups.addPeerGroup(
-                   PeerGroup.make("aaa", keyPair.fingerprint)
-                   |> PeerGroup.addPeer({
-                        id: keyPair.fingerprint,
-                        permissions: {
-                          content: ReadWrite,
-                          membersList: ReadWrite,
-                        },
-                      }),
-                 ),
+            peerGroups: createDefaultPeerGroups(keyPair.fingerprint),
             peers: Peers.empty,
           }),
           Cmd.batch([
@@ -71,6 +124,13 @@ let update:
               () =>
               Msgs.noop
             ),
+            db
+            |> IDBCmds.setKey(
+                 "thisPeer",
+                 thisPeer,
+                 _ => Msgs.noop,
+                 _ => Msgs.noop,
+               ),
             /* DEBUG */
             Cmds.log("My ID: " ++ keyPair.fingerprint),
             CryptoCmds.exportPublicKey(
@@ -79,6 +139,8 @@ let update:
             ),
           ]),
         );
+      | OpeningDB
+      | HasIdentity(_) => (model, Cmds.none)
       }
 
     /*****************************************/
@@ -172,7 +234,8 @@ let update:
             Cmds.none;
           },
         );
-      | LoadingIdentity => (model, Cmds.none)
+      | OpeningDB
+      | LoadingIdentity(_) => (model, Cmds.none)
       }
 
     | ConnectToSignalServerSuccess(connection) => (
@@ -182,7 +245,8 @@ let update:
             ...stateWithId,
             signalServerState: SigningIn(connection),
           })
-        | LoadingIdentity => model
+        | OpeningDB
+        | LoadingIdentity(_) => model
         },
         Cmds.none,
       )
@@ -279,7 +343,8 @@ let update:
           }
         | _ => (model, Cmds.log("Received unhandled Signal message"))
         }
-      | LoadingIdentity => (model, Cmds.none)
+      | OpeningDB
+      | LoadingIdentity(_) => (model, Cmds.none)
       }
 
     | RtcAnswerReady(_rtcConn, sdp, initiatorId) =>
@@ -305,7 +370,8 @@ let update:
         | NoNetwork => (model, Cmds.none)
         }
 
-      | LoadingIdentity => (model, Cmds.none)
+      | OpeningDB
+      | LoadingIdentity(_) => (model, Cmds.none)
       }
 
     | RtcOfferReady(rtcConn, sdp, _acceptorId) =>
@@ -349,7 +415,8 @@ let update:
         | NoNetwork => (model, Cmds.none)
         }
 
-      | LoadingIdentity => (model, Cmds.none)
+      | OpeningDB
+      | LoadingIdentity(_) => (model, Cmds.none)
       }
 
     | RtcConnected(rtcConn, peerId) =>
@@ -378,7 +445,8 @@ let update:
             ]),
           )
         }
-      | LoadingIdentity => (model, Cmds.none)
+      | OpeningDB
+      | LoadingIdentity(_) => (model, Cmds.none)
       }
 
     | RtcGotData(_rtcConn, data) => (
@@ -414,7 +482,8 @@ let update:
           }
         | None => (model, Cmds.log("Cannot find public key for peer."))
         }
-      | LoadingIdentity => (model, Cmds.none)
+      | OpeningDB
+      | LoadingIdentity(_) => (model, Cmds.none)
       }
     | Noop => (model, Cmds.none);
 
@@ -441,5 +510,6 @@ open Types;
 let getMyId = model =>
   switch (model) {
   | HasIdentity(state) => Some(state.thisPeer.id)
-  | LoadingIdentity => None
+  | OpeningDB
+  | LoadingIdentity(_) => None
   };
