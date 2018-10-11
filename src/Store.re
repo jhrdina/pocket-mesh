@@ -1,5 +1,4 @@
 open BlackTea;
-open Collections;
 
 /* Constants */
 
@@ -173,7 +172,7 @@ let update:
                 )
               | Connected(_conn, _onlinePeers) =>
                 /* TODO */
-                /* PeerIdSet.mem(id, onlinePeers) ? */
+                /* PeerId.Set.mem(id, onlinePeers) ? */
                 (CreatingSdpOffer, true) /* :
                   (WaitingForOnlineSignal, false)*/
               };
@@ -194,7 +193,7 @@ let update:
               ) {
               | (NoNeedToConnect, Connected(_conn, _onlinePeers)) =>
                 /* TODO */
-                /* PeerIdSet.mem(id, onlinePeers) ? */
+                /* PeerId.Set.mem(id, onlinePeers) ? */
                 (Peer.CreatingSdpOffer, true) /*:
                   (WaitingForOnlineSignal, false)*/
 
@@ -258,8 +257,7 @@ let update:
         | Ok(onlinePeers) => (
             HasIdentity({
               ...stateWithId,
-              signalServerState:
-                Connected(connection, PeerIdSet.of_list(onlinePeers)),
+              signalServerState: Connected(connection, onlinePeers),
             }),
             /* TODO: initialize connection for peers that are waiting for online signal */
             Cmds.none,
@@ -327,10 +325,10 @@ let update:
                         /* TODO: Care only about those I have in my contacts */
                         switch (change) {
                         | Message.WentOnline(peerId) =>
-                          prevOnlinePeers |> PeerIdSet.add(peerId)
+                          prevOnlinePeers |> PeerId.Set.add(peerId)
                         | WentOffline(peerId) =>
                           prevOnlinePeers
-                          |> PeerIdSet.filter(oldPeer => oldPeer !== peerId)
+                          |> PeerId.Set.filter(oldPeer => oldPeer !== peerId)
                         },
                       onlinePeers,
                       changes,

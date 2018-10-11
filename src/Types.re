@@ -41,7 +41,7 @@ type signalServerState =
   | SigningIn(SignalServerCmds.t)
   | Connected(
       SignalServerCmds.t,
-      /* watchedPeers that are online */ Collections.PeerIdSet.t,
+      /* watchedPeers that are online */ PeerId.Set.t,
     )
   /* time, attemptsMade, lastErrorMessage */
   | FailedRetryingAt(string, int, string)

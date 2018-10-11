@@ -20,7 +20,14 @@ let connect =
     ->WebSocket.setOnOpen(_ => {
         callbacks^.enqueue(openedToMsg(t));
         /* TODO: Sign */
-        t.ws |> send(Login({src: thisPeer.id, watch: [], signature: ""}));
+        t.ws
+        |> send(
+             Login({
+               src: thisPeer.id,
+               watch: PeerId.Set.empty,
+               signature: "",
+             }),
+           );
       });
     t.ws
     ->WebSocket.setOnMessage(event =>

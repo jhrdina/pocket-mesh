@@ -1,28 +1,26 @@
-open Collections;
-
 type byConnStates = {
-  noNeedToConnect: PeerIdSet.t,
-  waitingForOnlineSignal: PeerIdSet.t,
-  creatingSdpOffer: PeerIdSet.t,
-  waitingForSdpAnswer: PeerIdSet.t,
-  failedRetrying: PeerIdSet.t,
-  connected: PeerIdSet.t,
+  noNeedToConnect: PeerId.Set.t,
+  waitingForOnlineSignal: PeerId.Set.t,
+  creatingSdpOffer: PeerId.Set.t,
+  waitingForSdpAnswer: PeerId.Set.t,
+  failedRetrying: PeerId.Set.t,
+  connected: PeerId.Set.t,
 };
 
 type t = {
-  peers: PeerIdMap.t(Peer.t),
+  peers: PeerId.Map.t(Peer.t),
   byConnectionState: byConnStates,
 };
 
 let empty = {
-  peers: PeerIdMap.empty,
+  peers: PeerId.Map.empty,
   byConnectionState: {
-    noNeedToConnect: PeerIdSet.empty,
-    waitingForOnlineSignal: PeerIdSet.empty,
-    creatingSdpOffer: PeerIdSet.empty,
-    waitingForSdpAnswer: PeerIdSet.empty,
-    failedRetrying: PeerIdSet.empty,
-    connected: PeerIdSet.empty,
+    noNeedToConnect: PeerId.Set.empty,
+    waitingForOnlineSignal: PeerId.Set.empty,
+    creatingSdpOffer: PeerId.Set.empty,
+    waitingForSdpAnswer: PeerId.Set.empty,
+    failedRetrying: PeerId.Set.empty,
+    connected: PeerId.Set.empty,
   },
 };
 
@@ -52,26 +50,26 @@ let _mapByConnectionStateIndex = (connState, f, index) =>
   };
 
 let findOpt = (peerId, t) =>
-  switch (t.peers |> PeerIdMap.find(peerId)) {
+  switch (t.peers |> PeerId.Map.find(peerId)) {
   | peer => Some(peer)
   | exception Not_found => None
   };
 
 let add = (id, peer, t) => {
-  peers: PeerIdMap.add(id, peer, t.peers),
+  peers: PeerId.Map.add(id, peer, t.peers),
   byConnectionState:
     switch (findOpt(id, t)) {
     | Some(oldPeer) when oldPeer.connectionState !== peer.connectionState =>
       t.byConnectionState
       |> _mapByConnectionStateIndex(
            oldPeer.connectionState,
-           PeerIdSet.remove(id),
+           PeerId.Set.remove(id),
          )
-      |> _mapByConnectionStateIndex(peer.connectionState, PeerIdSet.add(id))
+      |> _mapByConnectionStateIndex(peer.connectionState, PeerId.Set.add(id))
     | Some(_) => t.byConnectionState
     | None =>
       t.byConnectionState
-      |> _mapByConnectionStateIndex(peer.connectionState, PeerIdSet.add(id))
+      |> _mapByConnectionStateIndex(peer.connectionState, PeerId.Set.add(id))
     },
 };
 
@@ -91,7 +89,7 @@ let findAllIdsWithConnectionState = (connState, t) => {
 
 let findByConnectionState = (connState, t) => {
   let idSet = t |> findAllIdsWithConnectionState(connState);
-  switch (idSet |> PeerIdSet.choose) {
+  switch (idSet |> PeerId.Set.choose) {
   | peerId => t |> findOpt(peerId)
   | exception Not_found => None
   };
