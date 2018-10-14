@@ -3,14 +3,14 @@ open Rex_json.Json.Infix;
 
 let latestVersion = 1;
 
-type offerOrAnswer = {
+type sdpMessage = {
   src: PeerId.t,
   tg: PeerId.t,
   sdp: string,
   signature: string,
 };
 
-type login = {
+type loginOrChangeWatchedPeers = {
   src: PeerId.t,
   watch: PeerId.Set.t,
   signature: string,
@@ -30,15 +30,14 @@ type error =
   | InvalidMessage(string);
 
 type t =
-  | Login(login)
-  | Offer(offerOrAnswer)
-  | Answer(offerOrAnswer)
+  | Login(loginOrChangeWatchedPeers)
+  | Offer(sdpMessage)
+  | Answer(sdpMessage)
   | Error(error)
   | Logoff(logoff)
-  /* TODO: Convert to Set */
   | Ok(PeerId.Set.t)
-  /* TODO: Convert to Set */
   | WatchedPeersChanged(list(peerChange))
+  | ChangeWatchedPeers(loginOrChangeWatchedPeers)
   | Unknown;
 
 type clientToServer = t;
@@ -131,6 +130,22 @@ let toJSON =
         ]),
       )
     )
+  | ChangeWatchedPeers(msg) =>
+    Json.(
+      stringify(
+        Object([
+          ("type", String("changeWatchedPeers")),
+          ("src", String(msg.src)),
+          (
+            "watch",
+            Array(
+              msg.watch |> PeerId.Set.elements |> List.map(id => String(id)),
+            ),
+          ),
+          ("signature", String(msg.signature)),
+        ]),
+      )
+    )
   | _ => "decoder not implemented";
 
 type parsingResult('a) =
@@ -180,6 +195,17 @@ let decodeLoginMsg = json =>
   | (Some(src), Some(signature), Some(watch)) =>
     Ok(Login({src, signature, watch}))
   | _ => Error("Login message invalid format")
+  };
+
+let decodeChangeWatchedPeers = json =>
+  switch (
+    json |> Json.get("src") |?> Json.string,
+    json |> Json.get("signature") |?> Json.string,
+    json |> Json.get("watch") |?> decodePeerIdSet,
+  ) {
+  | (Some(src), Some(signature), Some(watch)) =>
+    Ok(ChangeWatchedPeers({src, signature, watch}))
+  | _ => Error("ChangeWatchedPeers message invalid format")
   };
 
 let decodeLogoffMsg = json =>
@@ -263,6 +289,7 @@ let fromJSON = str => {
         | "logoff" => decodeLogoffMsg(json)
         | "ok" => decodeOkMsg(json)
         | "watchedPeersChanged" => decodeWatchedPeersChanged(json)
+        | "changeWatchedPeers" => decodeChangeWatchedPeers(json)
         | _ => Error("Type: Unknown message type.")
         }
       | None => Error("Type: Missing or not string")
