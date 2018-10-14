@@ -23,11 +23,7 @@ module Subs = {
   /* let externalNotifier = model => model.Sub.none; */
 };
 
-let init: unit => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
-  () => (
-    OpeningDB,
-    IDBCmds.open_("pocketMesh", "all", Msgs.openDbSuccess, _ => Msgs.noop),
-  );
+/* Helpers */
 
 let createDefaultPeerGroups = myId =>
   PeerGroups.empty
@@ -41,6 +37,28 @@ let createDefaultPeerGroups = myId =>
             },
           }),
      );
+
+let applyPeerStatusChanges = (onlinePeers, changes) =>
+  List.fold_left(
+    (prevOnlinePeers, change) =>
+      /* TODO: Care only about those I have in my contacts */
+      switch (change) {
+      | Message.WentOnline(peerId) =>
+        prevOnlinePeers |> PeerId.Set.add(peerId)
+      | WentOffline(peerId) =>
+        prevOnlinePeers |> PeerId.Set.filter(oldPeer => oldPeer !== peerId)
+      },
+    onlinePeers,
+    changes,
+  );
+
+/* Updates */
+
+let init: unit => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
+  () => (
+    OpeningDB,
+    IDBCmds.open_("pocketMesh", "all", Msgs.openDbSuccess, _ => Msgs.noop),
+  );
 
 let update:
   (Types.rootState, Msgs.t) => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
@@ -163,18 +181,16 @@ let update:
           | None =>
             let (newConnectionState, shouldConnect) =
               switch (stateWithId.signalServerState) {
-              | NoNetwork
-              | Connecting
-              | SigningIn(_)
-              | FailedRetryingAt(_, _, _) => (
-                  Peer.WaitingForOnlineSignal,
-                  None,
-                )
               | Connected(conn, _onlinePeers) =>
                 /* TODO */
                 /* PeerId.Set.mem(id, onlinePeers) ? */
                 (Peer.CreatingSdpOffer, Some(conn)) /* :
                 (WaitingForOnlineSignal, None)*/
+
+              | NoNetwork
+              | Connecting
+              | SigningIn(_)
+              | FailedRetryingAt(_, _, _) => (WaitingForOnlineSignal, None)
               };
             (
               {
@@ -331,19 +347,7 @@ let update:
                 signalServerState:
                   Connected(
                     conn,
-                    List.fold_left(
-                      (prevOnlinePeers, change) =>
-                        /* TODO: Care only about those I have in my contacts */
-                        switch (change) {
-                        | Message.WentOnline(peerId) =>
-                          prevOnlinePeers |> PeerId.Set.add(peerId)
-                        | WentOffline(peerId) =>
-                          prevOnlinePeers
-                          |> PeerId.Set.filter(oldPeer => oldPeer !== peerId)
-                        },
-                      onlinePeers,
-                      changes,
-                    ),
+                    applyPeerStatusChanges(onlinePeers, changes),
                   ),
               }),
               Cmds.none,
