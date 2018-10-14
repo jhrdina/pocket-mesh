@@ -168,13 +168,13 @@ let update:
               | SigningIn(_)
               | FailedRetryingAt(_, _, _) => (
                   Peer.WaitingForOnlineSignal,
-                  false,
+                  None,
                 )
-              | Connected(_conn, _onlinePeers) =>
+              | Connected(conn, _onlinePeers) =>
                 /* TODO */
                 /* PeerId.Set.mem(id, onlinePeers) ? */
-                (CreatingSdpOffer, true) /* :
-                  (WaitingForOnlineSignal, false)*/
+                (Peer.CreatingSdpOffer, Some(conn)) /* :
+                (WaitingForOnlineSignal, None)*/
               };
             (
               {
@@ -191,13 +191,13 @@ let update:
                 existingPeer.connectionState,
                 stateWithId.signalServerState,
               ) {
-              | (NoNeedToConnect, Connected(_conn, _onlinePeers)) =>
+              | (NoNeedToConnect, Connected(conn, _onlinePeers)) =>
                 /* TODO */
                 /* PeerId.Set.mem(id, onlinePeers) ? */
-                (Peer.CreatingSdpOffer, true) /*:
-                  (WaitingForOnlineSignal, false)*/
+                (Peer.CreatingSdpOffer, Some(conn)) /*:
+                  (WaitingForOnlineSignal, None)*/
 
-              | (oldState, _) => (oldState, false)
+              | (oldState, _) => (oldState, None)
               };
             (
               {...existingPeer, connectionState: newConnectionState},
@@ -221,16 +221,27 @@ let update:
                  ),
             peers: stateWithId.peers |> Peers.add(id, peersNewPeer),
           }),
-          if (shouldConnect) {
+          switch (shouldConnect) {
+          | Some(sigServConn) =>
             Js.log("aaa");
-            RTCCmds.createInitiator(
-              id,
-              Msgs.rtcOfferReady,
-              Msgs.rtcConnected,
-              Msgs.rtcGotData,
-            );
-          } else {
-            Cmds.none;
+            Cmds.batch([
+              RTCCmds.createInitiator(
+                id,
+                Msgs.rtcOfferReady,
+                Msgs.rtcConnected,
+                Msgs.rtcGotData,
+              ),
+              SignalServerCmds.sendMsg(
+                ChangeWatchedPeers({
+                  src: stateWithId.thisPeer.id,
+                  watch:
+                    stateWithId.peers |> Peers.getAllIds |> PeerId.Set.add(id),
+                  signature: "",
+                }),
+                sigServConn,
+              ),
+            ]);
+          | None => Cmds.none
           },
         );
       | OpeningDB

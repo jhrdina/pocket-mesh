@@ -85,6 +85,13 @@ let findAllIdsWithConnectionState = (connState, t) => {
   };
 };
 
+let getAllIds = t =>
+  PeerId.Map.fold(
+    (peerId, _v, peerIdSet) => peerIdSet |> PeerId.Set.add(peerId),
+    t.peers,
+    PeerId.Set.empty,
+  );
+
 /* Helpers */
 
 let findByConnectionState = (connState, t) => {
