@@ -27,6 +27,7 @@ type peerChange =
 
 type error =
   | TargetNotOnline
+  | SourceNotOnline
   | InvalidMessage(string);
 
 type t =
@@ -71,6 +72,7 @@ let toJSON =
           ("type", String("error")),
           ...switch (error) {
              | TargetNotOnline => [("code", String("TargetNotOnline"))]
+             | SourceNotOnline => [("code", String("SourceNotOnline"))]
              | InvalidMessage(explanation) => [
                  ("code", String("InvalidMessage")),
                  ("explanation", String(explanation)),
