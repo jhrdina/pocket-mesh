@@ -73,6 +73,13 @@ let add = (id, peer, t) => {
     },
 };
 
+let map = (f, t) =>
+  PeerId.Map.fold(
+    (id, peer, acc) => add(id, f(peer), acc),
+    t.peers,
+    empty,
+  );
+
 let findAllIdsWithConnectionState = (connState, t) => {
   let index = t.byConnectionState;
   switch (connState) {
