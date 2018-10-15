@@ -6,7 +6,7 @@ let send = (msg: Message.t, ws: WebapiExtra.Dom.WebSocket.t) =>
   WebapiExtra.Dom.(msg |> Message.toJSON |> ws->WebSocket.sendString);
 
 let sendMsg = (msg: Message.t, t: t) =>
-  Cmd.call(callbacks =>
+  Cmd.call(_callbacks =>
     msg |> Message.toJSON |> t.ws->WebapiExtra.Dom.WebSocket.sendString
   );
 

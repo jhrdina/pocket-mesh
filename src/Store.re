@@ -52,6 +52,40 @@ let applyPeerStatusChanges = (onlinePeers, changes) =>
     changes,
   );
 
+exception InternalError;
+
+let connectWaitingPeers = allPeers => {
+  let waitingPeerIds =
+    allPeers |> Peers.findAllIdsWithConnectionState(WaitingForOnlineSignal);
+
+  let (peers, cmds) =
+    PeerId.Set.fold(
+      (peerId, (peers, cmds)) => {
+        let peer =
+          switch (peers |> Peers.findOpt(peerId)) {
+          | Some(peer) => peer
+          | None => raise(InternalError)
+          };
+        let newPeers =
+          peers
+          |> Peers.add(peerId, {...peer, connectionState: CreatingSdpOffer});
+        let newCmds = [
+          RTCCmds.createInitiator(
+            peerId,
+            Msgs.rtcOfferReady,
+            Msgs.rtcConnected,
+            Msgs.rtcGotData,
+          ),
+          ...cmds,
+        ];
+        (newPeers, newCmds);
+      },
+      waitingPeerIds,
+      (allPeers, []),
+    );
+  (peers, Cmds.batch(cmds));
+};
+
 /* Updates */
 
 let init: unit => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
@@ -176,89 +210,69 @@ let update:
     | AddPeerWithIdAndPublicKeyToGroup(id, key, groupId) =>
       switch (model) {
       | HasIdentity(stateWithId) =>
-        let (peersNewPeer, shouldConnect) =
+        let peerGroups =
+          stateWithId.peerGroups
+          |> PeerGroups.update(groupId, group =>
+               group
+               |> PeerGroup.addPeer({
+                    id,
+                    /* TODO: Really? */
+                    permissions: {
+                      content: ReadWrite,
+                      membersList: ReadWrite,
+                    },
+                  })
+             );
+
+        let (peersPeer, isNewPeer) =
           switch (stateWithId.peers |> Peers.findOpt(id)) {
-          | None =>
-            let (newConnectionState, shouldConnect) =
-              switch (stateWithId.signalServerState) {
-              | Connected(conn, _onlinePeers) =>
-                /* TODO */
-                /* PeerId.Set.mem(id, onlinePeers) ? */
-                (Peer.CreatingSdpOffer, Some(conn)) /* :
-                (WaitingForOnlineSignal, None)*/
-
-              | NoNetwork
-              | Connecting
-              | SigningIn(_)
-              | FailedRetryingAt(_, _, _) => (WaitingForOnlineSignal, None)
-              };
-            (
-              {
-                Peer.id,
-                publicKey: key,
-                nickName: "",
-                connectionState: newConnectionState,
-              },
-              shouldConnect,
-            );
-          | Some(existingPeer) =>
-            let (newConnectionState, shouldConnect) =
-              switch (
-                existingPeer.connectionState,
-                stateWithId.signalServerState,
-              ) {
-              | (NoNeedToConnect, Connected(conn, _onlinePeers)) =>
-                /* TODO */
-                /* PeerId.Set.mem(id, onlinePeers) ? */
-                (Peer.CreatingSdpOffer, Some(conn)) /*:
-                  (WaitingForOnlineSignal, None)*/
-
-              | (oldState, _) => (oldState, None)
-              };
-            (
-              {...existingPeer, connectionState: newConnectionState},
-              shouldConnect,
-            );
+          | Some(existingPeer) => (existingPeer, false)
+          | None => (Peer.make(id, key), true)
           };
+        let (newConnectionState, shouldConnect) =
+          switch (peersPeer.connectionState, stateWithId.signalServerState) {
+          | (NoNeedToConnect, Connected(_conn, onlinePeers))
+              when PeerId.Set.mem(id, onlinePeers) => (
+              Peer.CreatingSdpOffer,
+              true,
+            )
+          | (NoNeedToConnect, Connected(_, _))
+          | (NoNeedToConnect, _) => (WaitingForOnlineSignal, false)
+          | (oldState, _) => (oldState, false)
+          };
+        let peersPeer = {...peersPeer, connectionState: newConnectionState};
+        let peers = stateWithId.peers |> Peers.add(id, peersPeer);
+
         (
-          HasIdentity({
-            ...stateWithId,
-            peerGroups:
-              stateWithId.peerGroups
-              |> PeerGroups.update(groupId, group =>
-                   group
-                   |> PeerGroup.addPeer({
-                        id,
-                        permissions: {
-                          content: ReadWrite,
-                          membersList: ReadWrite,
-                        },
-                      })
-                 ),
-            peers: stateWithId.peers |> Peers.add(id, peersNewPeer),
-          }),
-          switch (shouldConnect) {
-          | Some(sigServConn) =>
-            Js.log("aaa");
-            Cmds.batch([
+          HasIdentity({...stateWithId, peerGroups, peers}),
+          Cmds.batch([
+            switch (isNewPeer, stateWithId.signalServerState) {
+            | (true, Connected(conn, _)) =>
+              SignalServerCmds.sendMsg(
+                ChangeWatchedPeers({
+                  src: stateWithId.thisPeer.id,
+                  watch: peers |> Peers.getAllIds,
+                  /* TODO: Sign */
+                  signature: "",
+                }),
+                conn,
+              )
+            | (
+                true,
+                Connecting | SigningIn(_) | FailedRetryingAt(_, _, _) |
+                NoNetwork,
+              )
+            | (false, _) => Cmds.none
+            },
+            shouldConnect ?
               RTCCmds.createInitiator(
                 id,
                 Msgs.rtcOfferReady,
                 Msgs.rtcConnected,
                 Msgs.rtcGotData,
-              ),
-              SignalServerCmds.sendMsg(
-                ChangeWatchedPeers({
-                  src: stateWithId.thisPeer.id,
-                  watch:
-                    stateWithId.peers |> Peers.getAllIds |> PeerId.Set.add(id),
-                  signature: "",
-                }),
-                sigServConn,
-              ),
-            ]);
-          | None => Cmds.none
-          },
+              ) :
+              Cmds.none,
+          ]),
         );
       | OpeningDB
       | LoadingIdentity(_) => (model, Cmds.none)
@@ -281,14 +295,17 @@ let update:
       switch (model) {
       | HasIdentity(stateWithId) =>
         switch (msg) {
-        | Ok(onlinePeers) => (
+        | Ok(onlinePeers) =>
+          let (peers, connectPeersCmd) =
+            connectWaitingPeers(stateWithId.peers);
+          (
             HasIdentity({
               ...stateWithId,
               signalServerState: Connected(connection, onlinePeers),
+              peers,
             }),
-            /* TODO: initialize connection for peers that are waiting for online signal */
-            Cmds.none,
-          )
+            connectPeersCmd,
+          );
         | Offer(offer) =>
           /* Check that I have the src peer added */
           switch (stateWithId.peers |> Peers.findOpt(offer.src)) {
@@ -341,7 +358,10 @@ let update:
           }
         | WatchedPeersChanged(changes) =>
           switch (stateWithId.signalServerState) {
-          | Connected(conn, onlinePeers) => (
+          | Connected(conn, onlinePeers) =>
+            let (peers, connectPeersCmd) =
+              connectWaitingPeers(stateWithId.peers);
+            (
               HasIdentity({
                 ...stateWithId,
                 signalServerState:
@@ -349,9 +369,10 @@ let update:
                     conn,
                     applyPeerStatusChanges(onlinePeers, changes),
                   ),
+                peers,
               }),
-              Cmds.none,
-            )
+              connectPeersCmd,
+            );
           | _ => (model, Cmds.none)
           }
         | _ => (model, Cmds.log("Received unhandled Signal message"))

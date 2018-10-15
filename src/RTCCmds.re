@@ -34,7 +34,7 @@ let createAcceptor = (tag, sdpOffer, answerToMsg, connectedToMsg, dataToMsg) =>
 let signal = (t, sdpAnswer) =>
   Cmd.call(_callbacks => t->SimpleRTC.signal(sdpAnswer));
 
-let destroy = t =>
+let destroy = _t =>
   Cmd.call(_callbacks
     /* TODO: Implement */
     => Js.log("Destroying RTC connection: Not implemented!!"));
