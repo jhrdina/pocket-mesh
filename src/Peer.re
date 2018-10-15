@@ -14,3 +14,10 @@ type t = {
   nickName: string,
   connectionState: peerConnectionState,
 };
+
+let make = (id, key) => {
+  id,
+  publicKey: key,
+  nickName: "",
+  connectionState: NoNeedToConnect,
+};
