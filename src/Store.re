@@ -52,6 +52,15 @@ let applyPeerStatusChanges = (onlinePeers, changes) =>
     changes,
   );
 
+let cmdConnectToSignalServer = thisPeer =>
+  SignalServerCmds.connect(
+    defaultSignalServerUrl,
+    thisPeer,
+    Msgs.connectToSignalServerSuccess,
+    Msgs.signalServerMessage,
+    Msgs.signalServerConnectionError,
+  );
+
 exception InternalError;
 
 let connectWaitingPeers = allPeers => {
@@ -91,7 +100,7 @@ let connectWaitingPeers = allPeers => {
 let init: unit => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
   () => (
     OpeningDB,
-    IDBCmds.open_("pocketMesh", "all", Msgs.openDbSuccess, _ => Msgs.noop),
+    IDBCmds.open_("pocketMesh", "all", Msgs.openDbSuccess, Msgs.dbFatalError),
   );
 
 let update:
@@ -104,9 +113,15 @@ let update:
     | OpenDbSuccess(db) => (
         LoadingIdentity(db),
         db
-        |> IDBCmds.getKey("thisPeer", Msgs.loadIdentityFromDBSuccess, _ =>
-             Msgs.noop
+        |> IDBCmds.getKey(
+             "thisPeer",
+             Msgs.loadIdentityFromDBSuccess,
+             Msgs.dbFatalError,
            ),
+      )
+    | DbFatalError(_exn) => (
+        DbFatalError("Cannot open database."),
+        Cmds.none,
       )
     | LoadIdentityFromDBSuccess(maybeThisPeer) =>
       switch (model) {
@@ -124,14 +139,7 @@ let update:
             }),
             /* TODO: Remove duplicate code */
             Cmd.batch([
-              SignalServerCmds.connect(
-                defaultSignalServerUrl,
-                thisPeer,
-                Msgs.connectToSignalServerSuccess,
-                Msgs.signalServerMessage,
-                () =>
-                Msgs.noop
-              ),
+              cmdConnectToSignalServer(thisPeer),
               /* DEBUG */
               Cmds.log("My ID: " ++ thisPeer.id),
               CryptoCmds.exportPublicKey(
@@ -148,6 +156,7 @@ let update:
           )
         }
       | OpeningDB
+      | DbFatalError(_)
       | HasIdentity(_) => (model, Cmds.none)
       }
     | MyKeyPairGenSuccess(keyPair) =>
@@ -167,14 +176,7 @@ let update:
             peers: Peers.empty,
           }),
           Cmd.batch([
-            SignalServerCmds.connect(
-              defaultSignalServerUrl,
-              thisPeer,
-              Msgs.connectToSignalServerSuccess,
-              Msgs.signalServerMessage,
-              () =>
-              Msgs.noop
-            ),
+            cmdConnectToSignalServer(thisPeer),
             db
             |> IDBCmds.setKey(
                  "thisPeer",
@@ -191,6 +193,7 @@ let update:
           ]),
         );
       | OpeningDB
+      | DbFatalError(_)
       | HasIdentity(_) => (model, Cmds.none)
       }
 
@@ -275,6 +278,7 @@ let update:
           ]),
         );
       | OpeningDB
+      | DbFatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -286,10 +290,57 @@ let update:
             signalServerState: SigningIn(connection),
           })
         | OpeningDB
+        | DbFatalError(_)
         | LoadingIdentity(_) => model
         },
         Cmds.none,
       )
+
+    | SignalServerConnectionError =>
+      switch (model) {
+      | HasIdentity(stateWithId) =>
+        let (newSignalServerState, attemptsMade) =
+          switch (stateWithId.signalServerState) {
+          | FailedRetryingAt(time, attemptsMade, lastErr) => (
+              Types.FailedRetryingAt(time, attemptsMade + 1, lastErr),
+              attemptsMade,
+            )
+          | _ => (FailedRetryingAt("", 1, ""), 1)
+          };
+        (
+          HasIdentity({
+            ...stateWithId,
+            signalServerState: newSignalServerState,
+          }),
+          Cmds.timeout(
+            Msgs.signalServerRetryConnection,
+            SignalServerCmds.getRetryTimeoutMs(attemptsMade),
+          ),
+        );
+      | OpeningDB
+      | LoadingIdentity(_)
+      | DbFatalError(_) => (model, Cmds.none)
+      }
+
+    | SignalServerRetryConnection =>
+      switch (model) {
+      | HasIdentity({
+          thisPeer,
+          signalServerState: FailedRetryingAt(_, _, _),
+          _,
+        }) => (
+          model,
+          cmdConnectToSignalServer(thisPeer),
+        )
+      | HasIdentity({
+          signalServerState:
+            Connecting | SigningIn(_) | Connected(_, _) | NoNetwork,
+          _,
+        })
+      | OpeningDB
+      | LoadingIdentity(_)
+      | DbFatalError(_) => (model, Cmds.none)
+      }
 
     | SignalServerMessage(connection, msg) =>
       switch (model) {
@@ -378,6 +429,7 @@ let update:
         | _ => (model, Cmds.log("Received unhandled Signal message"))
         }
       | OpeningDB
+      | DbFatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -405,6 +457,7 @@ let update:
         }
 
       | OpeningDB
+      | DbFatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -450,6 +503,7 @@ let update:
         }
 
       | OpeningDB
+      | DbFatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -480,6 +534,7 @@ let update:
           )
         }
       | OpeningDB
+      | DbFatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -517,6 +572,7 @@ let update:
         | None => (model, Cmds.log("Cannot find public key for peer."))
         }
       | OpeningDB
+      | DbFatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
     | Noop => (model, Cmds.none);
@@ -545,5 +601,6 @@ let getMyId = model =>
   switch (model) {
   | HasIdentity(state) => Some(state.thisPeer.id)
   | OpeningDB
+  | DbFatalError(_)
   | LoadingIdentity(_) => None
   };

@@ -20,3 +20,10 @@ let wrapPairPromise = (runPromise, successToMsg, errorToMsg) =>
 let none = Cmd.none;
 let batch = Cmd.batch;
 let log = str => Cmd.call(_ => str |> Js.log);
+
+let timeout = (itIsTimeMsg, delayMs) =>
+  /* TODO: Cancel support? */
+  Cmd.call(callbacks =>
+    Js.Global.setTimeout(() => callbacks^.enqueue(itIsTimeMsg), delayMs)
+    |> ignore
+  );

@@ -2,6 +2,7 @@
 type t =
   | OpenDbSuccess(IDBCmds.t)
   | LoadIdentityFromDBSuccess(option(ThisPeer.t))
+  | DbFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | LogMyPublicKey(SimpleCrypto.jwk)
   | AddPeerToGroup(string, string)
@@ -9,6 +10,8 @@ type t =
   /*            */
   /* Signalling */
   | ConnectToSignalServerSuccess(SignalServerCmds.t)
+  | SignalServerConnectionError
+  | SignalServerRetryConnection
   | SignalServerMessage(SignalServerCmds.t, Message.t)
   /*     */
   /* RTC */

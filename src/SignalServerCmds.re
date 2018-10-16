@@ -11,7 +11,7 @@ let sendMsg = (msg: Message.t, t: t) =>
   );
 
 let connect =
-    (url, thisPeer: ThisPeer.t, openedToMsg, signalServerMsgToMsg, errorToMsg) =>
+    (url, thisPeer: ThisPeer.t, openedToMsg, signalServerMsgToMsg, errorMsg) =>
   Cmd.call(callbacks => {
     open WebapiExtra.Dom;
     let t = {ws: WebSocket.create(url)};
@@ -36,5 +36,16 @@ let connect =
         | Error(msg) => Js.log(msg)
         }
       );
-    t.ws->WebSocket.setOnClose(_ => callbacks^.enqueue(errorToMsg()));
+    t.ws->WebSocket.setOnError(_ => callbacks^.enqueue(errorMsg));
+    t.ws->WebSocket.setOnClose(_ => callbacks^.enqueue(errorMsg));
   });
+
+let getRetryTimeoutMs = attemptsMade => {
+  let timeoutSec =
+    switch (attemptsMade) {
+    | c when c <= 4 => 2
+    | c when c <= 4 + 6 => 5
+    | _ => 10
+    };
+  timeoutSec * 1000;
+};
