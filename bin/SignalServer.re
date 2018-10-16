@@ -1,35 +1,25 @@
 module WS: DreamWSType.T = DreamWSCohttp;
-open Rex_json;
-
-module Fingerprint = String;
 
 type client = {
+  id: PeerId.t,
   socket: WS.Socket.t,
   isAuthenticated: bool,
   protocolVersion: int,
-  /* <<FK>> */
-  fingerprint: Fingerprint.t,
 };
 
 module PeerWatching = {
   type t = {
-    /* <<PK>> */
-    watchedPeer: Fingerprint.t,
-    /* <<FK to activeConnections>>  */
-    watcherPeer: Fingerprint.t,
+    watchedPeer: PeerId.t,
+    watcherPeer: PeerId.t,
   };
-  let compare = (a, b) => {
-    let watchedRes = String.compare(a.watchedPeer, b.watchedPeer);
-    watchedRes != 0 ?
-      watchedRes : String.compare(a.watcherPeer, b.watcherPeer);
-  };
+  let compare = compare;
 };
 
 module PeerWatchingSet = Set.Make(PeerWatching);
 module PeerWatchings = IndexedCollection.Make(PeerWatching);
 
 type serverState = {
-  connectedPeers: Hashtbl.t(Fingerprint.t, client),
+  connectedPeers: Hashtbl.t(PeerId.t, client),
   watchings: PeerWatchings.t(PeerWatching.t),
   watchingsByWatcher: PeerWatchings.index(PeerWatching.t, PeerId.t),
   watchingsByWatched: PeerWatchings.index(PeerWatching.t, PeerId.t),
@@ -87,17 +77,14 @@ let updateWatchings = (state, watcher, watchedPeers) => {
 
 /* Connected peers */
 
-let addPeer = (state, client) =>
-  Hashtbl.replace(state.connectedPeers, client.fingerprint, client);
+let addPeer = (s, client) =>
+  Hashtbl.replace(s.connectedPeers, client.id, client);
 
-let removePeer = (state, fingerprint) =>
-  Hashtbl.remove(state.connectedPeers, fingerprint);
+let removePeer = (s, id) => Hashtbl.remove(s.connectedPeers, id);
 
-let findPeer = (state, fingerprint) =>
-  Hashtbl.find_opt(state.connectedPeers, fingerprint);
+let findPeer = (s, id) => Hashtbl.find_opt(s.connectedPeers, id);
 
-let memPeer = (state, fingerprint) =>
-  Hashtbl.mem(state.connectedPeers, fingerprint);
+let memPeer = (s, id) => Hashtbl.mem(s.connectedPeers, id);
 
 /* Helpers */
 
@@ -147,7 +134,7 @@ let handleMessage = (srcSocket, msgStr, state) =>
           isAuthenticated: false,
           /* TODO: Support multiple protocol versions */
           protocolVersion: 1,
-          fingerprint: msg.src,
+          id: msg.src,
         },
       );
 
@@ -180,14 +167,13 @@ let handleMessage = (srcSocket, msgStr, state) =>
       }
     | Offer(payload) as msg
     | Answer(payload) as msg =>
-      /* TODO: Check fingerprint */
-      Printf.eprintf("Got offer... ooooo\n");
+      /* TODO: Check signature */
       switch (findPeer(state, payload.tg)) {
       | Some(tgClient) => [Emit(tgClient.socket, msg)]
       | None => [Emit(srcSocket, Error(TargetNotOnline))]
-      };
+      }
     | Logoff(msg) =>
-      /* TODO: Check fingerprint */
+      /* TODO: Check signature */
       removeAllWatchings(state, msg.src);
       removePeer(state, msg.src);
       [];
