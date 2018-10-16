@@ -1,12 +1,8 @@
 module WS: DreamWSType.T = DreamWSCohttp;
 open Rex_json;
 
-let t = BlackTea.Cmd.none;
-
 module Fingerprint = String;
 
-/* module FingerprintMap = Map.Make(Fingerprint); */
-/* module FingerprintSet = Set.Make(Fingerprint); */
 type client = {
   socket: WS.Socket.t,
   isAuthenticated: bool,
@@ -30,91 +26,66 @@ module PeerWatching = {
 };
 
 module PeerWatchingSet = Set.Make(PeerWatching);
+module PeerWatchings = IndexedCollection.Make(PeerWatching);
 
 type serverState = {
   connectedPeers: Hashtbl.t(Fingerprint.t, client),
-  watcherToWatched: Hashtbl.t(Fingerprint.t, PeerWatchingSet.t),
-  watchedToWatchers: Hashtbl.t(Fingerprint.t, PeerWatchingSet.t),
+  watchings: PeerWatchings.t(PeerWatching.t),
+  watchingsByWatcher: PeerWatchings.index(PeerWatching.t, PeerId.t),
+  watchingsByWatched: PeerWatchings.index(PeerWatching.t, PeerId.t),
 };
+
+type effect =
+  | Emit(WS.Socket.t, Message.t)
+  | Db(serverState);
 
 let init = () => {
-  connectedPeers: Hashtbl.create(10),
-  watcherToWatched: Hashtbl.create(10),
-  watchedToWatchers: Hashtbl.create(10),
+  let watchingsByWatcher =
+    PeerWatchings.makeIndex(({PeerWatching.watcherPeer, _}) => watcherPeer);
+  let watchingsByWatched =
+    PeerWatchings.makeIndex(({PeerWatching.watchedPeer, _}) => watchedPeer);
+  {
+    connectedPeers: Hashtbl.create(10),
+    watchings:
+      PeerWatchings.make(
+        a => a,
+        [I(watchingsByWatcher), I(watchingsByWatched)],
+      ),
+    watchingsByWatcher,
+    watchingsByWatched,
+  };
 };
+
+/* Watchings */
 
 let getWatchedByWatcher = (state, watcher) =>
-  Hashtbl.find_opt(state.watcherToWatched, watcher);
+  state.watchingsByWatcher |> PeerWatchings.get(watcher);
 
 let getWatchersByWatched = (state, watched) =>
-  Hashtbl.find_opt(state.watchedToWatchers, watched);
+  state.watchingsByWatched |> PeerWatchings.get(watched);
 
-let addWatching = (state, watching: PeerWatching.t) => {
-  Hashtbl.replace(
-    state.watcherToWatched,
-    watching.watcherPeer,
-    /* TODO: Eliminate this check */
-    (
-      switch (Hashtbl.find_opt(state.watcherToWatched, watching.watcherPeer)) {
-      | Some(watchingSet) => watchingSet
-      | None => PeerWatchingSet.empty
-      }
-    )
-    |> PeerWatchingSet.add(watching),
-  );
-  /* TODO: remove duplicate code */
-  Hashtbl.replace(
-    state.watchedToWatchers,
-    watching.watchedPeer,
-    /* TODO: Eliminate this check */
-    (
-      switch (Hashtbl.find_opt(state.watchedToWatchers, watching.watchedPeer)) {
-      | Some(watchingSet) => watchingSet
-      | None => PeerWatchingSet.empty
-      }
-    )
-    |> PeerWatchingSet.add(watching),
-  );
-};
+let addWatching = (state, watching: PeerWatching.t) =>
+  state.watchings |> PeerWatchings.add(watching);
 
-let removeWatching = (state, watching: PeerWatching.t) => {
-  let newWatcherToWatched =
-    Hashtbl.find(state.watcherToWatched, watching.watcherPeer)
-    |> PeerWatchingSet.remove(watching);
-  if (newWatcherToWatched |> PeerWatchingSet.is_empty) {
-    Hashtbl.remove(state.watcherToWatched, watching.watcherPeer);
-  } else {
-    Hashtbl.replace(
-      state.watcherToWatched,
-      watching.watcherPeer,
-      newWatcherToWatched,
-    );
-  };
-
-  /* TODO: Remove duplicate code */
-  let newWatchedToWatcher =
-    Hashtbl.find(state.watchedToWatchers, watching.watchedPeer)
-    |> PeerWatchingSet.remove(watching);
-  if (newWatchedToWatcher |> PeerWatchingSet.is_empty) {
-    Hashtbl.remove(state.watchedToWatchers, watching.watchedPeer);
-  } else {
-    Hashtbl.replace(
-      state.watchedToWatchers,
-      watching.watchedPeer,
-      newWatchedToWatcher,
-    );
-  };
-};
+let removeWatching = (state, watching: PeerWatching.t) =>
+  state.watchings |> PeerWatchings.remove(watching);
 
 let removeAllWatchings = (state, watcher) =>
-  switch (getWatchedByWatcher(state, watcher)) {
-  | Some(watchedSet) =>
-    watchedSet |> PeerWatchingSet.iter(removeWatching(state))
-  | None =>
-    Printf.eprintf(
-      "Internal error: trying to remove watchings of watcher that doesn't have record in watcherToWatched.",
-    )
-  };
+  getWatchedByWatcher(state, watcher)
+  |> PeerWatchingSet.iter(removeWatching(state));
+
+let addWatchings = (state, watcher, watchedPeers) =>
+  watchedPeers
+  |> PeerId.Set.iter(peerId =>
+       addWatching(state, {watcherPeer: watcher, watchedPeer: peerId})
+     );
+
+let updateWatchings = (state, watcher, watchedPeers) => {
+  removeAllWatchings(state, watcher);
+  addWatchings(state, watcher, watchedPeers);
+};
+
+/* Connected peers */
 
 let addPeer = (state, client) =>
   Hashtbl.replace(state.connectedPeers, client.fingerprint, client);
@@ -125,9 +96,31 @@ let removePeer = (state, fingerprint) =>
 let findPeer = (state, fingerprint) =>
   Hashtbl.find_opt(state.connectedPeers, fingerprint);
 
-type effect =
-  | Emit(WS.Socket.t, Message.t)
-  | Db(serverState);
+let memPeer = (state, fingerprint) =>
+  Hashtbl.mem(state.connectedPeers, fingerprint);
+
+/* Helpers */
+
+let makeNotificationsForInterestedPeers = (state, peerChange) => {
+  let Message.WentOnline(peerId) | WentOffline(peerId) = peerChange;
+  PeerWatchingSet.fold(
+    ({PeerWatching.watcherPeer, watchedPeer: _}, acc) =>
+      switch (findPeer(state, watcherPeer)) {
+      | Some(peer) => [
+          Emit(peer.socket, WatchedPeersChanged([peerChange])),
+          ...acc,
+        ]
+      | None =>
+        Printf.eprintf(
+          "Internal error: found a watching of watcher %s who is not online though.",
+          watcherPeer,
+        );
+        acc;
+      },
+    getWatchersByWatched(state, peerId),
+    [],
+  );
+};
 
 let handleMessage = (srcSocket, msgStr, state) =>
   /* ignore(Lwt_io.eprintf("asdf\n%!")); */
@@ -135,6 +128,16 @@ let handleMessage = (srcSocket, msgStr, state) =>
   | Ok(message) =>
     switch (message) {
     | Login(msg) =>
+      /* Existing peer */
+      switch (findPeer(state, msg.src)) {
+      | Some(_) =>
+        /* There is already an existing connected peer with the same ID. */
+        /* ...Let's kick him out... */
+        /* TODO: Disconnect an existing connected peer */
+        ()
+      | None => ()
+      };
+
       /* TODO: Check signature */
       addPeer(
         state,
@@ -147,48 +150,34 @@ let handleMessage = (srcSocket, msgStr, state) =>
           fingerprint: msg.src,
         },
       );
+
       /* Add my watches */
-      msg.watch
-      |> List.iter(peerId =>
-           addWatching(state, {watcherPeer: msg.src, watchedPeer: peerId})
-         );
+      updateWatchings(state, msg.src, msg.watch);
+
       /* Populate states of peers I'm interested in */
-      let onlinePeers =
-        msg.watch
-        |> List.filter(peerId =>
-             switch (findPeer(state, peerId)) {
-             | Some(_) => true
-             | None => false
-             }
-           );
+      let onlinePeers = msg.watch |> PeerId.Set.filter(memPeer(state));
       /* Notify others that are interested in my arrival */
       let notifications =
-        switch (getWatchersByWatched(state, msg.src)) {
-        | Some(watchings) =>
-          PeerWatchingSet.fold(
-            ({PeerWatching.watcherPeer, watchedPeer: _}, acc) =>
-              switch (findPeer(state, watcherPeer)) {
-              | Some(peer) => [
-                  Emit(
-                    peer.socket,
-                    WatchedPeersChanged([WentOnline(msg.src)]),
-                  ),
-                  ...acc,
-                ]
-              | None =>
-                Printf.eprintf(
-                  "Internal error: found a watching of watcher %s who is not online though.",
-                  watcherPeer,
-                );
-                acc;
-              },
-            watchings,
-            [],
-          )
-        | None => []
-        };
+        makeNotificationsForInterestedPeers(state, WentOnline(msg.src));
 
       [Emit(srcSocket, Ok(onlinePeers)), ...notifications];
+    | ChangeWatchedPeers(msg) =>
+      /* TODO: Check signature */
+      switch (findPeer(state, msg.src)) {
+      | Some(_) =>
+        updateWatchings(state, msg.src, msg.watch);
+
+        /* Populate states of peers I'm interested in */
+        let onlinePeersIds = msg.watch |> PeerId.Set.filter(memPeer(state));
+        let peerChanges =
+          PeerId.Set.fold(
+            (peerId, acc) => [Message.WentOnline(peerId), ...acc],
+            onlinePeersIds,
+            [],
+          );
+        [Emit(srcSocket, WatchedPeersChanged(peerChanges))];
+      | None => [Emit(srcSocket, Error(SourceNotOnline))]
+      }
     | Offer(payload) as msg
     | Answer(payload) as msg =>
       /* TODO: Check fingerprint */
@@ -199,11 +188,19 @@ let handleMessage = (srcSocket, msgStr, state) =>
       };
     | Logoff(msg) =>
       /* TODO: Check fingerprint */
+      removeAllWatchings(state, msg.src);
       removePeer(state, msg.src);
       [];
     /* [Emit(srcSocket, Ok)]; */
-    | _ =>
-      Printf.eprintf("Unknown message\n");
+    | Error(_)
+    | Ok(_)
+    | WatchedPeersChanged(_) =>
+      Printf.eprintf(
+        "Got message type that should be sent only from server to client\n",
+      );
+      [];
+    | Unknown =>
+      Printf.eprintf("Unknown message type\n");
       [];
     }
   | Error(str) => [Emit(srcSocket, Error(InvalidMessage(str)))]
