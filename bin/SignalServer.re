@@ -29,23 +29,6 @@ type effect =
   | Emit(WS.Socket.t, Message.t)
   | Db(serverState);
 
-let init = () => {
-  let watchingsByWatcher =
-    PeerWatchings.makeIndex(({PeerWatching.watcherPeer, _}) => watcherPeer);
-  let watchingsByWatched =
-    PeerWatchings.makeIndex(({PeerWatching.watchedPeer, _}) => watchedPeer);
-  {
-    connectedPeers: Hashtbl.create(10),
-    watchings:
-      PeerWatchings.make(
-        a => a,
-        [I(watchingsByWatcher), I(watchingsByWatched)],
-      ),
-    watchingsByWatcher,
-    watchingsByWatched,
-  };
-};
-
 /* Watchings */
 
 let getWatchedByWatcher = (state, watcher) =>
@@ -109,8 +92,26 @@ let makeNotificationsForInterestedPeers = (state, peerChange) => {
   );
 };
 
+/* Main server logic */
+
+let init = () => {
+  let watchingsByWatcher =
+    PeerWatchings.makeIndex(({PeerWatching.watcherPeer, _}) => watcherPeer);
+  let watchingsByWatched =
+    PeerWatchings.makeIndex(({PeerWatching.watchedPeer, _}) => watchedPeer);
+  {
+    connectedPeers: Hashtbl.create(10),
+    watchings:
+      PeerWatchings.make(
+        a => a,
+        [I(watchingsByWatcher), I(watchingsByWatched)],
+      ),
+    watchingsByWatcher,
+    watchingsByWatched,
+  };
+};
+
 let handleMessage = (srcSocket, msgStr, state) =>
-  /* ignore(Lwt_io.eprintf("asdf\n%!")); */
   switch (Message.fromJSON(msgStr)) {
   | Ok(message) =>
     switch (message) {
@@ -148,6 +149,7 @@ let handleMessage = (srcSocket, msgStr, state) =>
         makeNotificationsForInterestedPeers(state, WentOnline(msg.src));
 
       [Emit(srcSocket, Ok(onlinePeers)), ...notifications];
+
     | ChangeWatchedPeers(msg) =>
       /* TODO: Check signature */
       switch (findPeer(state, msg.src)) {
@@ -165,6 +167,7 @@ let handleMessage = (srcSocket, msgStr, state) =>
         [Emit(srcSocket, WatchedPeersChanged(peerChanges))];
       | None => [Emit(srcSocket, Error(SourceNotOnline))]
       }
+
     | Offer(payload) as msg
     | Answer(payload) as msg =>
       /* TODO: Check signature */
@@ -172,12 +175,14 @@ let handleMessage = (srcSocket, msgStr, state) =>
       | Some(tgClient) => [Emit(tgClient.socket, msg)]
       | None => [Emit(srcSocket, Error(TargetNotOnline))]
       }
+
     | Logoff(msg) =>
       /* TODO: Check signature */
       removeAllWatchings(state, msg.src);
       removePeer(state, msg.src);
       [];
     /* [Emit(srcSocket, Ok)]; */
+
     | Error(_)
     | Ok(_)
     | WatchedPeersChanged(_) =>
@@ -185,10 +190,12 @@ let handleMessage = (srcSocket, msgStr, state) =>
         "Got message type that should be sent only from server to client\n",
       );
       [];
+
     | Unknown =>
       Printf.eprintf("Unknown message type\n");
       [];
     }
+
   | Error(str) => [Emit(srcSocket, Error(InvalidMessage(str)))]
   };
 
