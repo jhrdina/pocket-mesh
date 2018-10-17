@@ -58,5 +58,5 @@ type hasIdentity = {
 type rootState =
   | OpeningDB
   | LoadingIdentity(IDBCmds.t)
-  | DbFatalError(string)
+  | FatalError(exn)
   | HasIdentity(hasIdentity);

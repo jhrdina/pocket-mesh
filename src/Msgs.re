@@ -4,6 +4,7 @@ type t =
   | LoadIdentityFromDBSuccess(option(ThisPeer.t))
   | DbFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
+  | MyKeyPairGenError(exn)
   | LogMyPublicKey(SimpleCrypto.jwk)
   | AddPeerToGroup(string, string)
   | AddPeerWithIdAndPublicKeyToGroup(string, SimpleCrypto.key, string)

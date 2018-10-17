@@ -103,6 +103,9 @@ let init: unit => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
     IDBCmds.open_("pocketMesh", "all", Msgs.openDbSuccess, Msgs.dbFatalError),
   );
 
+exception CannotOpenDatabase;
+exception CannotCreateIdentity;
+
 let update:
   (Types.rootState, Msgs.t) => (Types.rootState, BlackTea.Cmd.t(Msgs.t)) =
   model =>
@@ -119,10 +122,7 @@ let update:
              Msgs.dbFatalError,
            ),
       )
-    | DbFatalError(_exn) => (
-        DbFatalError("Cannot open database."),
-        Cmds.none,
-      )
+    | DbFatalError(_exn) => (FatalError(CannotOpenDatabase), Cmds.none)
     | LoadIdentityFromDBSuccess(maybeThisPeer) =>
       switch (model) {
       | LoadingIdentity(db) =>
@@ -150,13 +150,14 @@ let update:
           )
         | None => (
             model,
-            CryptoCmds.generateKeyPair(Msgs.myKeyPairGenSuccess, _ =>
-              Msgs.noop
+            CryptoCmds.generateKeyPair(
+              Msgs.myKeyPairGenSuccess,
+              Msgs.myKeyPairGenError,
             ),
           )
         }
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | HasIdentity(_) => (model, Cmds.none)
       }
     | MyKeyPairGenSuccess(keyPair) =>
@@ -193,9 +194,14 @@ let update:
           ]),
         );
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | HasIdentity(_) => (model, Cmds.none)
       }
+
+    | MyKeyPairGenError(_exn) => (
+        FatalError(CannotCreateIdentity),
+        Cmds.none,
+      )
 
     /*****************************************/
     /* Peers & groups management, connecting */
@@ -278,7 +284,7 @@ let update:
           ]),
         );
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -290,7 +296,7 @@ let update:
             signalServerState: SigningIn(connection),
           })
         | OpeningDB
-        | DbFatalError(_)
+        | FatalError(_)
         | LoadingIdentity(_) => model
         },
         Cmds.none,
@@ -319,7 +325,7 @@ let update:
         );
       | OpeningDB
       | LoadingIdentity(_)
-      | DbFatalError(_) => (model, Cmds.none)
+      | FatalError(_) => (model, Cmds.none)
       }
 
     | SignalServerRetryConnection =>
@@ -339,7 +345,7 @@ let update:
         })
       | OpeningDB
       | LoadingIdentity(_)
-      | DbFatalError(_) => (model, Cmds.none)
+      | FatalError(_) => (model, Cmds.none)
       }
 
     | SignalServerMessage(connection, msg) =>
@@ -429,7 +435,7 @@ let update:
         | _ => (model, Cmds.log("Received unhandled Signal message"))
         }
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -457,7 +463,7 @@ let update:
         }
 
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -503,7 +509,7 @@ let update:
         }
 
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -534,7 +540,7 @@ let update:
           )
         }
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
 
@@ -572,7 +578,7 @@ let update:
         | None => (model, Cmds.log("Cannot find public key for peer."))
         }
       | OpeningDB
-      | DbFatalError(_)
+      | FatalError(_)
       | LoadingIdentity(_) => (model, Cmds.none)
       }
     | Noop => (model, Cmds.none);
@@ -601,6 +607,6 @@ let getMyId = model =>
   switch (model) {
   | HasIdentity(state) => Some(state.thisPeer.id)
   | OpeningDB
-  | DbFatalError(_)
+  | FatalError(_)
   | LoadingIdentity(_) => None
   };
