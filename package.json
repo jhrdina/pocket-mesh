@@ -23,7 +23,6 @@
     "@esy-ocaml/reason": "^3.0.0",
     "@opam/jbuilder": "*",
     "@opam/re": "*",
-    "bs-black-tea": "file:../../bs-black-tea/bs-black-tea",
     "reason-websocket": "github:jaredly/reason-websocket",
     "refmterr": "^3.0.4"
   },
