@@ -15,3 +15,6 @@ let setOnSignal: (t, string => unit) => unit;
 let setOnData: (t, string => unit) => unit;
 let setOnConnect: (t, unit => unit) => unit;
 let setOnError: (t, string => unit) => unit;
+let setOnClose: (t, unit => unit) => unit;
+
+let destroy: t => unit;

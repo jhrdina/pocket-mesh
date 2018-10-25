@@ -17,16 +17,20 @@ type t = {
   mutable waitingAnswer: option(RTCSessionDescription.t),
   mutable dataChannel: option(RTCDataChannel.t),
   mutable connected: bool,
+  mutable destroyed: bool,
   mutable onSignal: option(string => unit),
   mutable onData: option(string => unit),
   mutable onConnect: option(unit => unit),
   mutable onError: option(string => unit),
+  mutable onClose: option(unit => unit),
 };
 
-let promiseFailed = (name, _) =>
-  Js_promise.resolve @@ Js.log(name ++ " FAILED");
-
 type options = {role};
+
+let logDebug = s => Js.log2("[SimpleRTC]", s);
+
+let promiseFailed = (name, _) =>
+  Js_promise.resolve @@ logDebug(name ++ " FAILED");
 
 let emitSignal = (s, str) =>
   switch (s.onSignal) {
@@ -52,6 +56,12 @@ let emitConnect = s =>
   | None => ()
   };
 
+let emitClose = s =>
+  switch (s.onClose) {
+  | Some(cb) => cb()
+  | None => ()
+  };
+
 let sendAnswer = (s, answer) =>
   /* Only type and sdp */
   switch (Js.Json.stringifyAny(answer)) {
@@ -60,7 +70,7 @@ let sendAnswer = (s, answer) =>
   };
 
 let sendOffer = (s, offer) => {
-  Js.log("send Offer");
+  logDebug("send Offer");
   /* Only type and sdp */
   switch (Js.Json.stringifyAny(offer)) {
   | Some(descAsStr) => s->emitSignal(descAsStr)
@@ -69,11 +79,11 @@ let sendOffer = (s, offer) => {
 };
 
 let onIceCandidate = (s, e) => {
-  Js.log("OnIceCandidate");
+  logDebug("OnIceCandidate");
   let candidate = RTCPeerConnectionIceEvent.getCandidate(e);
   if (Js.Null.return(candidate) != Js.null) {
-    Js.log(candidate);
     ();
+      /* logDebug(candidate); */
   } else {
     /* No more candidates, ICE is complete. */
     s.iceComplete = true;
@@ -82,13 +92,13 @@ let onIceCandidate = (s, e) => {
     /* | Some(waitingAnswer) => send(SendAnswer(waitingAnswer)) */
     | Some(_waitingAnswer) =>
       s->sendAnswer(RTCPeerConnection.localDescription(s.connection))
-    | None => Js.log("no waiting answer")
+    | None => logDebug("no waiting answer")
     };
     switch (s.waitingOffer) {
     /* | Some(waitingOffer) => send(SendOffer(waitingOffer)) */
     | Some(_) =>
       s->sendOffer(RTCPeerConnection.localDescription(s.connection))
-    | None => Js.log("no waiting offer")
+    | None => logDebug("no waiting offer")
     };
   };
 };
@@ -103,17 +113,22 @@ let onChannelOpen = s => {
 
 let onChannelClose = _s =>
   /* TODO */
-  Js.log("ChannelClose");
+  logDebug("ChannelClose");
 
 let setupDataChannel = (s, ch) => {
   s.dataChannel = Some(ch);
-  RTCDataChannel.setOnMessage(ch, e => s->onChannelMessage(e));
+  RTCDataChannel.setOnMessage(ch, Some(e => s->onChannelMessage(e)));
   /* onbufferedamountlow */
-  RTCDataChannel.setOnOpen(ch, () => s->onChannelOpen);
-  RTCDataChannel.setOnClose(ch, () => s->onChannelClose);
-  RTCDataChannel.setOnError(ch, _
-    /* self.destroy(makeError(err, 'ERR_DATA_CHANNEL')) */
-    => Js.log("there was an error somewhere"));
+  RTCDataChannel.setOnOpen(ch, Some(() => s->onChannelOpen));
+  RTCDataChannel.setOnClose(ch, Some(() => s->onChannelClose));
+  RTCDataChannel.setOnError(
+    ch,
+    Some(
+      _ =>
+        /* self.destroyAndNotify(makeError(err, 'ERR_DATA_CHANNEL')) */
+        logDebug("there was an error somewhere"),
+    ),
+  );
 };
 
 let createOfferFinished = (s, offer) =>
@@ -134,11 +149,11 @@ let createOffer = s => {
   ignore(
     RTCPeerConnection.createOffer(s.connection, ~options=offerConstraints)
     |> Js.Promise.then_(offer => {
-         Js.log("createOffer success!");
+         logDebug("createOffer success!");
 
          RTCPeerConnection.setLocalDescription(s.connection, offer)
          |> Js.Promise.then_(() => {
-              Js.log("setLocalDescription");
+              logDebug("setLocalDescription");
               s->createOfferFinished(offer);
               Js.Promise.resolve();
             });
@@ -160,10 +175,10 @@ let createAnswer = s =>
   ignore(
     RTCPeerConnection.createAnswer(s.connection)
     |> Js.Promise.then_(answer => {
-         Js.log("createAnswer went well");
+         logDebug("createAnswer went well");
          RTCPeerConnection.setLocalDescription(s.connection, answer)
          |> Js.Promise.then_(() => {
-              Js.log("setLocalDescription");
+              logDebug("setLocalDescription");
               s->createAnswerFinished(answer);
               Js.Promise.resolve();
             });
@@ -198,23 +213,52 @@ let signal = (s, str) => {
   );
 };
 
-let onIceStateChange = s => {
-  Js.log("OnIceStateChange");
+let destroy = s =>
+  if (!s.destroyed) {
+    switch (s.dataChannel) {
+    | Some(ch) =>
+      RTCDataChannel.setOnMessage(ch, None);
+      RTCDataChannel.setOnOpen(ch, None);
+      RTCDataChannel.setOnClose(ch, None);
+      RTCDataChannel.setOnError(ch, None);
+      try (RTCDataChannel.close(ch)) {
+      | Js.Exn.Error(_) => ()
+      };
+      s.dataChannel = None;
+    | None => ()
+    };
+
+    s.connection->RTCPeerConnection.setOnIceConnectionStateChange(None);
+    s.connection->RTCPeerConnection.setOnIceCandidate(None);
+    s.connection->RTCPeerConnection.setOnDataChannel(None);
+    try (s.connection->RTCPeerConnection.close) {
+    | Js.Exn.Error(_) => ()
+    };
+
+    s.destroyed = true;
+  };
+
+let destroyAndNotify = s => {
+  s->destroy;
+  s->emitClose;
+};
+
+let onIceStateChange = s =>
   switch (RTCPeerConnection.iceConnectionState(s.connection)) {
   | Connected
-  | Completed => Js.log("Ice connection Completed")
-  | Failed => Js.log("Ice connection Failed")
-  | Closed => Js.log("Ice connection Closed")
-
-  | New => Js.log("Ice connection New")
-  | Checking => Js.log("Ice connection Checking")
-  | Disconnected => Js.log("Ice connection Disconnected")
-  | Unknown => Js.log("Ice connection Unknown state")
-  /* | _ => Js.log("Not completed") */
+  | Completed => logDebug("Ice connection Completed")
+  | Failed =>
+    logDebug("Ice connection Failed");
+    s->destroyAndNotify;
+  | Closed
+  | Disconnected => s->destroyAndNotify
+  | New => logDebug("Ice connection New")
+  | Checking => logDebug("Ice connection Checking")
+  | Unknown => logDebug("Ice connection Unknown state")
+  /* | _ => logDebug("Not completed") */
   };
-};
 let _onSignalingStateChange = () =>
-  Js.log(
+  logDebug(
     "OnSignalingStateChange",
     /* TODO */
   );
@@ -236,33 +280,39 @@ let create = options => {
     dataChannel: None,
     waitingOffer: None,
     waitingAnswer: None,
+    /* TODO: Model using variants */
+    destroyed: false,
     onSignal: None,
     onData: None,
     onConnect: None,
     onError: None,
+    onClose: None,
   };
 
   let c = s.connection;
-  RTCPeerConnection.setOnIceConnectionStateChange(c, _ => s->onIceStateChange);
+  RTCPeerConnection.setOnIceConnectionStateChange(
+    c,
+    Some(_ => s->onIceStateChange),
+  );
   /* RTCPeerConnection.setOnIceGatheringStateChange(c, _ => s->onIceStateChange);
      RTCPeerConnection.setOnSignalingStateChange(c, _ =>
        s->onSignalingStateChange
      ); */
-  RTCPeerConnection.setOnIceCandidate(c, e => s->onIceCandidate(e));
+  RTCPeerConnection.setOnIceCandidate(c, Some(e => s->onIceCandidate(e)));
 
   switch (s.role) {
   | Initiator =>
     let channelName = "somenamehere";
     let options =
-      RTCDataChannel.makeOptions(~ordered=true, ~maxRetransmitTime=3000.0);
+      RTCDataChannel.makeOptions(~ordered=true, ~maxPacketLifeTime=3000);
     /* let channelName = randombytes(20).toString('hex') */
-    s
-    ->setupDataChannel(
-        RTCPeerConnection.createDataChannel(c, ~channelName, ~options),
-      );
+    s->setupDataChannel(
+      RTCPeerConnection.createDataChannel(c, ~channelName, ~options),
+    );
   | Acceptor =>
-    RTCPeerConnection.setOnDataChannel(c, e =>
-      s->setupDataChannel(RTCDataChannelEvent.getChannel(e))
+    RTCPeerConnection.setOnDataChannel(
+      c,
+      Some(e => s->setupDataChannel(RTCDataChannelEvent.getChannel(e))),
     )
   };
 
@@ -278,3 +328,4 @@ let setOnSignal = (s, callback) => s.onSignal = Some(callback);
 let setOnData = (s, callback) => s.onData = Some(callback);
 let setOnConnect = (s, callback) => s.onConnect = Some(callback);
 let setOnError = (s, callback) => s.onError = Some(callback);
+let setOnClose = (s, callback) => s.onClose = Some(callback);

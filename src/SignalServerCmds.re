@@ -1,17 +1,34 @@
 open BlackTea;
 
-type t = {ws: WebapiExtra.Dom.WebSocket.t};
+/* CONSTANTS */
+
+let defaultSignalServerUrl = "ws://localhost:7777";
+
+/* TYPES */
+
+type conn = {ws: WebapiExtra.Dom.WebSocket.t};
+
+type peerChange = Message.peerChange;
 
 let send = (msg: Message.t, ws: WebapiExtra.Dom.WebSocket.t) =>
   WebapiExtra.Dom.(msg |> Message.toJSON |> ws->WebSocket.sendString);
 
-let sendMsg = (msg: Message.t, t: t) =>
+/* COMMANDS */
+
+let sendMsg = (msg: Message.t, t: conn) =>
   Cmd.call(_callbacks =>
     msg |> Message.toJSON |> t.ws->WebapiExtra.Dom.WebSocket.sendString
   );
 
 let connect =
-    (url, thisPeer: ThisPeer.t, openedToMsg, signalServerMsgToMsg, errorMsg) =>
+    (
+      url,
+      thisPeer: ThisPeer.t,
+      watchedPeers,
+      openedToMsg,
+      signalServerMsgToMsg,
+      errorMsg,
+    ) =>
   Cmd.call(callbacks => {
     open WebapiExtra.Dom;
     let t = {ws: WebSocket.create(url)};
@@ -22,30 +39,23 @@ let connect =
         /* TODO: Sign */
         t.ws
         |> send(
-             Login({
-               src: thisPeer.id,
-               watch: PeerId.Set.empty,
-               signature: "",
-             }),
+             Login({src: thisPeer.id, watch: watchedPeers, signature: ""}),
            );
       });
     t.ws
     ->WebSocket.setOnMessage(event =>
         switch (Message.fromJSON(event->MessageEvent.data)) {
-        | Ok(msg) => callbacks^.enqueue(signalServerMsgToMsg(t, msg))
+        | Ok(msg) => callbacks^.enqueue(signalServerMsgToMsg(msg))
         | Error(msg) => Js.log(msg)
         }
       );
-    t.ws->WebSocket.setOnError(_ => callbacks^.enqueue(errorMsg));
+    /* t.ws
+       ->WebSocket.setOnError(_ => {
+           Js.log("WS Error");
+           callbacks^.enqueue(errorMsg);
+         }); */
     t.ws->WebSocket.setOnClose(_ => callbacks^.enqueue(errorMsg));
   });
 
-let getRetryTimeoutMs = attemptsMade => {
-  let timeoutSec =
-    switch (attemptsMade) {
-    | c when c <= 4 => 2
-    | c when c <= 4 + 6 => 5
-    | _ => 10
-    };
-  timeoutSec * 1000;
-};
+let close = (t: conn) =>
+  Cmd.call(_callbacks => t.ws->WebapiExtra.Dom.WebSocket.close);

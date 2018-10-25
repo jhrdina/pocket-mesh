@@ -5,23 +5,28 @@ type t =
   | DbFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | MyKeyPairGenError(exn)
-  | LogMyPublicKey(SimpleCrypto.jwk)
   | AddPeerToGroup(string, string)
   | AddPeerWithIdAndPublicKeyToGroup(string, SimpleCrypto.key, string)
   /*            */
   /* Signalling */
-  | ConnectToSignalServerSuccess(SignalServerCmds.t)
+  | ConnectToSignalServerSuccess(SignalServerCmds.conn)
   | SignalServerConnectionError
   | SignalServerRetryConnection
-  | SignalServerMessage(SignalServerCmds.t, Message.t)
+  | SignalServerMessage(Message.t)
   /*     */
   /* RTC */
   /* _, SDP, Acceptor ID */
-  | RtcOfferReady(RTCCmds.t, string, string)
+  | RtcOfferReady(SimpleRTC.t, string, string)
   /* _, SDP, Initiator ID */
-  | RtcAnswerReady(RTCCmds.t, string, string)
-  | RtcConnected(RTCCmds.t, string)
-  | RtcGotData(RTCCmds.t, string)
+  | RtcAnswerReady(SimpleRTC.t, string, string)
+  | RtcConnected(SimpleRTC.t, string)
+  | RtcGotData(SimpleRTC.t, string)
+  /* _, PeerID, errMsg */
+  | RtcError(SimpleRTC.t, string, string)
+  /* _, PeerID */
+  | RtcClose(SimpleRTC.t, string)
+  /* PeerID */
+  | RtcRetryConnection(string)
   /*       */
   /* Debug */
   | SendToPeer(string, string)
