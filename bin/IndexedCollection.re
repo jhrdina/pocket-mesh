@@ -1,20 +1,38 @@
 module Make = (Primary: {type t; let compare: (t, t) => int;}) => {
   module PrimarySet = Set.Make(Primary);
 
-  type index('elt, 'key) = {
-    data: Hashtbl.t('key, PrimarySet.t),
-    getKey: 'elt => 'key,
+  module Index = {
+    type t('elt, 'key) = {
+      data: Hashtbl.t('key, PrimarySet.t),
+      getKey: 'elt => 'key,
+    };
+    let get = (key, index) =>
+      switch (Hashtbl.find_opt(index.data, key)) {
+      | Some(primarySet) => primarySet
+      | None => PrimarySet.empty
+      };
+
+    let mem = (key, index) =>
+      switch (Hashtbl.find_opt(index.data, key)) {
+      | Some(primarySet) => ! (primarySet |> PrimarySet.is_empty)
+      | None => false
+      };
+
+    let create = getKey => {data: Hashtbl.create(10), getKey};
   };
 
   type iMem('elt) =
-    | I(index('elt, 'key)): iMem('elt);
+    | I(Index.t('elt, 'key)): iMem('elt);
 
   type t('elt) = {
+    records: Hashtbl.t(Primary.t, 'elt),
     getPrimary: 'elt => Primary.t,
     indices: list(iMem('elt)),
   };
 
-  let add = (elt, t) =>
+  let add = (elt, t) => {
+    let primaryKeyVal = t.getPrimary(elt);
+    Hashtbl.replace(t.records, primaryKeyVal, elt);
     t.indices
     |> List.iter((I(index)) => {
          let key = index.getKey(elt);
@@ -26,11 +44,14 @@ module Make = (Primary: {type t; let compare: (t, t) => int;}) => {
          Hashtbl.replace(
            index.data,
            key,
-           oldPrimarySet |> PrimarySet.add(t.getPrimary(elt)),
+           oldPrimarySet |> PrimarySet.add(primaryKeyVal),
          );
        });
+  };
 
-  let remove = (elt, t) =>
+  let removeElt = (elt, t) => {
+    let primaryKeyVal = t.getPrimary(elt);
+    Hashtbl.remove(t.records, primaryKeyVal);
     t.indices
     |> List.iter((I(index)) => {
          let key = index.getKey(elt);
@@ -46,20 +67,22 @@ module Make = (Primary: {type t; let compare: (t, t) => int;}) => {
          | None => ()
          };
        });
+  };
 
-  let get = (key, index) =>
-    switch (Hashtbl.find_opt(index.data, key)) {
-    | Some(primarySet) => primarySet
-    | None => PrimarySet.empty
+  let remove = (primaryKeyVal, t) =>
+    switch (Hashtbl.find_opt(t.records, primaryKeyVal)) {
+    | Some(elt) => removeElt(elt, t)
+    | None => ()
     };
 
-  let mem = (key, index) =>
-    switch (Hashtbl.find_opt(index.data, key)) {
-    | Some(primarySet) => ! (primarySet |> PrimarySet.is_empty)
-    | None => false
-    };
+  let findOpt = (primaryKeyVal, t) =>
+    Hashtbl.find_opt(t.records, primaryKeyVal);
 
-  let makeIndex = getKey => {data: Hashtbl.create(10), getKey};
+  let mem = (primaryKeyVal, t) => Hashtbl.mem(t.records, primaryKeyVal);
 
-  let make = (getPrimary, indices) => {getPrimary, indices};
+  let create = (getPrimary, indices) => {
+    records: Hashtbl.create(10),
+    getPrimary,
+    indices,
+  };
 };

@@ -17,12 +17,20 @@ module PeerWatching = {
 
 module PeerWatchingSet = Set.Make(PeerWatching);
 module PeerWatchings = IndexedCollection.Make(PeerWatching);
+module Peers = IndexedCollection.Make(PeerId);
 
 type serverState = {
-  connectedPeers: Hashtbl.t(PeerId.t, client),
+  peers: Peers.t(client),
+  /*
+    TODO:
+      Use WS.Socket.compare by file_descr by implementing
+      Functorial Interface instead of comparison by the whole record value.
+      See https://caml.inria.fr/pub/docs/manual-ocaml/libref/Hashtbl.html#1_Functorialinterface
+   */
+  peersBySocket: Peers.Index.t(client, WS.Socket.t),
   watchings: PeerWatchings.t(PeerWatching.t),
-  watchingsByWatcher: PeerWatchings.index(PeerWatching.t, PeerId.t),
-  watchingsByWatched: PeerWatchings.index(PeerWatching.t, PeerId.t),
+  watchingsByWatcher: PeerWatchings.Index.t(PeerWatching.t, PeerId.t),
+  watchingsByWatched: PeerWatchings.Index.t(PeerWatching.t, PeerId.t),
 };
 
 type effect =
@@ -32,10 +40,10 @@ type effect =
 /* Watchings */
 
 let getWatchedByWatcher = (state, watcher) =>
-  state.watchingsByWatcher |> PeerWatchings.get(watcher);
+  state.watchingsByWatcher |> PeerWatchings.Index.get(watcher);
 
 let getWatchersByWatched = (state, watched) =>
-  state.watchingsByWatched |> PeerWatchings.get(watched);
+  state.watchingsByWatched |> PeerWatchings.Index.get(watched);
 
 let addWatching = (state, watching: PeerWatching.t) =>
   state.watchings |> PeerWatchings.add(watching);
@@ -60,14 +68,16 @@ let updateWatchings = (state, watcher, watchedPeers) => {
 
 /* Connected peers */
 
-let addPeer = (s, client) =>
-  Hashtbl.replace(s.connectedPeers, client.id, client);
+let addPeer = (s, client) => s.peers |> Peers.add(client);
 
-let removePeer = (s, id) => Hashtbl.remove(s.connectedPeers, id);
+let removePeer = (s, id) => s.peers |> Peers.remove(id);
 
-let findPeer = (s, id) => Hashtbl.find_opt(s.connectedPeers, id);
+let findPeer = (s, id) => s.peers |> Peers.findOpt(id);
 
-let memPeer = (s, id) => Hashtbl.mem(s.connectedPeers, id);
+let findPeerBySocket = (s, socket) =>
+  s.peersBySocket |> Peers.Index.get(socket) |> Peers.PrimarySet.choose_opt;
+
+let memPeer = (s, id) => s.peers |> Peers.mem(id);
 
 /* Helpers */
 
@@ -96,13 +106,19 @@ let makeNotificationsForInterestedPeers = (state, peerChange) => {
 
 let init = () => {
   let watchingsByWatcher =
-    PeerWatchings.makeIndex(({PeerWatching.watcherPeer, _}) => watcherPeer);
+    PeerWatchings.Index.create(({PeerWatching.watcherPeer, _}) =>
+      watcherPeer
+    );
   let watchingsByWatched =
-    PeerWatchings.makeIndex(({PeerWatching.watchedPeer, _}) => watchedPeer);
+    PeerWatchings.Index.create(({PeerWatching.watchedPeer, _}) =>
+      watchedPeer
+    );
+  let peersBySocket = Peers.Index.create(({socket, _}) => socket);
   {
-    connectedPeers: Hashtbl.create(10),
+    peers: Peers.create(({id, _}) => id, [I(peersBySocket)]),
+    peersBySocket,
     watchings:
-      PeerWatchings.make(
+      PeerWatchings.create(
         a => a,
         [I(watchingsByWatcher), I(watchingsByWatched)],
       ),
@@ -199,6 +215,20 @@ let handleMessage = (srcSocket, msgStr, state) =>
   | Error(str) => [Emit(srcSocket, Error(InvalidMessage(str)))]
   };
 
+let handleDisconnect = (socket, state) =>
+  switch (findPeerBySocket(state, socket)) {
+  | Some(peerId) =>
+    removeAllWatchings(state, peerId);
+    removePeer(state, peerId);
+    /* Notify others that are interested in my disconnect */
+    let notifications =
+      makeNotificationsForInterestedPeers(state, WentOffline(peerId));
+
+    Printf.eprintf("Disconnected peer %s\n%!", peerId);
+    notifications;
+  | None => []
+  };
+
 let state = ref(init());
 
 let handleEffect =
@@ -216,6 +246,8 @@ WS.run(
     |> Socket.setOnMessage((_, msg) =>
          handleMessage(socket, msg, state^) |> List.iter(handleEffect)
        )
-    |> Socket.setOnDisconnect(() => Printf.eprintf("Disconnected\n%!"));
+    |> Socket.setOnDisconnect(() =>
+         handleDisconnect(socket, state^) |> List.iter(handleEffect)
+       );
   },
 );
