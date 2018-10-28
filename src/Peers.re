@@ -90,6 +90,8 @@ let map = (f, t) =>
     empty,
   );
 
+let fold = (f, t, n) => PeerId.Map.fold(_ => f, t.peers, n);
+
 let findAllIdsWithConnectionState = (connState, t) => {
   let index = t.byConnectionState;
   switch (connState) {
@@ -121,11 +123,52 @@ let findByConnectionState = (connState, t) => {
   };
 };
 
+/* PERSISTENCY */
+
+let toDb = peers => peers |> PeerId.Map.map(peer => peer |> Peer.toDb);
+let saveToDb = (db, model) =>
+  Db.setPeers(model.peers |> toDb, _ => Msgs.noop, _ => Msgs.noop, db);
+
 /* UPDATE */
 
-let init = () => (empty, Cmds.none);
+let init = (db, peerGroups, signalServerState) =>
+  fun
+  | Some(dbPeers) => {
+      let (newPeers, cmdsList) =
+        PeerId.Map.fold(
+          (_, dbPeer, (peers, cmdsList)) =>
+            switch (peers |> findOpt(dbPeer.Types.id)) {
+            | Some(peer) => (peers, cmdsList)
+            | None =>
+              let (newPeer, newPeerCmd) =
+                Peer.initFromDb(
+                  dbPeer,
+                  PeerGroups.isPeerInAGroup(dbPeer.id, peerGroups),
+                  Peer.peerSignalStateOfSignalServerState(
+                    dbPeer.id,
+                    signalServerState,
+                  ),
+                );
+              (peers |> add(dbPeer.id, newPeer), [newPeerCmd, ...cmdsList]);
+            },
+          dbPeers,
+          (empty, []),
+        );
+      (newPeers, Cmds.batch(cmdsList));
+    }
+  | None => {
+      let newPeers = empty;
+      (newPeers, saveToDb(db, newPeers));
+    };
+
 let update =
-    (thisPeer, signalServerState: Types.signalServerState, peers, msg: Msgs.t) => {
+    (
+      db,
+      thisPeer,
+      signalServerState: Types.signalServerState,
+      peers,
+      msg: Msgs.t,
+    ) => {
   let updatePeer = (peerId, peerMsg) =>
     switch (peers |> findOpt(peerId)) {
     | Some(peer) =>
@@ -144,13 +187,14 @@ let update =
 
       | None =>
         let peerSignalState =
-          switch (signalServerState) {
-          | Connected(ssConn, onlinePeers)
-              when PeerId.Set.mem(id, onlinePeers) =>
-            Peer.Online(ssConn)
-          | _ => Offline
-          };
-        Peer.init(id, key, true, peerSignalState);
+          Peer.peerSignalStateOfSignalServerState(id, signalServerState);
+        Peer.init(
+          ~id,
+          ~publicKey=key,
+          ~nickName="",
+          ~inGroup=true,
+          ~peerSignalState,
+        );
       };
 
     let addWatchCmd =
@@ -168,9 +212,14 @@ let update =
       | _ => Cmds.none
       };
 
-    (peers |> add(id, newPeer), Cmds.batch([newPeerCmd, addWatchCmd]));
+    let newPeers = peers |> add(id, newPeer);
 
-  | (SignalServerMessage(Ok(onlinePeers)), Connected(ssConn, _)) =>
+    (
+      newPeers,
+      Cmds.batch([newPeerCmd, addWatchCmd, saveToDb(db, newPeers)]),
+    );
+
+  | (SignalServerMessage(Ok(onlinePeers)), SigningIn(ssConn)) =>
     /* updatePeers(onlinePeers, thisPeers, msg) */
     let (newPeers, cmdList) =
       PeerId.Set.fold(
@@ -186,6 +235,22 @@ let update =
         (peers, []),
       );
     (newPeers, Cmds.batch(cmdList));
+
+  | (SignalServerConnectionError, signalServerState) =>
+    switch (signalServerState) {
+    | FailedRetryingAt(_) => (peers, Cmds.none)
+    | _ =>
+      let (newPeers, cmdList) =
+        fold(
+          (peer, (newPeers, cmds)) => {
+            let (newPeer, cmd) = Peer.update(thisPeer, peer, WentOffline);
+            (newPeers |> add(peer.id, newPeer), [cmd, ...cmds]);
+          },
+          peers,
+          (peers, []),
+        );
+      (newPeers, Cmds.batch(cmdList));
+    }
 
   | (
       SignalServerMessage(WatchedPeersChanged(changes)),

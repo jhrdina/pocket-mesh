@@ -1,9 +1,8 @@
-type t = list(PeerGroup.t);
-
+/* TODO: Better container */
 let empty = [];
 
 let addPeerGroup = (peerGroup, t) => [peerGroup, ...t];
-let getFirstId: t => option(string) =
+let getFirstId: Types.peerGroups => option(string) =
   fun
   | [first, ..._] => Some(first.id)
   | [] => None;
@@ -26,39 +25,39 @@ let addPeerToGroup = (peerId, groupId, t) =>
           })
      );
 
-/* DEBUG */
-
-let createDefaultPeerGroups = myId =>
-  empty
-  |> addPeerGroup(
-       PeerGroup.make("aaa", myId)
-       |> PeerGroup.addPeer({
-            id: myId,
-            permissions: {
-              content: ReadWrite,
-              membersList: ReadWrite,
-            },
-          }),
-     );
-
 /* UPDATE */
 
-let init = thisPeerId =>
-  empty
-  |> addPeerGroup(
-       PeerGroup.make("aaa", thisPeerId)
-       |> PeerGroup.addPeer({
-            id: thisPeerId,
-            permissions: {
-              content: ReadWrite,
-              membersList: ReadWrite,
-            },
-          }),
-     );
+let saveToDb = (db, model) =>
+  Db.setPeerGroups(model, _ => Msgs.noop, _ => Msgs.noop, db);
 
-let update = (model, msg) =>
+let init = (db, thisPeerId, maybeDbPeerGroups) =>
+  switch (maybeDbPeerGroups) {
+  | Some(dbPeerGroups) => (dbPeerGroups, Cmds.none)
+  | None =>
+    let newPeerGroups =
+      empty
+      |> addPeerGroup(
+           PeerGroup.make("aaa", thisPeerId)
+           |> PeerGroup.addPeer({
+                id: thisPeerId,
+                permissions: {
+                  content: ReadWrite,
+                  membersList: ReadWrite,
+                },
+              }),
+         );
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+  };
+
+let update = (db, model, msg) =>
   switch (msg, model) {
   | (Msgs.AddPeerWithIdAndPublicKeyToGroup(id, key, groupId), peerGroups) =>
-    peerGroups |> addPeerToGroup(id, groupId)
-  | (_, peerGroups) => peerGroups
+    let newPeerGroups = peerGroups |> addPeerToGroup(id, groupId);
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+  | (_, peerGroups) => (peerGroups, Cmds.none)
   };
+
+/* QUERIES */
+
+let isPeerInAGroup = (peerId, t) =>
+  List.exists(peerGroup => peerGroup |> PeerGroup.containsPeer(peerId), t);

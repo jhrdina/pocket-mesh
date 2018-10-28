@@ -1,21 +1,21 @@
-open BlackTea;
+[%%debugger.chrome];
 
-/* CONSTANTS */
-let dbName = "pocketMesh";
+open BlackTea;
 
 /* TYPES */
 
 type hasIdentity = {
-  db: IDBCmds.t,
+  db: Db.t,
   thisPeer: ThisPeer.t,
   signalServerState: Types.signalServerState,
-  peerGroups: PeerGroups.t,
+  peerGroups: Types.peerGroups,
   peers: Peers.t,
 };
 
 type rootState =
   | OpeningDB
-  | LoadingIdentity(IDBCmds.t)
+  | LoadingDBData(Db.t)
+  | GeneratingIdentity(Db.t, Db.allData)
   | FatalError(exn)
   | HasIdentity(hasIdentity);
 
@@ -33,24 +33,26 @@ let logIdAndJWT = (thisPeer: ThisPeer.t) =>
            Js.log("My JWK: " ++ SimpleCrypto.jwkToString(jwk));
            Js.Promise.resolve();
          }),
-    () => Msgs.noop,
+    _ => Msgs.noop,
     _ => Msgs.noop,
   );
 
 /* UPDATE */
 
-let initStateWithId = (db, thisPeer) => {
-  let (peers, peersCmd) = Peers.init();
+let initStateWithId = (db, thisPeer: ThisPeer.t, allDbData: Db.allData) => {
+  let (peerGroups, peerGroupsCmd) =
+    PeerGroups.init(db, thisPeer.id, allDbData.peerGroups);
+  let (peers, peersCmd) =
+    Peers.init(
+      db,
+      peerGroups,
+      SignalServerState.initialModel,
+      allDbData.peers,
+    );
   let (ssState, ssStateCmd) = SignalServerState.init(thisPeer, peers);
   (
-    {
-      db,
-      thisPeer,
-      signalServerState: ssState,
-      peerGroups: PeerGroups.init(thisPeer.id),
-      peers,
-    },
-    Cmds.batch([ssStateCmd, peersCmd]),
+    {db, thisPeer, signalServerState: ssState, peerGroups, peers},
+    Cmds.batch([ssStateCmd, peersCmd, peerGroupsCmd]),
   );
 };
 
@@ -73,24 +75,29 @@ let updateStateWithId = (model, msg) => {
       msg,
     );
   let (peers, peersCmd) =
-    Peers.update(model.thisPeer, model.signalServerState, model.peers, msg);
+    Peers.update(
+      model.db,
+      model.thisPeer,
+      model.signalServerState,
+      model.peers,
+      msg,
+    );
+  let (peerGroups, peerGroupsCmd) =
+    PeerGroups.update(model.db, model.peerGroups, msg);
   (
     {
       db: model.db,
       thisPeer: model.thisPeer,
       signalServerState: ssState,
-      peerGroups: PeerGroups.update(model.peerGroups, msg),
+      peerGroups,
       peers,
     },
-    Cmd.batch([ssStateCmd, peersCmd, cryptoCmd]),
+    Cmd.batch([ssStateCmd, peersCmd, cryptoCmd, peerGroupsCmd]),
   );
 };
 
 let init: unit => (rootState, BlackTea.Cmd.t(Msgs.t)) =
-  () => (
-    OpeningDB,
-    IDBCmds.open_(dbName, "all", Msgs.openDbSuccess, Msgs.dbFatalError),
-  );
+  () => (OpeningDB, Db.open_(Msgs.openDbSuccess, Msgs.dbFatalError));
 
 let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
   (model, msg) =>
@@ -99,21 +106,8 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     /* Init */
     /********/
     | (OpenDbSuccess(db), OpeningDB) => (
-        LoadingIdentity(db),
-        Cmds.batch([
-          db
-          |> IDBCmds.getKey(
-               "thisPeer",
-               Msgs.loadIdentityFromDBSuccess,
-               Msgs.dbFatalError,
-             ),
-          /* db
-             |> IDBCmds.getKey(
-                  "peers",
-                  Msgs.loadPeersFromDBSuccess,
-                  Msgs.dbFatalError,
-                ), */
-        ]),
+        LoadingDBData(db),
+        Db.getAll(db, Msgs.loadDataFromDBSuccess, Msgs.dbFatalError),
       )
 
     | (DbFatalError(_exn), _) => (
@@ -121,16 +115,17 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         Cmds.none,
       )
 
-    | (LoadIdentityFromDBSuccess(maybeThisPeer), LoadingIdentity(db)) =>
-      switch (maybeThisPeer) {
+    | (LoadDataFromDBSuccess(allDbData), LoadingDBData(db)) =>
+      switch (allDbData.thisPeer) {
       | Some(thisPeer) =>
-        let (stateWithId, stateWithIdCmd) = initStateWithId(db, thisPeer);
+        let (stateWithId, stateWithIdCmd) =
+          initStateWithId(db, thisPeer, allDbData);
         (
           HasIdentity(stateWithId),
           Cmds.batch([stateWithIdCmd, logIdAndJWT(thisPeer)]),
         );
       | None => (
-          LoadingIdentity(db),
+          GeneratingIdentity(db, allDbData),
           CryptoCmds.generateKeyPair(
             Msgs.myKeyPairGenSuccess,
             Msgs.myKeyPairGenError,
@@ -138,20 +133,20 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         )
       }
 
-    | (MyKeyPairGenSuccess(keyPair), LoadingIdentity(db)) =>
+    | (MyKeyPairGenSuccess(keyPair), GeneratingIdentity(db, allDbData)) =>
       let thisPeer = {
         ThisPeer.id: keyPair.fingerprint,
         publicKey: keyPair.publicKey,
         privateKey: keyPair.privateKey,
       };
-      let (stateWithId, stateWithIdCmd) = initStateWithId(db, thisPeer);
+      let (stateWithId, stateWithIdCmd) =
+        initStateWithId(db, thisPeer, allDbData);
       (
         HasIdentity(stateWithId),
         Cmd.batch([
           stateWithIdCmd,
           db
-          |> IDBCmds.setKey(
-               "thisPeer",
+          |> Db.setThisPeer(
                {
                  ThisPeer.id: keyPair.fingerprint,
                  publicKey: keyPair.publicKey,
@@ -165,7 +160,7 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         ]),
       );
 
-    | (MyKeyPairGenError(_exn), LoadingIdentity(_db)) => (
+    | (MyKeyPairGenError(_exn), GeneratingIdentity(_)) => (
         FatalError(CannotCreateIdentity),
         Cmds.none,
       )
@@ -236,5 +231,6 @@ let getMyId = model =>
   | HasIdentity(state) => Some(state.thisPeer.id)
   | OpeningDB
   | FatalError(_)
-  | LoadingIdentity(_) => None
+  | LoadingDBData(_)
+  | GeneratingIdentity(_) => None
   };

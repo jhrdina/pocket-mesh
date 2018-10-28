@@ -1,20 +1,22 @@
 [@bs.deriving accessors]
 type t =
-  | OpenDbSuccess(IDBCmds.t)
-  | LoadIdentityFromDBSuccess(option(ThisPeer.t))
+  | OpenDbSuccess(Db.t)
+  | LoadDataFromDBSuccess(Db.allData)
   | DbFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | MyKeyPairGenError(exn)
   | AddPeerToGroup(string, string)
   | AddPeerWithIdAndPublicKeyToGroup(string, SimpleCrypto.key, string)
-  /*            */
+  /* ========== */
   /* Signalling */
+  /* ========== */
   | ConnectToSignalServerSuccess(SignalServerCmds.conn)
   | SignalServerConnectionError
   | SignalServerRetryConnection
   | SignalServerMessage(Message.t)
-  /*     */
-  /* RTC */
+  /* =========== */
+  /* Peers - RTC */
+  /* =========== */
   /* _, SDP, Acceptor ID */
   | RtcOfferReady(SimpleRTC.t, string, string)
   /* _, SDP, Initiator ID */
@@ -27,7 +29,8 @@ type t =
   | RtcClose(SimpleRTC.t, string)
   /* PeerID */
   | RtcRetryConnection(string)
-  /*       */
+  /* ===== */
   /* Debug */
+  /* ===== */
   | SendToPeer(string, string)
   | Noop;

@@ -1,3 +1,5 @@
+/* TYPES */
+
 type peerSignalState =
   | Online(SignalServerCmds.conn)
   | Offline;
@@ -96,6 +98,13 @@ let createInitiator = peerId =>
     Msgs.rtcError,
     Msgs.rtcClose,
   );
+
+let peerSignalStateOfSignalServerState = peerId =>
+  fun
+  | Types.Connected(ssConn, onlinePeers)
+      when PeerId.Set.mem(peerId, onlinePeers) =>
+    Online(ssConn)
+  | _ => Offline;
 
 /* UPDATES */
 
@@ -421,16 +430,27 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     )
   };
 
-let init = (id, key, inGroup, peerSignalState) => {
+let init = (~id, ~publicKey, ~nickName, ~inGroup, ~peerSignalState) => {
   let (connectionState, cmd) = initConnState(id, inGroup, peerSignalState);
-  ({id, publicKey: key, nickName: "", connectionState}, cmd);
+  ({id, publicKey, nickName, connectionState}, cmd);
 };
 
-let update = (thisPeer, model, msg) => {
+let update = (thisPeer, model: t, msg) => {
   let (connectionState, effect) =
     updateConnState(thisPeer, model.id, model.connectionState, msg);
   let model =
     model.connectionState !== connectionState ?
       {...model, connectionState} : model;
   (model, effect);
+};
+
+/* PERSISTENCY */
+
+let initFromDb = ({Types.id, publicKey, nickName}, inGroup, peerSignalState) =>
+  init(~id, ~publicKey, ~nickName, ~inGroup, ~peerSignalState);
+
+let toDb = ({id, publicKey, nickName, _}: t) => {
+  Types.id,
+  publicKey,
+  nickName,
 };

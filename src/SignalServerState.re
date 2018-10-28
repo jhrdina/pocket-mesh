@@ -34,8 +34,10 @@ let timeoutRetryCmd = attemptsMade =>
 
 /* INIT, UPDATE */
 
+let initialModel = Types.Connecting;
+
 let init = (thisPeer, peers) => (
-  Types.Connecting,
+  initialModel,
   cmdConnectToSignalServer(thisPeer, peers),
 );
 

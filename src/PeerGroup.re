@@ -22,6 +22,7 @@ type peerInGroup = {
 
 type t = {
   id: string,
+  /* TODO: Better container */
   peers: list(peerInGroup),
   content: docType,
 };
@@ -33,3 +34,9 @@ let make = (id, actorId) => {
 };
 
 let addPeer = (peer, t: t) => {...t, peers: [peer, ...t.peers]};
+
+let containsPeer = (peerId, t) =>
+  List.exists(
+    (peerInGroup: peerInGroup) => peerInGroup.id === peerId,
+    t.peers,
+  );
