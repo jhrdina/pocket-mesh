@@ -22,7 +22,8 @@ type t =
   /* _, SDP, Initiator ID */
   | RtcAnswerReady(SimpleRTC.t, string, string)
   | RtcConnected(SimpleRTC.t, string)
-  | RtcGotData(SimpleRTC.t, string)
+  /* _, tag, data */
+  | RtcGotData(SimpleRTC.t, string, string)
   /* _, PeerID, errMsg */
   | RtcError(SimpleRTC.t, string, string)
   /* _, PeerID */
@@ -33,4 +34,5 @@ type t =
   /* Debug */
   /* ===== */
   | SendToPeer(string, string)
+  | OfferChanges
   | Noop;

@@ -136,21 +136,17 @@ let init = (db, peerGroups, signalServerState) =>
   | Some(dbPeers) => {
       let (newPeers, cmdsList) =
         PeerId.Map.fold(
-          (_, dbPeer, (peers, cmdsList)) =>
-            switch (peers |> findOpt(dbPeer.Types.id)) {
-            | Some(peer) => (peers, cmdsList)
-            | None =>
-              let (newPeer, newPeerCmd) =
-                Peer.initFromDb(
-                  dbPeer,
-                  PeerGroups.isPeerInAGroup(dbPeer.id, peerGroups),
-                  Peer.peerSignalStateOfSignalServerState(
-                    dbPeer.id,
-                    signalServerState,
-                  ),
-                );
-              (peers |> add(dbPeer.id, newPeer), [newPeerCmd, ...cmdsList]);
-            },
+          (_, dbPeer: Types.peerInDb, (peers, cmdsList)) => {
+            let inGroup = PeerGroups.isPeerInAGroup(dbPeer.id, peerGroups);
+            let signalState =
+              Peer.peerSignalStateOfSignalServerState(
+                dbPeer.id,
+                signalServerState,
+              );
+            let (newPeer, newPeerCmd) =
+              Peer.initFromDb(dbPeer, inGroup, signalState);
+            (peers |> add(dbPeer.id, newPeer), [newPeerCmd, ...cmdsList]);
+          },
           dbPeers,
           (empty, []),
         );
@@ -220,7 +216,6 @@ let update =
     );
 
   | (SignalServerMessage(Ok(onlinePeers)), SigningIn(ssConn)) =>
-    /* updatePeers(onlinePeers, thisPeers, msg) */
     let (newPeers, cmdList) =
       PeerId.Set.fold(
         (peerId, (newPeers, cmds)) =>
@@ -308,3 +303,14 @@ let update =
   | (_, _) => (peers, Cmds.none)
   };
 };
+
+let foldActiveConnections = (f, peers, acc) =>
+  fold(
+    (peer, acc) =>
+      switch (peer |> Peer.getActiveConnection) {
+      | Some(rtcConn) => f(peer.id, rtcConn, acc)
+      | None => acc
+      },
+    peers,
+    acc,
+  );

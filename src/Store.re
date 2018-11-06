@@ -67,6 +67,28 @@ let updateStateWithId = (model, msg) => {
       )
     | _ => Cmds.none
     };
+  let debugCmd =
+    switch (msg) {
+    | Msgs.OfferChanges =>
+      Cmds.batch(
+        Peers.foldActiveConnections(
+          (peerId, rtcConn, cmdList) => {
+            let groupsStatuses =
+              PeerGroups.getGroupsStatusesForPeer(peerId, model.peerGroups);
+            let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
+            [
+              rtcConn->RTCCmds.send(
+                msgForPeer |> P2PMsg.encode |> Json.stringify,
+              ),
+              ...cmdList,
+            ];
+          },
+          model.peers,
+          [],
+        ),
+      )
+    | _ => Cmds.none
+    };
   let (ssState, ssStateCmd) =
     SignalServerState.update(
       model.thisPeer,
@@ -92,7 +114,7 @@ let updateStateWithId = (model, msg) => {
       peerGroups,
       peers,
     },
-    Cmd.batch([ssStateCmd, peersCmd, cryptoCmd, peerGroupsCmd]),
+    Cmd.batch([ssStateCmd, peersCmd, cryptoCmd, peerGroupsCmd, debugCmd]),
   );
 };
 
@@ -169,9 +191,9 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     /* Peers & groups management, connecting */
     /*****************************************/
 
-    | (RtcGotData(_rtcConn, data), _) => (
+    | (RtcGotData(_rtcConn, peerId, data), _) => (
         model,
-        Cmds.log("Store: Got data: " ++ data),
+        Cmds.log("Store: Got data from " ++ peerId ++ ": " ++ data),
       )
 
     | (RtcError(_rtcConn, peerId, msg), _) => (
@@ -224,6 +246,7 @@ let create = () => {
 
   makeGlobal("addFriend", jwk => app.pushMsg(AddPeerToGroup(jwk, "aaa")));
   makeGlobal("sendToPeer", (id, msg) => app.pushMsg(SendToPeer(id, msg)));
+  makeGlobal("offerChanges", () => app.pushMsg(OfferChanges));
 };
 
 let getMyId = model =>

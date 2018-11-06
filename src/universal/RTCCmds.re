@@ -21,7 +21,9 @@ let _create =
     t->SimpleRTC.setOnConnect(() =>
       callbacks^.enqueue(connectedToMsg(t, tag))
     );
-    t->SimpleRTC.setOnData(data => callbacks^.enqueue @@ dataToMsg(t, data));
+    t->SimpleRTC.setOnData(data =>
+      callbacks^.enqueue @@ dataToMsg(t, tag, data)
+    );
     t->SimpleRTC.setOnError(error =>
       error |> errorToMsg(t, tag) |> callbacks^.enqueue
     );
