@@ -362,18 +362,36 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       Connected(_, _, _) |
       NotInGroup(Offline),
     )
-  | (WentOffline, NotInGroup(Offline))
   | (
-      RtcRetryConnection,
-      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _),
+      WentOffline,
+      NotInGroup(Offline) | InGroupWaitingForOnlineSignal |
+      Connected(_, _, Offline),
     )
   | (
       WentOnline(_),
-      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _),
+      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _) |
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineWaitingForAcceptor(_) |
+      InGroupOnlineFailedRetryingAt(_) |
+      Connected(_, _, _) |
+      NotInGroup(_),
+    )
+  | (
+      RtcRetryConnection,
+      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _) |
+      InGroupWaitingForOnlineSignal |
+      InGroupOnlineCreatingSdpOffer(_) |
+      Connected(_, _, _) |
+      NotInGroup(_),
     )
   | (
       RtcOfferReady(_, _),
-      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _),
+      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _) |
+      InGroupOnlineFailedRetryingAt(_) |
+      Connected(_, _, _) |
+      InGroupOnlineWaitingForAcceptor(_) |
+      InGroupWaitingForOnlineSignal |
+      NotInGroup(_),
     )
   | (
       RtcAnswerReady(_, _),
@@ -384,46 +402,33 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       OnlineWaitingForInitiator(_, _, _) |
       Connected(_, _, _),
     )
-  | (RtcConnected, OnlineCreatingSdpAnswer(_, _))
+  | (
+      RtcConnected,
+      OnlineCreatingSdpAnswer(_, _) | InGroupOnlineFailedRetryingAt(_) |
+      InGroupOnlineCreatingSdpOffer(_) |
+      Connected(_, _, _) |
+      InGroupWaitingForOnlineSignal |
+      NotInGroup(_),
+    )
   | (
       RemovedFromLastGroup,
       OnlineCreatingSdpAnswer(false, _) |
-      OnlineWaitingForInitiator(false, _, _),
-    )
-  | (
-      RemovedFromLastGroup | WentOnline(_) | RtcRetryConnection | RtcClose |
-      RtcOfferReady(_, _) |
-      RtcConnected,
+      OnlineWaitingForInitiator(false, _, _) |
       NotInGroup(_),
     )
   | (
       AddedToGroup,
       OnlineCreatingSdpAnswer(true, _) | Connected(_, true, _) |
-      OnlineWaitingForInitiator(true, _, _),
-    )
-  | (
-      AddedToGroup | RtcRetryConnection | RtcClose | RtcOfferReady(_, _) |
-      RtcConnected |
-      WentOffline,
-      InGroupWaitingForOnlineSignal,
-    )
-  | (
-      AddedToGroup | WentOnline(_) | RtcRetryConnection | RtcConnected,
-      InGroupOnlineCreatingSdpOffer(_),
-    )
-  | (
-      AddedToGroup | WentOnline(_) | RtcOfferReady(_, _),
-      InGroupOnlineWaitingForAcceptor(_),
-    )
-  | (
-      AddedToGroup | WentOnline(_) | RtcOfferReady(_, _) | RtcConnected |
-      RtcClose,
+      OnlineWaitingForInitiator(true, _, _) |
+      InGroupWaitingForOnlineSignal |
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineWaitingForAcceptor(_) |
       InGroupOnlineFailedRetryingAt(_),
     )
-  | (WentOffline, Connected(_, _, Offline))
   | (
-      WentOnline(_) | RtcRetryConnection | RtcOfferReady(_, _) | RtcConnected,
-      Connected(_, _, _),
+      RtcClose,
+      InGroupOnlineFailedRetryingAt(_) | InGroupWaitingForOnlineSignal |
+      NotInGroup(_),
     ) => (
       prevState,
       Cmds.none,
@@ -436,12 +441,9 @@ let init = (~id, ~publicKey, ~nickName, ~inGroup, ~peerSignalState) => {
 };
 
 let update = (thisPeer, model: t, msg) => {
-  let (connectionState, effect) =
+  let (newConnectionState, connectionStateCmd) =
     updateConnState(thisPeer, model.id, model.connectionState, msg);
-  let model =
-    model.connectionState !== connectionState ?
-      {...model, connectionState} : model;
-  (model, effect);
+  ({...model, connectionState: newConnectionState}, connectionStateCmd);
 };
 
 /* PERSISTENCY */
@@ -454,3 +456,11 @@ let toDb = ({id, publicKey, nickName, _}: t) => {
   publicKey,
   nickName,
 };
+
+/* QUERIES */
+
+let getActiveConnection = peer =>
+  switch (peer.connectionState) {
+  | Connected(rtcConn, _, _) => Some(rtcConn)
+  | _ => None
+  };
