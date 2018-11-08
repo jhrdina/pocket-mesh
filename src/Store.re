@@ -87,6 +87,8 @@ let updateStateWithId = (model, msg) => {
           [],
         ),
       )
+    | RtcGotData(_rtcConn, peerId, data) =>
+      Cmds.log("Store: Got data from " ++ peerId ++ ": " ++ data)
     | _ => Cmds.none
     };
   let (ssState, ssStateCmd) =
@@ -191,11 +193,6 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     /* Peers & groups management, connecting */
     /*****************************************/
 
-    | (RtcGotData(_rtcConn, peerId, data), _) => (
-        model,
-        Cmds.log("Store: Got data from " ++ peerId ++ ": " ++ data),
-      )
-
     | (RtcError(_rtcConn, peerId, msg), _) => (
         model,
         Cmds.log("RTC Error (peer " ++ peerId ++ "): " ++ msg),
@@ -204,7 +201,6 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     /*********/
     /* Debug */
     /*********/
-
     | (SendToPeer(id, msgStr), HasIdentity({peers})) =>
       switch (peers |> Peers.findOpt(id)) {
       | Some({connectionState: Connected(rtcConn, _, _), _}) => (
@@ -240,13 +236,22 @@ let create = () => {
       ~init,
       ~update,
       /* ~subscriptions=model => stateLogger(model), */
-      ~subscriptions=_ => Sub.none,
+      ~subscriptions=
+        model => {
+          makeGlobal("model", model);
+          Sub.none;
+        },
       ~shutdown=_model => Cmds.none,
     );
 
   makeGlobal("addFriend", jwk => app.pushMsg(AddPeerToGroup(jwk, "aaa")));
   makeGlobal("sendToPeer", (id, msg) => app.pushMsg(SendToPeer(id, msg)));
   makeGlobal("offerChanges", () => app.pushMsg(OfferChanges));
+  makeGlobal("addPeerToGroupWithPerms", (peerId, groupId, perms) =>
+    app.pushMsg(AddPeerToGroupWithPerms(peerId, groupId, perms))
+  );
+  makeGlobal("addItem", text => app.pushMsg(AddItem(text)));
+  makeGlobal("printData", () => app.pushMsg(PrintData));
 };
 
 let getMyId = model =>

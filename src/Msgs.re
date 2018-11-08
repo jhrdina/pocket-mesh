@@ -33,6 +33,9 @@ type t =
   /* ===== */
   /* Debug */
   /* ===== */
+  | PrintData
+  | AddItem(string)
   | SendToPeer(string, string)
+  | AddPeerToGroupWithPerms(PeerId.t, PeerGroup.Id.t, string)
   | OfferChanges
   | Noop;

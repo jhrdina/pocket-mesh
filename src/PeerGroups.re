@@ -13,12 +13,14 @@ let updateGroup = (id, updateFn, t) =>
   t
   |> List.map((item: PeerGroup.t) => item.id === id ? updateFn(item) : item);
 
-let addPeerToGroup = (peerId, groupId, t) =>
+let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
   t
   |> updateGroup(groupId, group =>
-       group
-       |> PeerGroup.addPeer({id: peerId, permissions: ReadContentAndMembers})
+       group |> PeerGroup.addPeer({id: peerId, permissions: perms})
      );
+
+let addPeerToGroup = (peerId, groupId, t) =>
+  addPeerToGroupWithPerms(peerId, groupId, ReadContentAndMembers, t);
 
 /* QUERIES */
 
@@ -62,10 +64,39 @@ let getGroupsStatusesForPeer = (peerId, peerGroups) =>
     peerGroups |> getGroupsForPeer(peerId),
   );
 
+/* ENCODING/DECODING */
+
+let encode = peerGroups =>
+  Json.(
+    Array(peerGroups |> List.map(peerGroup => peerGroup |> PeerGroup.encode))
+  );
+
+let decode = json =>
+  Json.(
+    switch (json |> array) {
+    | Some(jsonArr) =>
+      jsonArr
+      |> List.fold_left(
+           (jsonArr, jsonItem) =>
+             switch (jsonArr) {
+             | Some(jsonArr) =>
+               switch (jsonItem |> PeerGroup.decode) {
+               | Some(peerGroup) => Some([peerGroup, ...jsonArr])
+               | None => None
+               }
+             | None => None
+             },
+           Some([]),
+         )
+
+    | None => None
+    }
+  );
+
 /* UPDATE */
 
 let saveToDb = (db, model) =>
-  Db.setPeerGroups(model, _ => Msgs.noop, _ => Msgs.noop, db);
+  Db.setPeerGroups(model |> encode, _ => Msgs.noop, _ => Msgs.noop, db);
 
 let connectionStarted = (peerId, rtcConn, peerGroups) => {
   let groupsStatuses = getGroupsStatusesForPeer(peerId, peerGroups);
@@ -85,8 +116,8 @@ let maybeCreateRequestForMissingChanges:
           when
             !
               PeerGroup.AM.Clock.lessOrEqual(
-                localGroupStatus.clock,
                 remoteGroupStatus.clock,
+                localGroupStatus.clock,
               ) =>
         true
       | WriteContent(_)
@@ -97,10 +128,11 @@ let maybeCreateRequestForMissingChanges:
       switch (localGroupStatus.permissions) {
       | WriteContent(WriteMembers)
           when
-            PeerGroup.AM.Clock.lessOrEqual(
-              localGroupStatus.permissionsClock,
-              remoteGroupStatus.permissionsClock,
-            ) =>
+            !
+              PeerGroup.AM.Clock.lessOrEqual(
+                remoteGroupStatus.permissionsClock,
+                localGroupStatus.permissionsClock,
+              ) =>
         true
       | WriteContent(WriteMembers)
       | WriteContent(ReadMembers)
@@ -278,7 +310,8 @@ let receivedChanges = (peerId, groupsChanges, peerGroups) =>
     peerGroups,
   );
 
-let receivedMessageFromPeer = (peerId, rtcConn, message: P2PMsg.t, peerGroups) =>
+let receivedMessageFromPeer =
+    (peerId, rtcConn, db, message: P2PMsg.t, peerGroups) =>
   switch (message) {
   | ChangesOffer(changesOffer) => (
       peerGroups,
@@ -288,21 +321,20 @@ let receivedMessageFromPeer = (peerId, rtcConn, message: P2PMsg.t, peerGroups) =
       peerGroups,
       receivedChangesRequest(peerId, rtcConn, requestedChanges, peerGroups),
     )
-  | Changes(groupsChanges) => (
-      receivedChanges(peerId, groupsChanges, peerGroups),
-      Cmds.none,
-    )
+  | Changes(groupsChanges) =>
+    let newPeerGroups = receivedChanges(peerId, groupsChanges, peerGroups);
+    (newPeerGroups, saveToDb(db, newPeerGroups));
   };
 
 let receivedStringMessageFromPeer =
-    (peerId, rtcConn, stringMessage, peerGroups) => {
+    (peerId, rtcConn, db, stringMessage, peerGroups) => {
   let json =
     switch (stringMessage |> Json.parse) {
     | json => Some(json)
     | exception _ => None
     };
   switch (json |?> P2PMsg.decode) {
-  | Some(msg) => receivedMessageFromPeer(peerId, rtcConn, msg, peerGroups)
+  | Some(msg) => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups)
   | None => (
       peerGroups,
       Cmds.log("Failed to parse message from peer " ++ peerId),
@@ -311,7 +343,7 @@ let receivedStringMessageFromPeer =
 };
 
 let init = (db, thisPeerId, maybeDbPeerGroups) =>
-  switch (maybeDbPeerGroups) {
+  switch (maybeDbPeerGroups |?> decode) {
   | Some(dbPeerGroups) => (dbPeerGroups, Cmds.none)
   | None =>
     let newPeerGroups =
@@ -337,6 +369,60 @@ let update = (db, peerGroups, msg) =>
       connectionStarted(peerId, rtcConn, peerGroups),
     )
   | RtcGotData(rtcConn, peerId, data) =>
-    receivedStringMessageFromPeer(peerId, rtcConn, data, peerGroups)
+    receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
+
+  | AddPeerToGroupWithPerms(peerId, groupId, strPerms) =>
+    /* TODO: Check if the peer is in the friends list */
+    switch (PeerGroup.decodePermissions(strPerms)) {
+    | Some(perms) =>
+      let newPeerGroups =
+        peerGroups |> addPeerToGroupWithPerms(peerId, groupId, perms);
+      (newPeerGroups, saveToDb(db, newPeerGroups));
+    | None => (
+        peerGroups,
+        Cmds.log("Invalid permissions, try crmr, crwmr, or crwmrw"),
+      )
+    }
+
+  /* TODO: Debug, remove */
+  | AddItem(text) =>
+    let newPeerGroups =
+      peerGroups
+      |> updateGroup("aaa", peerGroup =>
+           {
+             ...peerGroup,
+             content:
+               peerGroup.content
+               |> PeerGroup.AM.change("Add item", root =>
+                    PeerGroup.AM.Json.(
+                      switch (root |> Map.get("items") |?> List.ofJson) {
+                      | Some(list) =>
+                        root
+                        |> Map.add(
+                             "items",
+                             list
+                             |> List.prepend(string(text))
+                             |> List.toJson,
+                           )
+                      | None => root
+                      }
+                    )
+                  ),
+           }
+         );
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+
+  /* TODO: Debug, remove */
+  | PrintData =>
+    switch (peerGroups |> findOpt("aaa")) {
+    | Some(peerGroup) => (
+        peerGroups,
+        Cmds.log(
+          PeerGroup.AM.(peerGroup.content |> root |> Json.Map.get("items")),
+        ),
+      )
+    | None => (peerGroups, Cmds.none)
+    }
+
   | _ => (peerGroups, Cmds.none)
   };

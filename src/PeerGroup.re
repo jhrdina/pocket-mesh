@@ -34,7 +34,15 @@ type t = {
 
 let make = (id, actorId) => {
   let actorId = AM.ActorId.ofString(actorId);
-  {id, peers: AM.make(actorId), content: AM.make(actorId)};
+  {
+    id,
+    peers: AM.make(actorId),
+    content:
+      AM.make(actorId)
+      |> AM.change("Init", root =>
+           AM.Json.(root |> Map.add("items", List.create() |> List.toJson))
+         ),
+  };
 };
 
 /* ENCODING/DECODING */
@@ -61,6 +69,7 @@ let addPeer = (peer: peerInGroup, t: t) => {
            |> Map.add(
                 peer.id,
                 Map.create()
+                |> Map.add("id", string(peer.id))
                 |> Map.add(
                      "permissions",
                      string(encodePermissions(peer.permissions)),
@@ -88,3 +97,26 @@ let getPeerInGroup = (peerId, t) => {
   | _ => None
   };
 };
+
+/* ENCODING/DECODING */
+
+let encode = peerGroup =>
+  Json.(
+    Object([
+      ("id", String(peerGroup.id)),
+      ("peers", String(peerGroup.peers |> AM.save)),
+      ("content", String(peerGroup.content |> AM.save)),
+    ])
+  );
+
+let decode = json =>
+  Json.(
+    switch (
+      json |> get("id") |?> string,
+      json |> get("peers") |?> string |?> AM.load,
+      json |> get("content") |?> string |?> AM.load,
+    ) {
+    | (Some(id), Some(peers), Some(content)) => Some({id, peers, content})
+    | _ => None
+    }
+  );

@@ -5,7 +5,7 @@ type t = IDBPromise.t;
 
 type allData = {
   thisPeer: option(ThisPeer.t),
-  peerGroups: option(Types.peerGroups),
+  peerGroups: option(Json.t),
   peers: option(Types.peersInDb),
 };
 
@@ -44,7 +44,7 @@ let setPeers = (peers: Types.peersInDb, succToMsg, errToMsg, t) =>
     errToMsg,
   );
 
-let setPeerGroups = (peerGroups: Types.peerGroups, succToMsg, errToMsg, t) =>
+let setPeerGroups = (peerGroups: Json.t, succToMsg, errToMsg, t) =>
   Cmds.wrapPromise(
     () => IDBPromise.setKey("peerGroups", peerGroups, t),
     succToMsg,
