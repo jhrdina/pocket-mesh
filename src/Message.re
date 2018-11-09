@@ -89,7 +89,9 @@ let toJSON =
           (
             "onlinePeers",
             Array(
-              onlinePeers |> PeerId.Set.elements |> List.map(id => String(id)),
+              onlinePeers
+              |> PeerId.Set.elements
+              |> List.rev_map(id => String(id)),
             ),
           ),
         ]),
@@ -104,7 +106,9 @@ let toJSON =
           (
             "watch",
             Array(
-              msg.watch |> PeerId.Set.elements |> List.map(id => String(id)),
+              msg.watch
+              |> PeerId.Set.elements
+              |> List.rev_map(id => String(id)),
             ),
           ),
           ("signature", String(msg.signature)),
@@ -120,7 +124,7 @@ let toJSON =
             "changes",
             Array(
               changes
-              |> List.map(
+              |> List.rev_map(
                    fun
                    | WentOnline(peerId) =>
                      Array([String(peerId), String("online")])
@@ -141,7 +145,9 @@ let toJSON =
           (
             "watch",
             Array(
-              msg.watch |> PeerId.Set.elements |> List.map(id => String(id)),
+              msg.watch
+              |> PeerId.Set.elements
+              |> List.rev_map(id => String(id)),
             ),
           ),
           ("signature", String(msg.signature)),

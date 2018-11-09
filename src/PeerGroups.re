@@ -11,7 +11,9 @@ let getFirstId: Types.peerGroups => option(string) =
 
 let updateGroup = (id, updateFn, t) =>
   t
-  |> List.map((item: PeerGroup.t) => item.id === id ? updateFn(item) : item);
+  |> List.rev_map((item: PeerGroup.t) =>
+       item.id === id ? updateFn(item) : item
+     );
 
 let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
   t
@@ -68,7 +70,9 @@ let getGroupsStatusesForPeer = (peerId, peerGroups) =>
 
 let encode = peerGroups =>
   Json.(
-    Array(peerGroups |> List.map(peerGroup => peerGroup |> PeerGroup.encode))
+    Array(
+      peerGroups |> List.rev_map(peerGroup => peerGroup |> PeerGroup.encode),
+    )
   );
 
 let decode = json =>
