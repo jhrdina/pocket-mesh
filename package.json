@@ -7,8 +7,8 @@
     "build": "bsb -make-world",
     "start": "bsb -make-world -w",
     "clean": "bsb -clean-world",
-    "pack": "webpack example/example.bs.js -o lib/app.js --mode development",
-    "pack-start": "webpack -w example/example.bs.js -o lib/app.js --mode development",
+    "pack": "webpack --config ./example/webpack.config.js",
+    "pack-start": "webpack -w --config ./example/webpack.config.js",
     "prepare": "npm link bs-platform"
   },
   "repository": {
