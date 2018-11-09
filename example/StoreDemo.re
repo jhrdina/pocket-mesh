@@ -1,1 +1,1 @@
-let run = () => Store.create() |> ignore;
+Store.create() |> ignore;
