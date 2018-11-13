@@ -56,7 +56,7 @@ let update = (thisPeer, peers, model: Types.signalServerState, msg) =>
       timeoutRetryCmd(attemptsMade),
     )
 
-  | (SignalServerConnectionError, signalServerState) => (
+  | (SignalServerConnectionError, _signalServerState) => (
       FailedRetryingAt("", 1, ""),
       timeoutRetryCmd(1),
     )

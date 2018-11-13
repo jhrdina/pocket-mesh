@@ -230,7 +230,7 @@ external makeGlobal: (Webapi.Dom.Window.t, string, 'a) => unit = "";
 let makeGlobal = (name, value) => makeGlobal(Webapi.Dom.window, name, value);
 
 let create = () => {
-  let stateLogger = StateLogger.create();
+  /* let stateLogger = StateLogger.create(); */
   let app =
     BlackTea.Store.create(
       ~init,

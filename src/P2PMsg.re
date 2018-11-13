@@ -61,7 +61,7 @@ type t =
   | Changes(PeerGroup.Id.Map.t(groupChanges));
 /*| Blob(blobInfo)*/
 
-/* JSON ENCODERS & DECODERS */
+/* ENCODING & DECODING */
 
 let encodeGroupStatus = (t: groupStatus) =>
   Json.(
@@ -240,6 +240,156 @@ let decode = json =>
     | _ => None
     }
   );
+
+/* MESSAGES CREATING */
+
+let getGroupStatusForPeer: (PeerId.t, PeerGroup.t) => option(groupStatus) =
+  (peerId, group) =>
+    group
+    |> PeerGroup.getPeerPermissions(peerId)
+    |?>> (
+      permissions => {
+        id: group.id,
+        clock: group.content |> PeerGroup.AM.getClock,
+        permissions,
+        permissionsClock: group.peers |> PeerGroup.AM.getClock,
+      }
+    );
+
+let maybeCreateRequestForMissingChanges:
+  (groupStatus, groupStatus) => option(groupChangesRequest) =
+  (remoteGroupStatus, localGroupStatus) => {
+    let wantsContent =
+      switch (localGroupStatus.permissions) {
+      | WriteContent(_)
+          when
+            !
+              PeerGroup.AM.Clock.lessOrEqual(
+                remoteGroupStatus.clock,
+                localGroupStatus.clock,
+              ) =>
+        true
+      | WriteContent(_)
+      | ReadContentAndMembers => false
+      };
+
+    let wantsMembers =
+      switch (localGroupStatus.permissions) {
+      | WriteContent(WriteMembers)
+          when
+            !
+              PeerGroup.AM.Clock.lessOrEqual(
+                remoteGroupStatus.permissionsClock,
+                localGroupStatus.permissionsClock,
+              ) =>
+        true
+      | WriteContent(WriteMembers)
+      | WriteContent(ReadMembers)
+      | ReadContentAndMembers => false
+      };
+
+    switch (wantsContent, wantsMembers) {
+    | (true, true) =>
+      Some(
+        ContentAndMembers(
+          localGroupStatus.clock,
+          localGroupStatus.permissionsClock,
+        ),
+      )
+    | (true, false) => Some(Content(localGroupStatus.clock))
+    | (false, true) => Some(Members(localGroupStatus.permissionsClock))
+    | (false, false) => None
+    };
+  };
+
+let maybeCreateRequestsForMissingChanges =
+    (remoteGroupsStatuses, localGroupsStatuses) => {
+  let requests =
+    PeerGroup.Id.Map.fold(
+      (groupId, remoteGroupStatus, requestedChanges) =>
+        switch (localGroupsStatuses |> PeerGroup.Id.Map.find(groupId)) {
+        | localGroupStatus =>
+          let maybeRequest =
+            maybeCreateRequestForMissingChanges(
+              remoteGroupStatus,
+              localGroupStatus,
+            );
+          switch (maybeRequest) {
+          | Some(request) =>
+            requestedChanges |> PeerGroup.Id.Map.add(groupId, request)
+          | None => requestedChanges
+          };
+        | exception Not_found => requestedChanges
+        },
+      remoteGroupsStatuses,
+      PeerGroup.Id.Map.empty,
+    );
+  !PeerGroup.Id.Map.is_empty(requests) ? Some(requests) : None;
+};
+
+let maybeGetGroupChangesForRequest =
+    (peerId, groupChangesRequest: groupChangesRequest, group) =>
+  if (PeerGroup.containsPeer(peerId, group)) {
+    /* If peer is in a group it automatically has at least read permissions. */
+    let maybeContentChanges =
+      switch (groupChangesRequest) {
+      | Content(clock)
+      | ContentAndMembers(clock, _) =>
+        Some(group.content |> PeerGroup.AM.getChangesFromTime(clock))
+      | Members(_) => None
+      };
+
+    let maybeMembersChanges =
+      switch (groupChangesRequest) {
+      | Members(clock)
+      | ContentAndMembers(_, clock) =>
+        Some(group.peers |> PeerGroup.AM.getChangesFromTime(clock))
+      | Content(_) => None
+      };
+
+    switch (maybeContentChanges, maybeMembersChanges) {
+    | (Some(contentChanges), Some(membersChanges)) =>
+      Some(ContentAndMembers(contentChanges, membersChanges))
+    | (Some(contentChanges), None) => Some(Content(contentChanges))
+    | (None, Some(membersChanges)) => Some(Members(membersChanges))
+    | (None, None) => None
+    };
+  } else {
+    None;
+  };
+
+let maybeGetPeerGroupWithAppliedChanges =
+    (peerId, groupChanges: groupChanges, peerGroup) =>
+  switch (PeerGroup.getPeerPermissions(peerId, peerGroup)) {
+  | Some(permissions) =>
+    let maybeNewContent =
+      switch (permissions, groupChanges) {
+      | (WriteContent(_), Content(changes) | ContentAndMembers(changes, _)) =>
+        Some(peerGroup.content |> PeerGroup.AM.applyChanges(changes))
+      | (WriteContent(_), Members(_))
+      | (ReadContentAndMembers, _) => None
+      };
+
+    let maybeNewMembers =
+      switch (permissions, groupChanges) {
+      | (
+          WriteContent(WriteMembers),
+          Members(changes) | ContentAndMembers(_, changes),
+        ) =>
+        Some(peerGroup.peers |> PeerGroup.AM.applyChanges(changes))
+      | (WriteContent(WriteMembers), Content(_))
+      | (ReadContentAndMembers | WriteContent(ReadMembers), _) => None
+      };
+
+    switch (maybeNewContent, maybeNewMembers) {
+    | (Some(newContent), Some(newMembers)) =>
+      Some({...peerGroup, content: newContent, peers: newMembers})
+    | (Some(newContent), None) => Some({...peerGroup, content: newContent})
+    | (None, Some(newMembers)) => Some({...peerGroup, peers: newMembers})
+    | (None, None) => None
+    };
+  | None => None
+  };
 
 /*
   How do I (A) send changes to the other peer (B)?
