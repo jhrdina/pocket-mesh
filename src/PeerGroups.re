@@ -6,7 +6,6 @@ let defaultGroupId = PeerGroup.Id.ofStringExn("aaa");
 /* TYPES */
 type t = Types.peerGroups;
 
-/* TODO: Better container */
 let empty = PeerGroup.Id.Map.empty;
 
 let addPeerGroup = (peerGroup: PeerGroup.t, t) =>
@@ -20,6 +19,9 @@ let updateGroup = (id, updateFn: PeerGroup.t => PeerGroup.t, t) =>
 
 let removeGroup = PeerGroup.Id.Map.remove;
 
+let fold = (f, acc, t) =>
+  PeerGroup.Id.Map.fold((_id, group, acc) => f(acc, group), t, acc);
+
 let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
   t
   |> updateGroup(groupId, group =>
@@ -29,8 +31,18 @@ let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
 let addPeerToGroup = (peerId, groupId, t) =>
   addPeerToGroupWithPerms(peerId, groupId, ReadContentAndMembers, t);
 
-let fold = (f, acc, t) =>
-  PeerGroup.Id.Map.fold((_id, group, acc) => f(acc, group), t, acc);
+let removePeerFromAllGroups = (peerId, t) =>
+  fold(
+    (newPeerGroups, group) =>
+      if (group |> PeerGroup.containsPeer(peerId)) {
+        let newGroup = group |> PeerGroup.removePeer(peerId);
+        newPeerGroups |> addPeerGroup(newGroup);
+      } else {
+        newPeerGroups;
+      },
+    t,
+    t,
+  );
 
 /* QUERIES */
 
@@ -253,6 +265,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
         ),
       )
     }
+
   | UpdateGroupAlias(id, alias) =>
     switch (peerGroups |> findOpt(id)) {
     | Some(peersGroup) =>
@@ -260,6 +273,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
       (newPeerGroups, saveToDb(db, newPeerGroups));
     | None => (peerGroups, Cmds.none)
     }
+
   | UpdateGroupContent(id, content) =>
     switch (peerGroups |> findOpt(id)) {
     | Some(peersGroup) =>
@@ -270,6 +284,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
       (newPeerGroups, saveToDb(db, newPeerGroups));
     | None => (peerGroups, Cmds.none)
     }
+
   | RemoveGroup(id) =>
     let newPeerGroups = peerGroups |> removeGroup(id);
     (newPeerGroups, saveToDb(db, newPeerGroups));
@@ -292,6 +307,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
     | Some(false)
     | None => (peerGroups, Cmds.none)
     }
+
   | RemovePeerFromGroup(peerId, groupId) =>
     let newPeerGroups =
       peerGroups
@@ -299,12 +315,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
     (newPeerGroups, saveToDb(db, newPeerGroups));
 
   | RemovePeer(peerId) =>
-    /* TODO: Remove peer from all groups */
-    (peerGroups, Cmds.none)
-
-  /* TODO: Remove */
-  | AddPeerWithIdAndPublicKeyToGroup(id, _key, groupId) =>
-    let newPeerGroups = peerGroups |> addPeerToGroup(id, groupId);
+    let newPeerGroups = peerGroups |> removePeerFromAllGroups(peerId);
     (newPeerGroups, saveToDb(db, newPeerGroups));
 
   /* INTERNAL MESSAGES */
@@ -313,6 +324,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
       peerGroups,
       connectionStarted(peerId, rtcConn, peerGroups),
     )
+
   | RtcGotData(rtcConn, peerId, data) =>
     receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
 

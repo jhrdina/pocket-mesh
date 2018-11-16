@@ -5,11 +5,6 @@ type t =
   | DbFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | MyKeyPairGenError(exn)
-  | AddPeerWithIdAndPublicKeyToGroup(
-      PeerId.t,
-      SimpleCrypto.key,
-      PeerGroup.Id.t,
-    )
   /* ========== */
   /* Signalling */
   /* ========== */
