@@ -93,7 +93,7 @@ let makeNotificationsForInterestedPeers = (state, peerChange) => {
       | None =>
         Printf.eprintf(
           "Internal error: found a watching of watcher %s who is not online though.",
-          watcherPeer,
+          watcherPeer |> PeerId.toString,
         );
         acc;
       },
@@ -224,7 +224,7 @@ let handleDisconnect = (socket, state) =>
     let notifications =
       makeNotificationsForInterestedPeers(state, WentOffline(peerId));
 
-    Printf.eprintf("Disconnected peer %s\n%!", peerId);
+    Printf.eprintf("Disconnected peer %s\n%!", peerId |> PeerId.toString);
     notifications;
   | None => []
   };
