@@ -57,8 +57,8 @@ let toJSON =
         stringify(
           Object([
             ("type", String(typeString)),
-            ("src", String(msg.src)),
-            ("tg", String(msg.tg)),
+            ("src", String(msg.src |> PeerId.toString)),
+            ("tg", String(msg.tg |> PeerId.toString)),
             ("sdp", String(msg.sdp)),
             ("signature", String(msg.signature)),
           ]),
@@ -91,7 +91,7 @@ let toJSON =
             Array(
               onlinePeers
               |> PeerId.Set.elements
-              |> List.rev_map(id => String(id)),
+              |> List.rev_map(id => String(id |> PeerId.toString)),
             ),
           ),
         ]),
@@ -102,13 +102,13 @@ let toJSON =
       stringify(
         Object([
           ("type", String("login")),
-          ("src", String(msg.src)),
+          ("src", String(msg.src |> PeerId.toString)),
           (
             "watch",
             Array(
               msg.watch
               |> PeerId.Set.elements
-              |> List.rev_map(id => String(id)),
+              |> List.rev_map(id => String(id |> PeerId.toString)),
             ),
           ),
           ("signature", String(msg.signature)),
@@ -127,9 +127,15 @@ let toJSON =
               |> List.rev_map(
                    fun
                    | WentOnline(peerId) =>
-                     Array([String(peerId), String("online")])
+                     Array([
+                       String(peerId |> PeerId.toString),
+                       String("online"),
+                     ])
                    | WentOffline(peerId) =>
-                     Array([String(peerId), String("offline")]),
+                     Array([
+                       String(peerId |> PeerId.toString),
+                       String("offline"),
+                     ]),
                  ),
             ),
           ),
@@ -141,13 +147,13 @@ let toJSON =
       stringify(
         Object([
           ("type", String("changeWatchedPeers")),
-          ("src", String(msg.src)),
+          ("src", String(msg.src |> PeerId.toString)),
           (
             "watch",
             Array(
               msg.watch
               |> PeerId.Set.elements
-              |> List.rev_map(id => String(id)),
+              |> List.rev_map(id => String(id |> PeerId.toString)),
             ),
           ),
           ("signature", String(msg.signature)),
@@ -184,7 +190,7 @@ let decodePeerIdSet = json =>
     items =>
       List.fold_left(
         (peerIdSet, peerId) =>
-          switch (peerIdSet, peerId |> Json.string) {
+          switch (peerIdSet, peerId |> Json.string |?> PeerId.ofString) {
           | (Some(peerIdSet), Some(peerId)) =>
             Some(peerIdSet |> PeerId.Set.add(peerId))
           | _ => None
@@ -196,7 +202,7 @@ let decodePeerIdSet = json =>
 
 let decodeLoginMsg = json =>
   switch (
-    json |> Json.get("src") |?> Json.string,
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
     json |> Json.get("signature") |?> Json.string,
     json |> Json.get("watch") |?> decodePeerIdSet,
   ) {
@@ -207,7 +213,7 @@ let decodeLoginMsg = json =>
 
 let decodeChangeWatchedPeers = json =>
   switch (
-    json |> Json.get("src") |?> Json.string,
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
     json |> Json.get("signature") |?> Json.string,
     json |> Json.get("watch") |?> decodePeerIdSet,
   ) {
@@ -218,7 +224,7 @@ let decodeChangeWatchedPeers = json =>
 
 let decodeLogoffMsg = json =>
   switch (
-    json |> Json.get("src") |?> Json.string,
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
     json |> Json.get("signature") |?> Json.string,
   ) {
   | (Some(src), Some(signature)) => Ok(Logoff({src, signature}))
@@ -227,8 +233,8 @@ let decodeLogoffMsg = json =>
 
 let decodeOfferOrAnswer = json =>
   switch (
-    json |> Json.get("src") |?> Json.string,
-    json |> Json.get("tg") |?> Json.string,
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
+    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
     json |> Json.get("sdp") |?> Json.string,
     json |> Json.get("signature") |?> Json.string,
   ) {
@@ -250,7 +256,7 @@ let decodeWatchedPeersChanged = json =>
     |> Json.get("changes")
     |?> decodeList(ch =>
           switch (
-            ch |> Json.nth(0) |?> Json.string,
+            ch |> Json.nth(0) |?> Json.string |?> PeerId.ofString,
             ch |> Json.nth(1) |?> Json.string,
           ) {
           | (Some(peerId), Some("offline")) => Some(WentOffline(peerId))

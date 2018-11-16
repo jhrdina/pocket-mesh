@@ -66,7 +66,7 @@ type t =
 let encodeGroupStatus = (t: groupStatus) =>
   Json.(
     Object([
-      ("id", String(t.id)),
+      ("id", String(t.id |> PeerGroup.Id.toString)),
       ("clock", String(t.clock |> PeerGroup.AM.Clock.toString)),
       ("permissions", String(t.permissions |> PeerGroup.encodePermissions)),
       (
@@ -78,7 +78,7 @@ let encodeGroupStatus = (t: groupStatus) =>
 let decodeGroupStatus = json =>
   Json.(
     switch (
-      json |> get("id") |?> string,
+      json |> get("id") |?> string |?> PeerGroup.Id.ofString,
       json |> get("clock") |?> string |?> PeerGroup.AM.Clock.fromString,
       json |> get("permissions") |?> string |?> PeerGroup.decodePermissions,
       json
@@ -172,7 +172,10 @@ let decodeGroupChanges = json =>
 let encodePeerGroupIdMap = (itemEncoder, map) =>
   Rex_json.Json.Object(
     PeerGroup.Id.Map.fold(
-      (groupId, value, acc) => [(groupId, itemEncoder(value)), ...acc],
+      (groupId, value, acc) => [
+        (groupId |> PeerGroup.Id.toString, itemEncoder(value)),
+        ...acc,
+      ],
       map,
       [],
     ),
@@ -181,13 +184,13 @@ let decodePeerGroupIdMap = (itemDecoder, json) =>
   json
   |> Json.obj
   |?> List.fold_left(
-        (maybeNewMap, (groupId, value)) =>
+        (maybeNewMap, (groupIdStr, value)) =>
           switch (maybeNewMap) {
           | Some(newMap) =>
-            switch (itemDecoder(value)) {
-            | Some(decodedValue) =>
+            switch (PeerGroup.Id.ofString(groupIdStr), itemDecoder(value)) {
+            | (Some(groupId), Some(decodedValue)) =>
               Some(newMap |> PeerGroup.Id.Map.add(groupId, decodedValue))
-            | None => None
+            | _ => None
             }
           | None => None
           },

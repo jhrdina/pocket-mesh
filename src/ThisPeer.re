@@ -3,3 +3,5 @@ type t = {
   publicKey: SimpleCrypto.key,
   privateKey: SimpleCrypto.key,
 };
+
+let id = t => t.id;

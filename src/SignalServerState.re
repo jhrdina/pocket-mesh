@@ -1,10 +1,14 @@
-let defaultSignalServerUrl = "ws://localhost:7777";
+/* TYPES */
+type t = {
+  url: string,
+  connectionState: Types.signalServerState,
+};
 
 /* HELPERS */
 
-let cmdConnectToSignalServer = (thisPeer, peers) =>
+let cmdConnectToSignalServer = (thisPeer, peers, url) =>
   SignalServerCmds.connect(
-    defaultSignalServerUrl,
+    url,
     thisPeer,
     peers |> Peers.getAllIds,
     Msgs.connectToSignalServerSuccess,
@@ -26,58 +30,77 @@ let applyPeerStatusChanges = (onlinePeers, changes) =>
     changes,
   );
 
-let timeoutRetryCmd = attemptsMade =>
-  Cmds.timeout(
-    Msgs.signalServerRetryConnection,
-    Retry.getTimeoutMs(attemptsMade),
-  );
-
 /* INIT, UPDATE */
 
-let initialModel = Types.Connecting;
+let initialConnectionState = Types.Connecting;
 
-let init = (thisPeer, peers) => (
-  initialModel,
-  cmdConnectToSignalServer(thisPeer, peers),
+let init = (thisPeer, peers, url) => (
+  {url, connectionState: initialConnectionState},
+  cmdConnectToSignalServer(thisPeer, peers, url),
 );
 
-let update = (thisPeer, peers, model: Types.signalServerState, msg) =>
-  switch (msg, model) {
-  | (Msgs.ConnectToSignalServerSuccess(connection), _) => (
-      Types.SigningIn(connection),
-      Cmds.none,
-    )
+let update = (thisPeer, peers, {url, connectionState}, msg) => {
+  let (newConnectionState, cmd) =
+    switch (msg, connectionState) {
+    | (Msgs.ConnectToSignalServerSuccess(connection), _) => (
+        Types.SigningIn(connection),
+        Cmds.none,
+      )
 
-  | (
-      SignalServerConnectionError,
-      FailedRetryingAt(time, attemptsMade, lastErr),
-    ) => (
-      Types.FailedRetryingAt(time, attemptsMade + 1, lastErr),
-      timeoutRetryCmd(attemptsMade),
-    )
+    | (
+        SignalServerConnectionError,
+        FailedRetryingAt(_, attemptsMade, lastErr),
+      ) =>
+      let newFailedAttempts = attemptsMade + 1;
+      let timeoutMs = Retry.getTimeoutMs(newFailedAttempts);
+      (
+        Types.FailedRetryingAt(
+          timeoutMs |> Retry.msToSec,
+          newFailedAttempts,
+          lastErr,
+        ),
+        Cmds.timeout(Msgs.signalServerRetryConnection, timeoutMs),
+      );
 
-  | (SignalServerConnectionError, _signalServerState) => (
-      FailedRetryingAt("", 1, ""),
-      timeoutRetryCmd(1),
-    )
+    | (SignalServerConnectionError, _signalServerState) =>
+      let failedAttempts = 1;
+      let timeoutMs = Retry.getTimeoutMs(failedAttempts);
+      (
+        FailedRetryingAt(timeoutMs |> Retry.msToSec, failedAttempts, ""),
+        Cmds.timeout(Msgs.signalServerRetryConnection, timeoutMs),
+      );
 
-  | (SignalServerRetryConnection, FailedRetryingAt(_, _, _)) => (
-      model,
-      cmdConnectToSignalServer(thisPeer, peers),
-    )
+    | (SignalServerRetryConnection, FailedRetryingAt(_, _, _)) => (
+        connectionState,
+        cmdConnectToSignalServer(thisPeer, peers, url),
+      )
 
-  | (SignalServerMessage(Ok(onlinePeers)), SigningIn(conn)) => (
-      Connected(conn, onlinePeers),
-      Cmds.none,
-    )
+    | (SignalServerMessage(Ok(onlinePeers)), SigningIn(conn)) => (
+        Connected(conn, onlinePeers),
+        Cmds.none,
+      )
 
-  | (
-      SignalServerMessage(WatchedPeersChanged(changes)),
-      Connected(conn, onlinePeers),
-    ) => (
-      Connected(conn, applyPeerStatusChanges(onlinePeers, changes)),
-      Cmds.none,
-    )
+    | (UpdateSignalServerUrl(url), _) => (
+        Connecting,
+        cmdConnectToSignalServer(thisPeer, peers, url),
+      )
 
-  | (_, signalServerState) => (signalServerState, Cmds.none)
-  };
+    | (
+        SignalServerMessage(WatchedPeersChanged(changes)),
+        Connected(conn, onlinePeers),
+      ) => (
+        Connected(conn, applyPeerStatusChanges(onlinePeers, changes)),
+        Cmds.none,
+      )
+
+    | (_, signalServerState) => (signalServerState, Cmds.none)
+    };
+
+  let newUrl =
+    switch (msg) {
+    | UpdateSignalServerUrl(newUrl) => newUrl
+    | _ => url
+    };
+
+  ({connectionState: newConnectionState, url: newUrl}, cmd);
+};

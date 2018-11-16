@@ -49,8 +49,8 @@ type peerConnectionState =
 
 type t = {
   id: PeerId.t,
-  publicKey: SimpleCrypto.key,
-  nickName: string,
+  publicKey: option(SimpleCrypto.key),
+  alias: string,
   connectionState: peerConnectionState,
 };
 
@@ -68,7 +68,9 @@ type msgs =
   /* t, sdp */
   | RtcAnswerReady(RTCCmds.t, string)
   | RtcOfferReady(RTCCmds.t, string)
-  | RtcConnected;
+  | RtcConnected
+  /* Not influencing connection state */
+  | UpdateAlias(string);
 
 type effect =
   | None
@@ -110,8 +112,6 @@ let peerSignalStateOfSignalServerState = peerId =>
       when PeerId.Set.mem(peerId, onlinePeers) =>
     Online(ssConn)
   | _ => Offline;
-
-let timeoutMsToSec = ms => (ms + 999) / 1000;
 
 /* UPDATES */
 
@@ -254,6 +254,11 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       Cmds.none,
     )
 
+  | (WentOnline(ssConn), Connected(rtcConn, inGroup, Offline)) => (
+      Connected(rtcConn, inGroup, Online(ssConn)),
+      Cmds.none,
+    )
+
   | (WentOffline, Connected(rtcConn, true, Online(_))) => (
       Connected(rtcConn, true, Offline),
       Cmds.none,
@@ -293,7 +298,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     (
       InGroupOnlineFailedRetryingAt(
         ssConn,
-        timeoutMs |> timeoutMsToSec,
+        timeoutMs |> Retry.msToSec,
         newFailedAttempts,
         "",
       ),
@@ -306,7 +311,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     (
       InGroupOnlineFailedRetryingAt(
         ssConn,
-        timeoutMs |> timeoutMsToSec,
+        timeoutMs |> Retry.msToSec,
         newFailedAttempts,
         "",
       ),
@@ -323,7 +328,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     (
       InGroupOnlineFailedRetryingAt(
         ssConn,
-        timeoutMs |> timeoutMsToSec,
+        timeoutMs |> Retry.msToSec,
         newFailedAttempts,
         "",
       ),
@@ -342,7 +347,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     (
       InGroupOnlineFailedRetryingAt(
         ssConn,
-        timeoutMs |> timeoutMsToSec,
+        timeoutMs |> Retry.msToSec,
         newFailedAttempts,
         "",
       ),
@@ -379,6 +384,11 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
   | (RemovedFromLastGroup, InGroupWaitingForOnlineSignal)
   | (WentOffline, NotInGroup(Online(_))) => (
       NotInGroup(Offline),
+      Cmds.none,
+    )
+
+  | (WentOnline(ssConn), NotInGroup(Offline)) => (
+      NotInGroup(Online(ssConn)),
       Cmds.none,
     )
 
@@ -433,8 +443,8 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       InGroupOnlineCreatingSdpOffer(_) |
       InGroupOnlineWaitingForAcceptor(_) |
       InGroupOnlineFailedRetryingAt(_) |
-      Connected(_, _, _) |
-      NotInGroup(_),
+      Connected(_, _, Online(_)) |
+      NotInGroup(Online(_)),
     )
   | (
       RtcRetryConnection,
@@ -489,33 +499,38 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       RtcClose,
       InGroupOnlineFailedRetryingAt(_) | InGroupWaitingForOnlineSignal |
       NotInGroup(_),
-    ) => (
-      prevState,
-      Cmds.none,
     )
+  | (UpdateAlias(_), _) => (prevState, Cmds.none)
   };
 
-let init = (~id, ~publicKey, ~nickName, ~inGroup, ~peerSignalState) => {
+let updateAlias = alias =>
+  fun
+  | UpdateAlias(newAlias) => newAlias
+  | _ => alias;
+
+let init = (~id, ~publicKey, ~alias, ~inGroup, ~peerSignalState) => {
   let (connectionState, cmd) = initConnState(id, inGroup, peerSignalState);
-  ({id, publicKey, nickName, connectionState}, cmd);
+  ({id, publicKey, alias, connectionState}, cmd);
 };
 
 let update = (thisPeer, model: t, msg) => {
+  let newAlias = updateAlias(model.alias, msg);
+
   let (newConnectionState, connectionStateCmd) =
     updateConnState(thisPeer, model.id, model.connectionState, msg);
-  ({...model, connectionState: newConnectionState}, connectionStateCmd);
+
+  (
+    {...model, alias: newAlias, connectionState: newConnectionState},
+    connectionStateCmd,
+  );
 };
 
 /* PERSISTENCY */
 
-let initFromDb = ({Types.id, publicKey, nickName}, inGroup, peerSignalState) =>
-  init(~id, ~publicKey, ~nickName, ~inGroup, ~peerSignalState);
+let initFromDb = ({Types.id, publicKey, alias}, inGroup, peerSignalState) =>
+  init(~id, ~publicKey, ~alias, ~inGroup, ~peerSignalState);
 
-let toDb = ({id, publicKey, nickName, _}: t) => {
-  Types.id,
-  publicKey,
-  nickName,
-};
+let toDb = ({id, publicKey, alias, _}: t) => {Types.id, publicKey, alias};
 
 /* QUERIES */
 

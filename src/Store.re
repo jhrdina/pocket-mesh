@@ -1,21 +1,45 @@
 [%%debugger.chrome];
 
 open BlackTea;
+open Json.Infix;
+
+/* CONSTANTS */
+
+let defaultSignalServerUrl = "ws://localhost:7777";
+
+/* MODULES */
+
+module InitConfig = {
+  type t = {
+    contentInitializer: PeerGroup.AM.t => PeerGroup.AM.t,
+    signalServerUrl: string,
+  };
+
+  let make =
+      (
+        ~contentInitializer=crdt => crdt,
+        ~signalServerUrl=defaultSignalServerUrl,
+        (),
+      ) => {
+    contentInitializer,
+    signalServerUrl,
+  };
+};
 
 /* TYPES */
 
 type hasIdentity = {
   db: Db.t,
   thisPeer: ThisPeer.t,
-  signalServerState: Types.signalServerState,
+  signalServer: SignalServerState.t,
   peerGroups: Types.peerGroups,
   peers: Peers.t,
 };
 
 type rootState =
-  | OpeningDB
-  | LoadingDBData(Db.t)
-  | GeneratingIdentity(Db.t, Db.allData)
+  | OpeningDB(InitConfig.t)
+  | LoadingDBData(InitConfig.t, Db.t)
+  | GeneratingIdentity(InitConfig.t, Db.t, Db.allData)
   | FatalError(exn)
   | HasIdentity(hasIdentity);
 
@@ -29,7 +53,7 @@ let logIdAndJWT = (thisPeer: ThisPeer.t) =>
     () =>
       SimpleCrypto.publicKeyToJwk(thisPeer.publicKey)
       |> Js.Promise.then_(jwk => {
-           Js.log("My ID: " ++ thisPeer.id);
+           Js.log("My ID: " ++ (thisPeer.id |> PeerId.toString));
            Js.log("My JWK: " ++ SimpleCrypto.jwkToString(jwk));
            Js.Promise.resolve();
          }),
@@ -39,40 +63,52 @@ let logIdAndJWT = (thisPeer: ThisPeer.t) =>
 
 /* UPDATE */
 
-let initStateWithId = (db, thisPeer: ThisPeer.t, allDbData: Db.allData) => {
+let initStateWithId =
+    (
+      db,
+      thisPeer: ThisPeer.t,
+      allDbData: Db.allData,
+      {contentInitializer, signalServerUrl}: InitConfig.t,
+    ) => {
   let (peerGroups, peerGroupsCmd) =
-    PeerGroups.init(db, thisPeer.id, allDbData.peerGroups);
+    PeerGroups.init(
+      db,
+      thisPeer.id,
+      allDbData.peerGroups,
+      contentInitializer,
+    );
   let (peers, peersCmd) =
     Peers.init(
       db,
       peerGroups,
-      SignalServerState.initialModel,
+      SignalServerState.initialConnectionState,
       allDbData.peers,
     );
-  let (ssState, ssStateCmd) = SignalServerState.init(thisPeer, peers);
+  let (signalServer, signalServerCmd) =
+    SignalServerState.init(thisPeer, peers, signalServerUrl);
   (
-    {db, thisPeer, signalServerState: ssState, peerGroups, peers},
-    Cmds.batch([ssStateCmd, peersCmd, peerGroupsCmd]),
+    {db, thisPeer, signalServer, peerGroups, peers},
+    Cmds.batch([signalServerCmd, peersCmd, peerGroupsCmd]),
   );
 };
 
 let updateStateWithId = (model, msg) => {
-  let cryptoCmd =
-    switch (msg, model) {
-    | (Msgs.AddPeerToGroup(jwkStr, groupId), _) =>
-      CryptoCmds.importAndFingerprintKey(
-        jwkStr |> SimpleCrypto.stringToJwk,
-        (id, key) => Msgs.addPeerWithIdAndPublicKeyToGroup(id, key, groupId),
-        _ => Msgs.noop,
-      )
-    | _ => Cmds.none
-    };
+  /* let cryptoCmd =
+     switch (msg, model) {
+     | (Msgs.AddPeerToGroup(jwkStr, groupId), _) =>
+       CryptoCmds.importAndFingerprintKey(
+         jwkStr |> SimpleCrypto.stringToJwk,
+         (id, key) => Msgs.addPeerWithIdAndPublicKeyToGroup(id, key, groupId),
+         _ => Msgs.noop,
+       )
+     | _ => Cmds.none
+     }; */
   let debugCmd =
     switch (msg) {
     | Msgs.OfferChanges =>
       Cmds.batch(
         Peers.foldActiveConnections(
-          (peerId, rtcConn, cmdList) => {
+          (cmdList, peerId, rtcConn) => {
             let groupsStatuses =
               PeerGroups.getGroupsStatusesForPeer(peerId, model.peerGroups);
             let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
@@ -83,45 +119,45 @@ let updateStateWithId = (model, msg) => {
               ...cmdList,
             ];
           },
-          model.peers,
           [],
+          model.peers,
         ),
       )
     | RtcGotData(_rtcConn, peerId, data) =>
-      Cmds.log("Store: Got data from " ++ peerId ++ ": " ++ data)
+      Cmds.log(
+        "Store: Got data from " ++ (peerId |> PeerId.toString) ++ ": " ++ data,
+      )
     | _ => Cmds.none
     };
-  let (ssState, ssStateCmd) =
+  let (signalServer, signalServerCmd) =
     SignalServerState.update(
       model.thisPeer,
       model.peers,
-      model.signalServerState,
+      model.signalServer,
       msg,
     );
   let (peers, peersCmd) =
     Peers.update(
       model.db,
       model.thisPeer,
-      model.signalServerState,
+      model.signalServer.connectionState,
+      model.peerGroups,
       model.peers,
       msg,
     );
   let (peerGroups, peerGroupsCmd) =
-    PeerGroups.update(model.db, model.peerGroups, msg);
+    PeerGroups.update(model.db, model.thisPeer.id, model.peerGroups, msg);
   (
-    {
-      db: model.db,
-      thisPeer: model.thisPeer,
-      signalServerState: ssState,
-      peerGroups,
-      peers,
-    },
-    Cmd.batch([ssStateCmd, peersCmd, cryptoCmd, peerGroupsCmd, debugCmd]),
+    {db: model.db, thisPeer: model.thisPeer, signalServer, peerGroups, peers},
+    Cmd.batch([signalServerCmd, peersCmd, peerGroupsCmd, debugCmd]),
   );
 };
 
-let init: unit => (rootState, BlackTea.Cmd.t(Msgs.t)) =
-  () => (OpeningDB, Db.open_(Msgs.openDbSuccess, Msgs.dbFatalError));
+let init: InitConfig.t => (rootState, BlackTea.Cmd.t(Msgs.t)) =
+  initConfig => (
+    OpeningDB(initConfig),
+    Db.open_(Msgs.openDbSuccess, Msgs.dbFatalError),
+  );
 
 let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
   (model, msg) =>
@@ -129,8 +165,8 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     /********/
     /* Init */
     /********/
-    | (OpenDbSuccess(db), OpeningDB) => (
-        LoadingDBData(db),
+    | (OpenDbSuccess(db), OpeningDB(initConfig)) => (
+        LoadingDBData(initConfig, db),
         Db.getAll(db, Msgs.loadDataFromDBSuccess, Msgs.dbFatalError),
       )
 
@@ -139,17 +175,17 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         Cmds.none,
       )
 
-    | (LoadDataFromDBSuccess(allDbData), LoadingDBData(db)) =>
+    | (LoadDataFromDBSuccess(allDbData), LoadingDBData(initConfig, db)) =>
       switch (allDbData.thisPeer) {
       | Some(thisPeer) =>
         let (stateWithId, stateWithIdCmd) =
-          initStateWithId(db, thisPeer, allDbData);
+          initStateWithId(db, thisPeer, allDbData, initConfig);
         (
           HasIdentity(stateWithId),
           Cmds.batch([stateWithIdCmd, logIdAndJWT(thisPeer)]),
         );
       | None => (
-          GeneratingIdentity(db, allDbData),
+          GeneratingIdentity(initConfig, db, allDbData),
           CryptoCmds.generateKeyPair(
             Msgs.myKeyPairGenSuccess,
             Msgs.myKeyPairGenError,
@@ -157,32 +193,30 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         )
       }
 
-    | (MyKeyPairGenSuccess(keyPair), GeneratingIdentity(db, allDbData)) =>
-      let thisPeer = {
-        ThisPeer.id: keyPair.fingerprint,
-        publicKey: keyPair.publicKey,
-        privateKey: keyPair.privateKey,
-      };
-      let (stateWithId, stateWithIdCmd) =
-        initStateWithId(db, thisPeer, allDbData);
-      (
-        HasIdentity(stateWithId),
-        Cmd.batch([
-          stateWithIdCmd,
-          db
-          |> Db.setThisPeer(
-               {
-                 ThisPeer.id: keyPair.fingerprint,
-                 publicKey: keyPair.publicKey,
-                 privateKey: keyPair.privateKey,
-               },
-               _ => Msgs.noop,
-               _ => Msgs.noop,
-             ),
-          /* Debug */
-          logIdAndJWT(thisPeer),
-        ]),
-      );
+    | (
+        MyKeyPairGenSuccess(keyPair),
+        GeneratingIdentity(initConfig, db, allDbData),
+      ) =>
+      switch (PeerId.ofString(keyPair.fingerprint)) {
+      | Some(thisPeerId) =>
+        let thisPeer = {
+          ThisPeer.id: thisPeerId,
+          publicKey: keyPair.publicKey,
+          privateKey: keyPair.privateKey,
+        };
+        let (stateWithId, stateWithIdCmd) =
+          initStateWithId(db, thisPeer, allDbData, initConfig);
+        (
+          HasIdentity(stateWithId),
+          Cmd.batch([
+            stateWithIdCmd,
+            db |> Db.setThisPeer(thisPeer, _ => Msgs.noop, _ => Msgs.noop),
+            /* Debug */
+            logIdAndJWT(thisPeer),
+          ]),
+        );
+      | None => (FatalError(CannotCreateIdentity), Cmds.none)
+      }
 
     | (MyKeyPairGenError(_exn), GeneratingIdentity(_)) => (
         FatalError(CannotCreateIdentity),
@@ -195,14 +229,16 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
 
     | (RtcError(_rtcConn, peerId, msg), _) => (
         model,
-        Cmds.log("RTC Error (peer " ++ peerId ++ "): " ++ msg),
+        Cmds.log(
+          "RTC Error (peer " ++ (peerId |> PeerId.toString) ++ "): " ++ msg,
+        ),
       )
 
     /*********/
     /* Debug */
     /*********/
-    | (SendToPeer(id, msgStr), HasIdentity({peers})) =>
-      switch (peers |> Peers.findOpt(id)) {
+    | (SendToPeer(strId, msgStr), HasIdentity({peers})) =>
+      switch (PeerId.ofString(strId) |?> (id => peers |> Peers.findOpt(id))) {
       | Some({connectionState: Connected(rtcConn, _, _), _}) => (
           model,
           RTCCmds.send(rtcConn, msgStr),
@@ -215,7 +251,9 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         )
       | None => (
           model,
-          Cmds.log("Peer " ++ id ++ " is not added in friends."),
+          Cmds.log(
+            "Peer '" ++ strId ++ "' has invalid ID or is not added in friends.",
+          ),
         )
       }
     | (msg, HasIdentity(stateWithId)) =>
@@ -231,9 +269,21 @@ let makeGlobal = (name, value) => makeGlobal(Webapi.Dom.window, name, value);
 
 let create = () => {
   /* let stateLogger = StateLogger.create(); */
+  let initConfig =
+    InitConfig.make(
+      ~contentInitializer=
+        crdt =>
+          crdt
+          |> PeerGroup.AM.change("Init", root =>
+               PeerGroup.AM.Json.(
+                 root |> Map.add("items", List.create() |> List.toJson)
+               )
+             ),
+      (),
+    );
   let app =
     BlackTea.Store.create(
-      ~init,
+      ~init=() => init(initConfig),
       ~update,
       /* ~subscriptions=model => stateLogger(model), */
       ~subscriptions=
@@ -244,21 +294,24 @@ let create = () => {
       ~shutdown=_model => Cmds.none,
     );
 
-  makeGlobal("addFriend", jwk => app.pushMsg(AddPeerToGroup(jwk, "aaa")));
+  makeGlobal("addPeer", (id, alias) => app.pushMsg(AddPeer(id, alias)));
+  makeGlobal("addPeerToGroup", id =>
+    app.pushMsg(
+      AddPeerToGroup(
+        id,
+        PeerGroups.defaultGroupId,
+        PeerGroup.ReadContentAndMembers,
+      ),
+    )
+  );
   makeGlobal("sendToPeer", (id, msg) => app.pushMsg(SendToPeer(id, msg)));
   makeGlobal("offerChanges", () => app.pushMsg(OfferChanges));
-  makeGlobal("addPeerToGroupWithPerms", (peerId, groupId, perms) =>
-    app.pushMsg(AddPeerToGroupWithPerms(peerId, groupId, perms))
+  makeGlobal("addPeerToGroupWithPerms", (peerId, groupId, permsStr) =>
+    switch (permsStr |> PeerGroup.decodePermissions) {
+    | Some(perms) => app.pushMsg(AddPeerToGroup(peerId, groupId, perms))
+    | None => Js.log("Invalid permissions, try crmr, crwmr, or crwmrw")
+    }
   );
   makeGlobal("addItem", text => app.pushMsg(AddItem(text)));
   makeGlobal("printData", () => app.pushMsg(PrintData));
 };
-
-let getMyId = model =>
-  switch (model) {
-  | HasIdentity(state) => Some(state.thisPeer.id)
-  | OpeningDB
-  | FatalError(_)
-  | LoadingDBData(_)
-  | GeneratingIdentity(_) => None
-  };

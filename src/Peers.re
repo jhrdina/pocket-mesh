@@ -83,6 +83,20 @@ let add = (id, peer, t) => {
     },
 };
 
+let remove = (id, t) => {
+  peers: PeerId.Map.remove(id, t.peers),
+  byConnectionState:
+    switch (findOpt(id, t)) {
+    | Some(peer) =>
+      t.byConnectionState
+      |> _mapByConnectionStateIndex(
+           peer.connectionState,
+           PeerId.Set.remove(id),
+         )
+    | None => t.byConnectionState
+    },
+};
+
 let map = (f, t) =>
   PeerId.Map.fold(
     (id, peer, acc) => add(id, f(peer), acc),
@@ -90,7 +104,8 @@ let map = (f, t) =>
     empty,
   );
 
-let fold = (f, t, n) => PeerId.Map.fold(_ => f, t.peers, n);
+let fold = (f, acc, t) =>
+  PeerId.Map.fold((_id, peer, acc) => f(acc, peer), t.peers, acc);
 
 let findAllIdsWithConnectionState = (connState, t) => {
   let index = t.byConnectionState;
@@ -157,41 +172,42 @@ let init = (db, peerGroups, signalServerState) =>
       (newPeers, saveToDb(db, newPeers));
     };
 
+let updatePeer = (peerId, peerMsg, thisPeer, peers) =>
+  switch (peers |> findOpt(peerId)) {
+  | Some(peer) =>
+    let (newPeer, cmd) = Peer.update(thisPeer, peer, peerMsg);
+    (peers |> add(peer.id, newPeer), cmd);
+  | None => (peers, Cmds.none)
+  };
+
 let update =
     (
       db,
-      thisPeer,
+      thisPeer: ThisPeer.t,
       signalServerState: Types.signalServerState,
+      peerGroups,
       peers,
       msg: Msgs.t,
-    ) => {
-  let updatePeer = (peerId, peerMsg) =>
-    switch (peers |> findOpt(peerId)) {
-    | Some(peer) =>
-      let (newPeer, cmd) = Peer.update(thisPeer, peer, peerMsg);
-      (peers |> add(peer.id, newPeer), cmd);
-    | None => (peers, Cmds.none)
-    };
-
+    ) =>
   switch (msg, signalServerState) {
-  | (AddPeerWithIdAndPublicKeyToGroup(id, key, _groupId), signalServerState) =>
+  | (AddPeer(id, alias), signalServerState) =>
     /* Ensure peer exists */
     let (newPeer, newPeerCmd) =
       switch (peers |> findOpt(id)) {
-      | Some(existingPeer) =>
-        Peer.update(thisPeer, existingPeer, AddedToGroup)
-
       | None =>
         let peerSignalState =
           Peer.peerSignalStateOfSignalServerState(id, signalServerState);
         Peer.init(
           ~id,
-          ~publicKey=key,
-          ~nickName="",
-          ~inGroup=true,
+          ~publicKey=None,
+          ~alias,
+          ~inGroup=false,
           ~peerSignalState,
         );
+      | Some(existingPeer) => (existingPeer, Cmds.none)
       };
+
+    let newPeers = peers |> add(id, newPeer);
 
     let addWatchCmd =
       switch (peers |> findOpt(id), signalServerState) {
@@ -208,12 +224,79 @@ let update =
       | _ => Cmds.none
       };
 
-    let newPeers = peers |> add(id, newPeer);
-
     (
       newPeers,
       Cmds.batch([newPeerCmd, addWatchCmd, saveToDb(db, newPeers)]),
     );
+
+  | (UpdatePeer(id, alias), _) =>
+    updatePeer(id, UpdateAlias(alias), thisPeer, peers)
+  | (RemovePeer(id), signalServerState) =>
+    let (newPeers, newPeersCmd) =
+      switch (peers |> findOpt(id)) {
+      | Some(peer) =>
+        /* TODO: Send some more appropriate message */
+        let (_newPeer, cmd) =
+          Peer.update(thisPeer, peer, RemovedFromLastGroup);
+        (peers |> remove(peer.id), cmd);
+      | None => (peers, Cmds.none)
+      };
+
+    let removeWatchCmd =
+      switch (peers |> findOpt(id), signalServerState) {
+      | (None, Connected(conn, _)) =>
+        SignalServerCmds.sendMsg(
+          ChangeWatchedPeers({
+            src: thisPeer.id,
+            watch: peers |> getAllIds |> PeerId.Set.remove(id),
+            /* TODO: Sign */
+            signature: "",
+          }),
+          conn,
+        )
+      | _ => Cmds.none
+      };
+
+    (newPeers, Cmds.batch([newPeersCmd, removeWatchCmd]));
+
+  | (RemoveGroup(groupId), _) =>
+    /* Check if the group was the last one for members */
+
+    let peersGroupsWithoutGroup =
+      peerGroups |> PeerGroups.removeGroup(groupId);
+
+    switch (peerGroups |> PeerGroups.findOpt(groupId)) {
+    | Some(group) =>
+      let (newPeers, cmdsList) =
+        PeerGroup.foldPeersInGroup(
+          ((peers, cmdsList), {id: peerId, _}) =>
+            if (!PeerGroups.isPeerInAGroup(peerId, peersGroupsWithoutGroup)) {
+              let (newPeers, cmd) =
+                peers |> updatePeer(peerId, RemovedFromLastGroup, thisPeer);
+              (newPeers, [cmd, ...cmdsList]);
+            } else {
+              (peers, cmdsList);
+            },
+          (peers, []),
+          group,
+        );
+      (newPeers, Cmds.batch(cmdsList));
+    | None => (peers, Cmds.none)
+    };
+
+  | (AddPeerToGroup(id, _groupId, _perms), _) =>
+    peers |> updatePeer(id, AddedToGroup, thisPeer)
+
+  | (RemovePeerFromGroup(peerId, groupId), _) =>
+    /* Check if the group was the last one for member */
+    let peersGroupsWithoutTheGroup =
+      peerGroups |> PeerGroups.removeGroup(groupId);
+
+    if (!PeerGroups.isPeerInAGroup(peerId, peersGroupsWithoutTheGroup)) {
+      peers |> updatePeer(peerId, RemovedFromLastGroup, thisPeer);
+    } else {
+      (peers, Cmds.none);
+    };
 
   | (SignalServerMessage(Ok(onlinePeers)), SigningIn(ssConn)) =>
     let (newPeers, cmdList) =
@@ -237,12 +320,12 @@ let update =
     | _ =>
       let (newPeers, cmdList) =
         fold(
-          (peer, (newPeers, cmds)) => {
+          ((newPeers, cmds), peer) => {
             let (newPeer, cmd) = Peer.update(thisPeer, peer, WentOffline);
             (newPeers |> add(peer.id, newPeer), [cmd, ...cmds]);
           },
-          peers,
           (peers, []),
+          peers,
         );
       (newPeers, Cmds.batch(cmdList));
     }
@@ -283,34 +366,35 @@ let update =
         | _ => raise(Types.InternalError)
         },
       );
-    updatePeer(payload.src, msgForPeer);
+    peers |> updatePeer(payload.src, msgForPeer, thisPeer);
 
   | (RtcOfferReady(rtcConn, sdp, acceptorId), _) =>
-    updatePeer(acceptorId, RtcOfferReady(rtcConn, sdp))
+    peers |> updatePeer(acceptorId, RtcOfferReady(rtcConn, sdp), thisPeer)
 
   | (RtcAnswerReady(rtcConn, sdp, peerId), _) =>
-    updatePeer(peerId, RtcAnswerReady(rtcConn, sdp))
+    peers |> updatePeer(peerId, RtcAnswerReady(rtcConn, sdp), thisPeer)
 
-  | (RtcConnected(_rtcConn, peerId), _) => updatePeer(peerId, RtcConnected)
+  | (RtcConnected(_rtcConn, peerId), _) =>
+    peers |> updatePeer(peerId, RtcConnected, thisPeer)
 
-  | (RtcClose(_rtcConn, peerId), _) => updatePeer(peerId, RtcClose)
+  | (RtcClose(_rtcConn, peerId), _) =>
+    peers |> updatePeer(peerId, RtcClose, thisPeer)
 
   | (RtcRetryConnection(peerId), _) =>
-    updatePeer(peerId, RtcRetryConnection)
+    peers |> updatePeer(peerId, RtcRetryConnection, thisPeer)
 
   /* DEBUG */
 
   | (_, _) => (peers, Cmds.none)
   };
-};
 
-let foldActiveConnections = (f, peers, acc) =>
+let foldActiveConnections = (f, acc, peers) =>
   fold(
-    (peer, acc) =>
+    (acc, peer) =>
       switch (peer |> Peer.getActiveConnection) {
-      | Some(rtcConn) => f(peer.id, rtcConn, acc)
+      | Some(rtcConn) => f(acc, peer.id, rtcConn)
       | None => acc
       },
-    peers,
     acc,
+    peers,
   );

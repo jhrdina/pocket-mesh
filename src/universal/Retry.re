@@ -7,3 +7,5 @@ let getTimeoutMs = attemptsMade => {
     };
   timeoutSec * 1000;
 };
+
+let msToSec = ms => (ms + 999) / 1000;

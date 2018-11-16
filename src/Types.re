@@ -5,16 +5,15 @@ type signalServerState =
       SignalServerCmds.conn,
       /* watchedPeers that are online */ PeerId.Set.t,
     )
-  /* time, attemptsMade, lastErrorMessage */
-  | FailedRetryingAt(string, int, string)
-  | NoNetwork;
+  /* intervalSec, attemptsMade, lastErrorMessage */
+  | FailedRetryingAt(int, int, string);
 
 /* We need these to be here because it is present as Msgs argument */
-type peerGroups = list(PeerGroup.t);
+type peerGroups = PeerGroup.Id.Map.t(PeerGroup.t);
 type peerInDb = {
   id: PeerId.t,
-  publicKey: SimpleCrypto.key,
-  nickName: string,
+  publicKey: option(SimpleCrypto.key),
+  alias: string,
 };
 type peersInDb = PeerId.Map.t(peerInDb);
 

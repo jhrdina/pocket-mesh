@@ -1,19 +1,24 @@
 open Json.Infix;
 
+/* CONSTANTS */
+let defaultGroupId = PeerGroup.Id.ofStringExn("aaa");
+
+/* TYPES */
+type t = Types.peerGroups;
+
 /* TODO: Better container */
-let empty = [];
+let empty = PeerGroup.Id.Map.empty;
 
-let addPeerGroup = (peerGroup, t) => [peerGroup, ...t];
-let getFirstId: Types.peerGroups => option(string) =
-  fun
-  | [first, ..._] => Some(first.id)
-  | [] => None;
+let addPeerGroup = (peerGroup: PeerGroup.t, t) =>
+  PeerGroup.Id.Map.add(peerGroup.id, peerGroup, t);
 
-let updateGroup = (id, updateFn, t) =>
-  t
-  |> List.rev_map((item: PeerGroup.t) =>
-       item.id === id ? updateFn(item) : item
-     );
+let updateGroup = (id, updateFn: PeerGroup.t => PeerGroup.t, t) =>
+  switch (t |> PeerGroup.Id.Map.find(id)) {
+  | peerGroup => t |> PeerGroup.Id.Map.add(id, updateFn(peerGroup))
+  | exception Not_found => t
+  };
+
+let removeGroup = PeerGroup.Id.Map.remove;
 
 let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
   t
@@ -24,22 +29,27 @@ let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
 let addPeerToGroup = (peerId, groupId, t) =>
   addPeerToGroupWithPerms(peerId, groupId, ReadContentAndMembers, t);
 
+let fold = (f, acc, t) =>
+  PeerGroup.Id.Map.fold((_id, group, acc) => f(acc, group), t, acc);
+
 /* QUERIES */
 
 let isPeerInAGroup = (peerId, t) =>
-  List.exists(PeerGroup.containsPeer(peerId), t);
+  /* WARNING: Maybe slow */
+  PeerGroup.Id.Map.exists(_groupId => PeerGroup.containsPeer(peerId), t);
 
 let getGroupsForPeer = (peerId, t) =>
-  List.filter(PeerGroup.containsPeer(peerId), t);
+  /* WARNING: Maybe slow */
+  PeerGroup.Id.Map.filter(_groupId => PeerGroup.containsPeer(peerId), t);
 
 let findOpt = (groupId, t) =>
-  switch (List.find((group: PeerGroup.t) => group.id == groupId, t)) {
+  switch (PeerGroup.Id.Map.find(groupId, t)) {
   | group => Some(group)
   | exception Not_found => None
   };
 
 let getGroupsStatusesForPeer = (peerId, peerGroups) =>
-  List.fold_left(
+  fold(
     (groupStatuses, group) =>
       switch (P2PMsg.getGroupStatusForPeer(peerId, group)) {
       | Some(groupStatus) =>
@@ -55,30 +65,32 @@ let getGroupsStatusesForPeer = (peerId, peerGroups) =>
 let encode = peerGroups =>
   Json.(
     Array(
-      peerGroups |> List.rev_map(peerGroup => peerGroup |> PeerGroup.encode),
+      peerGroups
+      |> fold(
+           (groupsList, peerGroup) => [
+             peerGroup |> PeerGroup.encode,
+             ...groupsList,
+           ],
+           [],
+         ),
     )
   );
 
 let decode = json =>
   Json.(
-    switch (json |> array) {
-    | Some(jsonArr) =>
-      jsonArr
-      |> List.fold_left(
-           (jsonArr, jsonItem) =>
-             switch (jsonArr) {
-             | Some(jsonArr) =>
-               switch (jsonItem |> PeerGroup.decode) {
-               | Some(peerGroup) => Some([peerGroup, ...jsonArr])
-               | None => None
-               }
-             | None => None
-             },
-           Some([]),
-         )
-
-    | None => None
-    }
+    json
+    |> array
+    |?> List.fold_left(
+          (newPeerGroups, jsonItem) =>
+            newPeerGroups
+            |?> (
+              newPeerGroups =>
+                jsonItem
+                |> PeerGroup.decode
+                |?>> (peerGroup => newPeerGroups |> addPeerGroup(peerGroup))
+            ),
+          Some(empty),
+        )
   );
 
 /* CMDS */
@@ -197,12 +209,14 @@ let receivedStringMessageFromPeer =
   | Some(msg) => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups)
   | None => (
       peerGroups,
-      Cmds.log("Failed to parse message from peer " ++ peerId),
+      Cmds.log(
+        "Failed to parse message from peer " ++ (peerId |> PeerId.toString),
+      ),
     )
   };
 };
 
-let init = (db, thisPeerId, maybeDbPeerGroups) =>
+let init = (db, thisPeerId, maybeDbPeerGroups, initContent) =>
   switch (maybeDbPeerGroups |?> decode) {
   | Some(dbPeerGroups) => (dbPeerGroups, Cmds.none)
   | None =>
@@ -210,20 +224,91 @@ let init = (db, thisPeerId, maybeDbPeerGroups) =>
       empty
       |> addPeerGroup(
            /* TODO: Really a fixed ID? */
-           PeerGroup.make("aaa", thisPeerId)
+           PeerGroup.make(defaultGroupId, thisPeerId, "aaa", initContent)
            |> PeerGroup.addPeer({
                 id: thisPeerId,
                 permissions: WriteContent(WriteMembers),
               }),
          );
+
     (newPeerGroups, saveToDb(db, newPeerGroups));
   };
 
-let update = (db, peerGroups, msg) =>
+let update = (db, thisPeerId, peerGroups, msg) =>
   switch (msg) {
-  | Msgs.AddPeerWithIdAndPublicKeyToGroup(id, _key, groupId) =>
+  /* GLOBAL MESSAGES */
+  | Msgs.AddGroup(id, alias, initContent) =>
+    switch (peerGroups |> findOpt(id)) {
+    | None =>
+      let newPeerGroups =
+        peerGroups
+        |> addPeerGroup(PeerGroup.make(id, thisPeerId, alias, initContent));
+      (newPeerGroups, saveToDb(db, newPeerGroups));
+    | Some(_) => (
+        peerGroups,
+        Cmds.log(
+          "Cannot add group "
+          ++ (id |> PeerGroup.Id.toString)
+          ++ ": Group already exists",
+        ),
+      )
+    }
+  | UpdateGroupAlias(id, alias) =>
+    switch (peerGroups |> findOpt(id)) {
+    | Some(peersGroup) =>
+      let newPeerGroups = peerGroups |> addPeerGroup({...peersGroup, alias});
+      (newPeerGroups, saveToDb(db, newPeerGroups));
+    | None => (peerGroups, Cmds.none)
+    }
+  | UpdateGroupContent(id, content) =>
+    switch (peerGroups |> findOpt(id)) {
+    | Some(peersGroup) =>
+      let newPeerGroups =
+        peerGroups |> addPeerGroup({...peersGroup, content});
+
+      /* TODO: Consider propagating changes to peers */
+      (newPeerGroups, saveToDb(db, newPeerGroups));
+    | None => (peerGroups, Cmds.none)
+    }
+  | RemoveGroup(id) =>
+    let newPeerGroups = peerGroups |> removeGroup(id);
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+
+  | AddPeerToGroup(peerId, groupId, perms) =>
+    /* TODO: Check if the peer is in the friends list */
+    let newPeerGroups =
+      peerGroups |> addPeerToGroupWithPerms(peerId, groupId, perms);
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+
+  | UpdatePeerPermissions(peerId, groupId, perms) =>
+    /* TODO: Check if the peer is in the friends list */
+    switch (
+      peerGroups |> findOpt(groupId) |?>> PeerGroup.containsPeer(peerId)
+    ) {
+    | Some(true) =>
+      let newPeerGroups =
+        peerGroups |> addPeerToGroupWithPerms(peerId, groupId, perms);
+      (newPeerGroups, saveToDb(db, newPeerGroups));
+    | Some(false)
+    | None => (peerGroups, Cmds.none)
+    }
+  | RemovePeerFromGroup(peerId, groupId) =>
+    let newPeerGroups =
+      peerGroups
+      |> updateGroup(groupId, group => group |> PeerGroup.removePeer(peerId));
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+
+  | RemovePeer(peerId) =>
+    /* TODO: Remove peer from all groups */
+    (peerGroups, Cmds.none)
+
+  /* TODO: Remove */
+  | AddPeerWithIdAndPublicKeyToGroup(id, _key, groupId) =>
     let newPeerGroups = peerGroups |> addPeerToGroup(id, groupId);
     (newPeerGroups, saveToDb(db, newPeerGroups));
+
+  /* INTERNAL MESSAGES */
+
   | RtcConnected(rtcConn, peerId) => (
       peerGroups,
       connectionStarted(peerId, rtcConn, peerGroups),
@@ -231,24 +316,11 @@ let update = (db, peerGroups, msg) =>
   | RtcGotData(rtcConn, peerId, data) =>
     receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
 
-  | AddPeerToGroupWithPerms(peerId, groupId, strPerms) =>
-    /* TODO: Check if the peer is in the friends list */
-    switch (PeerGroup.decodePermissions(strPerms)) {
-    | Some(perms) =>
-      let newPeerGroups =
-        peerGroups |> addPeerToGroupWithPerms(peerId, groupId, perms);
-      (newPeerGroups, saveToDb(db, newPeerGroups));
-    | None => (
-        peerGroups,
-        Cmds.log("Invalid permissions, try crmr, crwmr, or crwmrw"),
-      )
-    }
-
   /* TODO: Debug, remove */
   | AddItem(text) =>
     let newPeerGroups =
       peerGroups
-      |> updateGroup("aaa", peerGroup =>
+      |> updateGroup(defaultGroupId, peerGroup =>
            {
              ...peerGroup,
              content:
@@ -274,7 +346,7 @@ let update = (db, peerGroups, msg) =>
 
   /* TODO: Debug, remove */
   | PrintData =>
-    switch (peerGroups |> findOpt("aaa")) {
+    switch (peerGroups |> findOpt(defaultGroupId)) {
     | Some(peerGroup) => (
         peerGroups,
         Cmds.log(
