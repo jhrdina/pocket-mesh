@@ -1,16 +1,88 @@
 <!DOCTYPE html>
 <html>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=0"
+    />
+    <title>Peer Demo</title>
+    <style>
+      body {
+        font-family: Roboto, Arial, Helvetica, sans-serif;
+        font-size: 14px;
+        background-color: #fafafa;
+      }
 
-<head>
-  <title>Peer Demo</title>
-</head>
+      .sections {
+        display: flex;
+        flex-direction: column;
+        flex-wrap: wrap;
+        align-content: start;
+        padding-right: 8px;
 
-<body>
-  See console.
-  <!-- <input id="chatinput" type="text" />
-  <div id="chatarea"></div>
-  <button id="sendbutton">Send</button> -->
-  <script src="../lib/StoreDemo.bundle.js"></script>
-</body>
+        /* width: calc(100% - 16px); */
+        height: calc(100% - 16px);
+        position: absolute;
+      }
 
+      .section {
+        border: 1px solid #ccc;
+        margin: 0 8px 8px 0;
+        background-color: white;
+
+        max-width: 360px;
+      }
+
+      .section__title {
+        margin: 0;
+        border-bottom: 1px solid #ccc;
+        font-size: 16px;
+        padding: 4px;
+      }
+
+      .peer {
+        padding: 0 4px;
+        margin: 4px 0;
+      }
+
+      .peer__line {
+        display: flex;
+      }
+
+      .peer__alias {
+        flex: 1;
+      }
+
+      .peer__connection-state {
+      }
+
+      .peer__id {
+        color: grey;
+        font-size: 12px;
+        flex: 1;
+      }
+
+      .key-val {
+        /* display: flex; */
+        padding: 0 4px;
+        margin: 4px 0;
+      }
+      .key-val__key {
+        font-weight: bold;
+        /* text-align: right; */
+        /* width: 8em; */
+      }
+
+      .key-val__value {
+        /* flex: 1; */
+        /* margin-left: 0.5em; */
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script src="../lib/StoreDemo.bundle.js"></script>
+  </body>
 </html>
