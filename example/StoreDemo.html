@@ -8,10 +8,20 @@
     />
     <title>Peer Demo</title>
     <style>
+      :root {
+        --border-color: #ccc;
+        --border: 1px solid var(--border-color);
+      }
+
       body {
         font-family: Roboto, Arial, Helvetica, sans-serif;
         font-size: 14px;
         background-color: #fafafa;
+      }
+
+      .separator {
+        border: none;
+        border-top: var(--border);
       }
 
       .sections {
@@ -27,7 +37,7 @@
       }
 
       .section {
-        border: 1px solid #ccc;
+        border: var(--border);
         margin: 0 8px 8px 0;
         background-color: white;
 
@@ -36,17 +46,20 @@
 
       .section__title {
         margin: 0;
-        border-bottom: 1px solid #ccc;
+        border-bottom: var(--border);
         font-size: 16px;
         padding: 4px;
       }
 
-      .peer {
+      .peer,
+      .key-val,
+      .valbox {
         padding: 0 4px;
         margin: 4px 0;
       }
 
-      .peer__line {
+      .peer__line,
+      .valbox__row {
         display: flex;
       }
 
@@ -57,18 +70,29 @@
       .peer__connection-state {
       }
 
+      .valbox__row {
+      }
+
+      .valbox__small {
+        font-size: 12px;
+      }
+
+      .valbox__grey {
+        color: grey;
+      }
+
+      .valbox__stretch {
+        flex: 1;
+      }
+
       .peer__id {
         color: grey;
         font-size: 12px;
         flex: 1;
       }
 
-      .key-val {
-        /* display: flex; */
-        padding: 0 4px;
-        margin: 4px 0;
-      }
-      .key-val__key {
+      .key-val__key,
+      .valbox__bold {
         font-weight: bold;
         /* text-align: right; */
         /* width: 8em; */

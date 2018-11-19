@@ -1,4 +1,5 @@
 open BlackTea;
+open Json.Infix;
 module PM = PublicInterface;
 
 /* Store.create() |> ignore; */
@@ -8,11 +9,17 @@ module PM = PublicInterface;
 type model = {
   p2p: PM.State.t,
   counter: int,
+  itemsGeneratorGroup: option(PM.PeersGroup.Id.t),
+  itemsGenerator: InputEmulator.t,
 };
 
 [@bs.deriving accessors]
 type msg =
   | PMMsg(PM.Msg.t)
+  | StartItemsGenerator(PM.PeersGroup.Id.t)
+  | StopItemsGenerator
+  | ItemGenerated(string)
+  | ClearContent(PM.PeersGroup.Id.t)
   | Increment;
 
 /* STUPID HTML RENDERER */
@@ -93,6 +100,52 @@ let removeEvent: (string, string, unit => unit) => unit = [%bs.raw
 external makeGlobal: (Webapi.Dom.Window.t, string, 'a) => unit = "";
 let makeGlobal = (name, value) => makeGlobal(Webapi.Dom.window, name, value);
 
+let foldContentItems = (f, acc, crdt) =>
+  PM.Crdt.(
+    crdt
+    |> root
+    |> Json.Map.get("items")
+    |?> Json.List.ofJson
+    |?>> Json.List.foldLeft(
+           (acc, item) =>
+             switch (item |> Json.asString) {
+             | Some(strItem) => f(acc, strItem)
+             | None => acc
+             },
+           acc,
+         )
+  );
+
+let getGroupContentOpt = (groupId, model) =>
+  (
+    switch (model.p2p |> PM.State.classify) {
+    | PM.State.HasIdentity(stateWithId) => Some(stateWithId)
+    | _ => None
+    }
+  )
+  |?>> PM.StateWithId.groups
+  |?> PM.PeersGroups.findOpt(groupId)
+  |?>> PM.PeersGroup.content;
+
+let removeAllGroupContentItems = content =>
+  content
+  |> PM.Crdt.change("Remove all items", root =>
+       PM.Crdt.Json.(root |> Map.add("items", List.create() |> List.toJson))
+     );
+
+let getThisPeerIdStart = model =>
+  switch (model.p2p |> PM.State.classify) {
+  | PM.State.HasIdentity(stateWithId) =>
+    (
+      stateWithId
+      |> PM.StateWithId.thisPeer
+      |> PM.ThisPeer.id
+      |> PM.Peer.Id.toString
+    )
+    ->String.sub(0, 5)
+  | _ => "NO_ID"
+  };
+
 /* VIEWS */
 
 let vSection = (title, children) =>
@@ -105,10 +158,10 @@ let vSection = (title, children) =>
 let vKeyVal = (key, value) =>
   hac(
     div,
-    [(cls, "key-val")],
+    [(cls, "valbox")],
     [
-      hac(div, [(cls, "key-val__key")], [txt(key ++ ":")]),
-      hac(div, [(cls, "key-val__value")], [txt(value)]),
+      hac(div, [(cls, "valbox__bold")], [txt(key ++ ":")]),
+      hac(div, [], [txt(value)]),
     ],
   );
 
@@ -181,85 +234,138 @@ let viewPeers = peers =>
        ]),
   );
 
+let viewPeerInGroup = (group, peerInGroup) => {
+  let groupId = group |> PM.PeersGroup.id |> PM.PeersGroup.Id.toString;
+  let peerId = peerInGroup |> PM.PeerInGroup.id |> PM.Peer.Id.toString;
+  let permsStr =
+    switch (peerInGroup |> PM.PeerInGroup.permissions) {
+    | ReadContentAndMembers => "C: R, M: R"
+    | WriteContent(ReadMembers) => "C: RW, M: R"
+    | WriteContent(WriteMembers) => "C: RW, M: RW"
+    };
+  hac(
+    div,
+    [(cls, "valbox")],
+    [
+      hac(
+        div,
+        [(cls, "valbox__row")],
+        [
+          hac(div, [], [txt(permsStr)]),
+          hace(
+            btn,
+            [],
+            "removePeerFromGroupBtn_" ++ peerId ++ "_" ++ groupId,
+            [
+              (
+                "click",
+                PMMsg(
+                  PM.Msg.removePeerFromGroup(
+                    peerInGroup |> PM.PeerInGroup.id,
+                    group |> PM.PeersGroup.id,
+                  ),
+                ),
+              ),
+            ],
+            [txt("x")],
+          ),
+        ],
+      ),
+      hac(
+        div,
+        [(cls, "valbox__row")],
+        [hac(div, [(cls, "valbox__small valbox__grey")], [txt(peerId)])],
+      ),
+    ],
+  );
+};
+
+let vSeparator = ha("hr", [(cls, "separator")]);
+
+let viewContentItem = text =>
+  hac(div, [(cls, "valbox__small")], [txt(text)]);
+
 let viewGroup = group => {
   let groupId = group |> PM.PeersGroup.id |> PM.PeersGroup.Id.toString;
   hac(
     div,
     [],
-    List.append(
-      [
-        vKeyVal("ID", groupId),
-        hc(
-          div,
-          [
-            hace(
-              btn,
-              [],
-              "removeGroupBtn_" ++ groupId,
-              [
-                (
-                  "click",
-                  PMMsg(PM.Msg.removeGroup(group |> PM.PeersGroup.id)),
+    [
+      vSeparator,
+      vKeyVal("ID", groupId),
+      hc(
+        div,
+        [
+          hace(
+            btn,
+            [],
+            "removeGroupBtn_" ++ groupId,
+            [
+              (
+                "click",
+                PMMsg(PM.Msg.removeGroup(group |> PM.PeersGroup.id)),
+              ),
+            ],
+            [txt("Remove group")],
+          ),
+          hace(
+            btn,
+            [],
+            "startItemsGeneratorBtn_" ++ groupId,
+            [("click", StartItemsGenerator(group |> PM.PeersGroup.id))],
+            [txt("Start Gen.")],
+          ),
+          hace(
+            btn,
+            [],
+            "stopItemsGeneratorBtn_" ++ groupId,
+            [("click", StopItemsGenerator)],
+            [txt("Stop Gen.")],
+          ),
+          hace(
+            btn,
+            [],
+            "clearContentBtn_" ++ groupId,
+            [("click", ClearContent(group |> PM.PeersGroup.id))],
+            [txt("Clear content")],
+          ),
+        ],
+      ),
+      hac(
+        div,
+        [(cls, "valbox")],
+        [
+          hac(div, [(cls, "valbox__bold")], [txt("Members:")]),
+          ...group
+             |> PM.PeersGroup.foldPeersInGroup(
+                  (acc, peerInGroup) => [
+                    viewPeerInGroup(group, peerInGroup),
+                    ...acc,
+                  ],
+                  [],
                 ),
-              ],
-              [txt("Remove group")],
-            ),
-          ],
-        ),
-      ],
-      group
-      |> PM.PeersGroup.foldPeersInGroup(
-           (acc, peerInGroup) => {
-             let peerId =
-               peerInGroup |> PM.PeerInGroup.id |> PM.Peer.Id.toString;
-             let permsStr =
-               switch (peerInGroup |> PM.PeerInGroup.permissions) {
-               | ReadContentAndMembers => "C: R, M: R"
-               | WriteContent(ReadMembers) => "C: RW, M: R"
-               | WriteContent(WriteMembers) => "C: RW, M: RW"
-               };
-             [
-               hac(
-                 div,
-                 [(cls, "peer")],
-                 [
-                   hac(
-                     div,
-                     [(cls, "peer__line")],
-                     [
-                       hac(div, [(cls, "peer__perms")], [txt(permsStr)]),
-                       hace(
-                         btn,
-                         [],
-                         "removePeerFromGroupBtn_" ++ peerId ++ "_" ++ groupId,
-                         [
-                           (
-                             "click",
-                             PMMsg(
-                               PM.Msg.removePeerFromGroup(
-                                 peerInGroup |> PM.PeerInGroup.id,
-                                 group |> PM.PeersGroup.id,
-                               ),
-                             ),
-                           ),
-                         ],
-                         [txt("x")],
-                       ),
-                     ],
-                   ),
-                   hac(
-                     div,
-                     [(cls, "peer__line")],
-                     [hac(div, [(cls, "peer__id")], [txt(peerId)])],
-                   ),
-                 ],
-               ),
-               ...acc,
-             ];
-           },
-           [],
-         ),
-    ),
+        ],
+      ),
+      hac(
+        div,
+        [(cls, "valbox")],
+        [
+          hac(div, [(cls, "valbox__bold")], [txt("Content:")]),
+          ...group
+             |> PM.PeersGroup.content
+             |> foldContentItems(
+                  (acc, item) => [viewContentItem(item), ...acc],
+                  [],
+                )
+             |?>> List.rev
+             |?>> (
+               list =>
+                 list == [] ? [viewContentItem({js|– empty –|js})] : list
+             )
+             |? [viewContentItem("'items' key is missing or is not a List")],
+        ],
+      ),
+    ],
   );
 };
 
@@ -375,7 +481,7 @@ let view = (m: model) =>
   | OpeningDB => hc(div, ["Opening IndexedDB..." |> txt])
   | LoadingDBData => hc(div, ["Loading data from IDB..." |> txt])
   | GeneratingIdentity => hc(div, ["Generating identity..." |> txt])
-  | FatalError(exn) => hc(div, ["Fatal error." |> txt])
+  | FatalError(_) => hc(div, ["Fatal error." |> txt])
   | HasIdentity(p2pStateWithIdentity) =>
     viewWithIdentity(p2pStateWithIdentity)
   };
@@ -392,7 +498,15 @@ let init = () => {
   let p2pConfig = PM.InitConfig.make(~contentInitializer, ());
   let (p2p, p2pCmd) = PM.init(p2pConfig);
 
-  ({p2p, counter: 42}, p2pCmd |> Cmd.map(pMMsg));
+  (
+    {
+      p2p,
+      counter: 42,
+      itemsGeneratorGroup: None,
+      itemsGenerator: InputEmulator.create(),
+    },
+    p2pCmd |> Cmd.map(pMMsg),
+  );
 };
 
 let update = model =>
@@ -401,7 +515,58 @@ let update = model =>
       let (newP2P, p2pCmd) = PM.update(model.p2p, msg);
       ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
     }
-  | Increment => ({...model, counter: model.counter + 1}, Cmd.none);
+  | Increment => ({...model, counter: model.counter + 1}, Cmd.none)
+  | StartItemsGenerator(groupId) => {
+      let generatedItemPrefix = getThisPeerIdStart(model);
+      (
+        {...model, itemsGeneratorGroup: Some(groupId)},
+        model.itemsGenerator
+        |> InputEmulator.Cmds.start(itemGenerated, generatedItemPrefix),
+      );
+    }
+  | StopItemsGenerator => (
+      {...model, itemsGeneratorGroup: None},
+      model.itemsGenerator |> InputEmulator.Cmds.stop,
+    )
+  | ItemGenerated(text) =>
+    switch (
+      model.itemsGeneratorGroup,
+      model.itemsGeneratorGroup
+      |?> (groupId => model |> getGroupContentOpt(groupId)),
+    ) {
+    | (Some(itemsGeneratorGroup), Some(content)) =>
+      let newContent =
+        content
+        |> PM.Crdt.change("Add item", root =>
+             PM.Crdt.Json.(
+               switch (root |> Map.get("items") |?> List.ofJson) {
+               | Some(list) =>
+                 root
+                 |> Map.add(
+                      "items",
+                      list |> List.prepend(string(text)) |> List.toJson,
+                    )
+               | None => root
+               }
+             )
+           );
+      let (newP2P, p2pCmd) =
+        PM.update(
+          model.p2p,
+          PM.Msg.updateGroupContent(itemsGeneratorGroup, newContent),
+        );
+      ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
+    | _ => (model, Cmd.none)
+    }
+  | ClearContent(groupId) =>
+    switch (model |> getGroupContentOpt(groupId)) {
+    | Some(content) =>
+      let newContent = removeAllGroupContentItems(content);
+      let (newP2P, p2pCmd) =
+        PM.update(model.p2p, PM.Msg.updateGroupContent(groupId, newContent));
+      ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
+    | None => (model, Cmd.none)
+    };
 
 let renderSub = (model, pushMsg) => {
   let (html, evts) = model |> view;
