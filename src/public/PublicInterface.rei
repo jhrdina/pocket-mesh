@@ -115,22 +115,22 @@ module Msg: {
   type t;
 
   /* Peers */
-  let addPeer: (PeerId.t, string) => t;
-  let updatePeer: (PeerId.t, string) => t;
-  let removePeer: PeerId.t => t;
+  let addPeer: (Peer.Id.t, string) => t;
+  let updatePeer: (Peer.Id.t, string) => t;
+  let removePeer: Peer.Id.t => t;
 
   /* Groups */
-  let addGroup: (PeerGroup.Id.t, string, Crdt.t => Crdt.t) => t;
-  let updateGroupAlias: (PeerGroup.Id.t, string) => t;
-  let updateGroupContent: (PeerGroup.Id.t, PeerGroup.AM.t) => t;
-  let removeGroup: PeerGroup.Id.t => t;
+  let addGroup: (PeersGroup.Id.t, string, Crdt.t => Crdt.t) => t;
+  let updateGroupAlias: (PeersGroup.Id.t, string) => t;
+  let updateGroupContent: (PeersGroup.Id.t, Crdt.t) => t;
+  let removeGroup: PeersGroup.Id.t => t;
 
   /* Peers in groups */
   let addPeerToGroup:
-    (PeerId.t, PeerGroup.Id.t, PeerGroup.groupPermissions) => t;
+    (Peer.Id.t, PeersGroup.Id.t, PeerInGroup.groupPermissions) => t;
   let updatePeerPermissions:
-    (PeerId.t, PeerGroup.Id.t, PeerGroup.groupPermissions) => t;
-  let removePeerFromGroup: (PeerId.t, PeerGroup.Id.t) => t;
+    (Peer.Id.t, PeersGroup.Id.t, PeerInGroup.groupPermissions) => t;
+  let removePeerFromGroup: (Peer.Id.t, PeersGroup.Id.t) => t;
 
   /* Others */
   let updateSignalServerUrl: string => t;

@@ -57,26 +57,15 @@ module Peers = {
 
 module PeerInGroup = {
   type membersChangingPerms =
-    | ReadMembers
-    | WriteMembers;
+    PeerGroup.membersChangingPerms = | ReadMembers | WriteMembers;
   type groupPermissions =
-    | ReadContentAndMembers
-    | WriteContent(membersChangingPerms);
-  /* type membersChangingPerms =
-       | ReadMembers
-       | WriteMembers;
-     type groupPermissions =
-       | ReadContentAndMembers
-       | WriteContent(membersChangingPerms); */
+    PeerGroup.groupPermissions =
+      | ReadContentAndMembers | WriteContent(membersChangingPerms);
+
   type t = PeerGroup.peerInGroup;
 
   let id = (t: t) => t.id;
-  let permissions = (t: t) =>
-    switch (t.permissions) {
-    | ReadContentAndMembers => ReadContentAndMembers
-    | WriteContent(ReadMembers) => WriteContent(ReadMembers)
-    | WriteContent(WriteMembers) => WriteContent(WriteMembers)
-    };
+  let permissions = (t: t) => t.permissions;
 };
 
 module PeersGroup = PeerGroup;
