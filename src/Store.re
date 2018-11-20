@@ -34,6 +34,7 @@ type hasIdentity = {
   signalServer: SignalServerState.t,
   peerGroups: Types.peerGroups,
   peers: Peers.t,
+  offerChangesDebouncer: Debouncer.t(Msgs.t),
 };
 
 type rootState =
@@ -86,8 +87,9 @@ let initStateWithId =
     );
   let (signalServer, signalServerCmd) =
     SignalServerState.init(thisPeer, peers, signalServerUrl);
+  let offerChangesDebouncer = Debouncer.init();
   (
-    {db, thisPeer, signalServer, peerGroups, peers},
+    {db, thisPeer, signalServer, peerGroups, peers, offerChangesDebouncer},
     Cmds.batch([signalServerCmd, peersCmd, peerGroupsCmd]),
   );
 };
@@ -105,7 +107,7 @@ let updateStateWithId = (model, msg) => {
      }; */
   let debugCmd =
     switch (msg) {
-    | Msgs.OfferChanges =>
+    | Msgs.OfferChangesFromGroupsDebounced(_) =>
       Cmds.batch(
         Peers.foldActiveConnections(
           (cmdList, peerId, rtcConn) => {
@@ -147,9 +149,33 @@ let updateStateWithId = (model, msg) => {
     );
   let (peerGroups, peerGroupsCmd) =
     PeerGroups.update(model.db, model.thisPeer.id, model.peerGroups, msg);
+  let (offerChangesDebouncer, offerChangesDebouncerCmd) =
+    switch (msg) {
+    | OfferChangesDebouncerMsg(msg) =>
+      Debouncer.update(
+        d => d,
+        model.offerChangesDebouncer,
+        msg,
+        Msgs.offerChangesDebouncerMsg,
+      )
+    | _ => (model.offerChangesDebouncer, Cmds.none)
+    };
   (
-    {db: model.db, thisPeer: model.thisPeer, signalServer, peerGroups, peers},
-    Cmd.batch([signalServerCmd, peersCmd, peerGroupsCmd, debugCmd]),
+    {
+      db: model.db,
+      thisPeer: model.thisPeer,
+      signalServer,
+      peerGroups,
+      peers,
+      offerChangesDebouncer,
+    },
+    Cmd.batch([
+      signalServerCmd,
+      peersCmd,
+      peerGroupsCmd,
+      debugCmd,
+      offerChangesDebouncerCmd,
+    ]),
   );
 };
 
@@ -305,7 +331,6 @@ let create = () => {
     )
   );
   makeGlobal("sendToPeer", (id, msg) => app.pushMsg(SendToPeer(id, msg)));
-  makeGlobal("offerChanges", () => app.pushMsg(OfferChanges));
   makeGlobal("addPeerToGroupWithPerms", (peerId, groupId, permsStr) =>
     switch (permsStr |> PeerGroup.decodePermissions) {
     | Some(perms) => app.pushMsg(AddPeerToGroup(peerId, groupId, perms))

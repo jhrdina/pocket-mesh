@@ -57,5 +57,6 @@ type t =
   | PrintData
   | AddItem(string)
   | SendToPeer(string, string)
-  | OfferChanges
+  | OfferChangesDebouncerMsg(Debouncer.msg(t))
+  | OfferChangesFromGroupsDebounced(PeerGroup.Id.Set.t)
   | Noop;

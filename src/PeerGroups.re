@@ -6,6 +6,8 @@ let defaultGroupId = PeerGroup.Id.ofStringExn("aaa");
 /* TYPES */
 type t = Types.peerGroups;
 
+/* MODIFIERS */
+
 let empty = PeerGroup.Id.Map.empty;
 
 let addPeerGroup = (peerGroup: PeerGroup.t, t) =>
@@ -228,6 +230,13 @@ let receivedStringMessageFromPeer =
   };
 };
 
+let offerChangesDebounced = groupsIds =>
+  Debouncer.debounceCmd(
+    Msgs.OfferChangesFromGroupsDebounced(groupsIds),
+    Msgs.offerChangesDebouncerMsg,
+    3000,
+  );
+
 let init = (db, thisPeerId, maybeDbPeerGroups, initContent) =>
   switch (maybeDbPeerGroups |?> decode) {
   | Some(dbPeerGroups) => (dbPeerGroups, Cmds.none)
@@ -254,7 +263,13 @@ let update = (db, thisPeerId, peerGroups, msg) =>
     | None =>
       let newPeerGroups =
         peerGroups
-        |> addPeerGroup(PeerGroup.make(id, thisPeerId, alias, initContent));
+        |> addPeerGroup(
+             PeerGroup.make(id, thisPeerId, alias, initContent)
+             |> PeerGroup.addPeer({
+                  id: thisPeerId,
+                  permissions: WriteContent(WriteMembers),
+                }),
+           );
       (newPeerGroups, saveToDb(db, newPeerGroups));
     | Some(_) => (
         peerGroups,
@@ -281,7 +296,13 @@ let update = (db, thisPeerId, peerGroups, msg) =>
         peerGroups |> addPeerGroup({...peersGroup, content});
 
       /* TODO: Consider propagating changes to peers */
-      (newPeerGroups, saveToDb(db, newPeerGroups));
+      (
+        newPeerGroups,
+        Cmds.batch([
+          offerChangesDebounced(PeerGroup.Id.Set.singleton(id)),
+          saveToDb(db, newPeerGroups),
+        ]),
+      );
     | None => (peerGroups, Cmds.none)
     }
 
@@ -293,7 +314,13 @@ let update = (db, thisPeerId, peerGroups, msg) =>
     /* TODO: Check if the peer is in the friends list */
     let newPeerGroups =
       peerGroups |> addPeerToGroupWithPerms(peerId, groupId, perms);
-    (newPeerGroups, saveToDb(db, newPeerGroups));
+    (
+      newPeerGroups,
+      Cmds.batch([
+        offerChangesDebounced(PeerGroup.Id.Set.singleton(groupId)),
+        saveToDb(db, newPeerGroups),
+      ]),
+    );
 
   | UpdatePeerPermissions(peerId, groupId, perms) =>
     /* TODO: Check if the peer is in the friends list */
@@ -303,7 +330,13 @@ let update = (db, thisPeerId, peerGroups, msg) =>
     | Some(true) =>
       let newPeerGroups =
         peerGroups |> addPeerToGroupWithPerms(peerId, groupId, perms);
-      (newPeerGroups, saveToDb(db, newPeerGroups));
+      (
+        newPeerGroups,
+        Cmds.batch([
+          offerChangesDebounced(PeerGroup.Id.Set.singleton(groupId)),
+          saveToDb(db, newPeerGroups),
+        ]),
+      );
     | Some(false)
     | None => (peerGroups, Cmds.none)
     }
@@ -312,11 +345,37 @@ let update = (db, thisPeerId, peerGroups, msg) =>
     let newPeerGroups =
       peerGroups
       |> updateGroup(groupId, group => group |> PeerGroup.removePeer(peerId));
-    (newPeerGroups, saveToDb(db, newPeerGroups));
+    (
+      newPeerGroups,
+      Cmds.batch([
+        offerChangesDebounced(PeerGroup.Id.Set.singleton(groupId)),
+        saveToDb(db, newPeerGroups),
+      ]),
+    );
 
   | RemovePeer(peerId) =>
-    let newPeerGroups = peerGroups |> removePeerFromAllGroups(peerId);
-    (newPeerGroups, saveToDb(db, newPeerGroups));
+    let groups = peerGroups |> getGroupsForPeer(peerId);
+    let (changedGroupsIds, newPeerGroups) =
+      groups
+      |> fold(
+           ((changedGroupsIds, newPeerGroups), group) => {
+             let newPeerGroups =
+               newPeerGroups
+               |> addPeerGroup(group |> PeerGroup.removePeer(peerId));
+             let changedGroupsIds =
+               changedGroupsIds |> PeerGroup.Id.Set.add(group.id);
+             (changedGroupsIds, newPeerGroups);
+           },
+           (PeerGroup.Id.Set.empty, peerGroups),
+         );
+    /* let newPeerGroups = peerGroups |> removePeerFromAllGroups(peerId); */
+    (
+      newPeerGroups,
+      Cmds.batch([
+        offerChangesDebounced(changedGroupsIds),
+        saveToDb(db, newPeerGroups),
+      ]),
+    );
 
   /* INTERNAL MESSAGES */
 
