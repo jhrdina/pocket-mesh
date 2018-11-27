@@ -35,16 +35,15 @@ let fingerprintForRSAJWK = (jwk: Dom.jsonWebKey) =>
   };
 
 let jwkToPublicKey = jwk =>
-  subtle
-  ->Dom.SubtleCrypto.importKey(
-      jwk,
-      Dom.RsaHashedImportParams.make(
-        ~name=algorithm,
-        ~hash=Dom.HashAlgorithmIdentifier.make(~name=hash),
-      ),
-      true,
-      [|`Verify|],
-    );
+  subtle->Dom.SubtleCrypto.importKey(
+    jwk,
+    Dom.RsaHashedImportParams.make(
+      ~name=algorithm,
+      ~hash=Dom.HashAlgorithmIdentifier.make(~name=hash),
+    ),
+    true,
+    [|`Verify|],
+  );
 
 let publicKeyToJwk = key => subtle->Dom.SubtleCrypto.exportKey(key);
 
@@ -54,20 +53,20 @@ let jwkToString = jwk =>
   | None => ""
   };
 
+/* TODO: Make this safer */
 let stringToJwk: string => jwk = [%bs.raw str => "return JSON.parse(str);"];
 
 let generateKeyPair = () =>
-  subtle
-  ->Dom.SubtleCrypto.generateKeyPair(
-      Dom.RsaHashedKeyGenParams.make(
-        ~name=algorithm,
-        ~modulusLength=2048,
-        ~publicExponent=Js.Typed_array.Uint8Array.make([|0x01, 0x00, 0x01|]),
-        ~hash=Dom.HashAlgorithmIdentifier.make(~name=hash),
-      ),
-      false,
-      [|`Sign, `Verify|],
-    )
+  subtle->Dom.SubtleCrypto.generateKeyPair(
+    Dom.RsaHashedKeyGenParams.make(
+      ~name=algorithm,
+      ~modulusLength=2048,
+      ~publicExponent=Js.Typed_array.Uint8Array.make([|0x01, 0x00, 0x01|]),
+      ~hash=Dom.HashAlgorithmIdentifier.make(~name=hash),
+    ),
+    false,
+    [|`Sign, `Verify|],
+  )
   |> Js.Promise.then_(keyPair =>
        publicKeyToJwk(keyPair->Dom.CryptoKeyPair.publicKey)
        |> Js.Promise.then_(fingerprintForRSAJWK)
@@ -81,12 +80,11 @@ let generateKeyPair = () =>
      );
 
 let sign = (privateKey, stringToSign) =>
-  subtle
-  ->Dom.SubtleCrypto.sign(
-      algorithm,
-      privateKey,
-      SimpleEncoding.stringToArrayBuffer(stringToSign),
-    )
+  subtle->Dom.SubtleCrypto.sign(
+    algorithm,
+    privateKey,
+    SimpleEncoding.stringToArrayBuffer(stringToSign),
+  )
   |> Js.Promise.then_(signatureBuffer =>
        Js.Promise.resolve(
          SimpleEncoding.arrayBufferToBase64(signatureBuffer),
@@ -94,10 +92,9 @@ let sign = (privateKey, stringToSign) =>
      );
 
 let verify = (publicKey, signatureBase64, strToVerify) =>
-  subtle
-  ->Dom.SubtleCrypto.verify(
-      algorithm,
-      publicKey,
-      SimpleEncoding.base64ToArrayBuffer(signatureBase64),
-      SimpleEncoding.stringToArrayBuffer(strToVerify),
-    );
+  subtle->Dom.SubtleCrypto.verify(
+    algorithm,
+    publicKey,
+    SimpleEncoding.base64ToArrayBuffer(signatureBase64),
+    SimpleEncoding.stringToArrayBuffer(strToVerify),
+  );

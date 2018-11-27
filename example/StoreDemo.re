@@ -172,7 +172,6 @@ let viewPeer = peer => {
         {js|– no alias –|js} : peer |> PM.Peer.alias
     )
     |> txt;
-  let id = peer |> PM.Peer.id |> PM.Peer.Id.toString;
   let connectionState =
     (
       switch (peer |> PM.Peer.connectionState) {
