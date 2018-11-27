@@ -68,6 +68,19 @@ type parsingResult('a) =
 
 /* SERIALIZATION */
 
+let typeToJsonKeyVal = v => ("type", Json.String(v));
+
+let srcToJsonKeyVal = v => ("src", Json.String(v |> PeerId.toString));
+let srcOfJson = json =>
+  json |> Json.get("src") |?> Json.string |?> PeerId.ofString;
+
+let tgToJsonKeyVal = v => ("tg", Json.String(v |> PeerId.toString));
+let tgOfJson = json =>
+  json |> Json.get("tg") |?> Json.string |?> PeerId.ofString;
+
+let signatureToJsonKeyVal = v => ("signature", Json.String(v));
+let signatureOfJson = json => json |> Json.get("signature") |?> Json.string;
+
 let encode =
   Json.(
     fun
@@ -79,16 +92,16 @@ let encode =
           | _ => "answer"
           };
         Object([
-          ("type", String(typeString)),
-          ("src", String(msg.src |> PeerId.toString)),
-          ("tg", String(msg.tg |> PeerId.toString)),
+          typeString |> typeToJsonKeyVal,
+          msg.src |> srcToJsonKeyVal,
+          msg.tg |> tgToJsonKeyVal,
           ("sdp", String(msg.sdp)),
-          ("signature", String(msg.signature)),
+          msg.signature |> signatureToJsonKeyVal,
         ]);
       }
     | Error(error) =>
       Object([
-        ("type", String("error")),
+        "error" |> typeToJsonKeyVal,
         ...switch (error) {
            | TargetNotOnline => [("code", String("TargetNotOnline"))]
            | SourceNotOnline => [("code", String("SourceNotOnline"))]
@@ -100,7 +113,7 @@ let encode =
       ])
     | Ok(onlinePeers) =>
       Object([
-        ("type", String("ok")),
+        "ok" |> typeToJsonKeyVal,
         (
           "onlinePeers",
           Array(
@@ -112,8 +125,8 @@ let encode =
       ])
     | Login(msg) =>
       Object([
-        ("type", String("login")),
-        ("src", String(msg.src |> PeerId.toString)),
+        "login" |> typeToJsonKeyVal,
+        msg.src |> srcToJsonKeyVal,
         (
           "watch",
           Array(
@@ -122,11 +135,11 @@ let encode =
             |> List.rev_map(id => String(id |> PeerId.toString)),
           ),
         ),
-        ("signature", String(msg.signature)),
+        msg.signature |> signatureToJsonKeyVal,
       ])
     | WatchedPeersChanged(changes) =>
       Object([
-        ("type", String("watchedPeersChanged")),
+        "watchedPeersChanged" |> typeToJsonKeyVal,
         (
           "changes",
           Array(
@@ -149,8 +162,8 @@ let encode =
       ])
     | ChangeWatchedPeers(msg) =>
       Object([
-        ("type", String("changeWatchedPeers")),
-        ("src", String(msg.src |> PeerId.toString)),
+        "changeWatchedPeers" |> typeToJsonKeyVal,
+        msg.src |> srcToJsonKeyVal,
         (
           "watch",
           Array(
@@ -159,28 +172,28 @@ let encode =
             |> List.rev_map(id => String(id |> PeerId.toString)),
           ),
         ),
-        ("signature", String(msg.signature)),
+        msg.signature |> signatureToJsonKeyVal,
       ])
     | KeyRequest(msg) =>
       Object([
-        ("type", String("keyRequest")),
-        ("src", String(msg.src |> PeerId.toString)),
-        ("tg", String(msg.tg |> PeerId.toString)),
-        ("signature", String(msg.signature)),
+        "keyRequest" |> typeToJsonKeyVal,
+        msg.src |> srcToJsonKeyVal,
+        msg.tg |> tgToJsonKeyVal,
+        msg.signature |> signatureToJsonKeyVal,
       ])
     | KeyResponse(msg) =>
       Object([
-        ("type", String("keyRequest")),
-        ("src", String(msg.src |> PeerId.toString)),
-        ("tg", String(msg.tg |> PeerId.toString)),
+        "keyRequest" |> typeToJsonKeyVal,
+        msg.src |> srcToJsonKeyVal,
+        msg.tg |> tgToJsonKeyVal,
         ("key", String(msg.key)),
-        ("signature", String(msg.signature)),
+        msg.signature |> signatureToJsonKeyVal,
       ])
     | Logoff(msg) =>
       Object([
-        ("type", String("logoff")),
-        ("src", String(msg.src |> PeerId.toString)),
-        ("signature", String(msg.signature)),
+        "logoff" |> typeToJsonKeyVal,
+        msg.src |> srcToJsonKeyVal,
+        msg.signature |> signatureToJsonKeyVal,
       ])
   );
 
@@ -220,8 +233,8 @@ let decodePeerIdSet = json =>
 
 let decodeLoginMsg = json =>
   switch (
-    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("signature") |?> Json.string,
+    json |> srcOfJson,
+    json |> signatureOfJson,
     json |> Json.get("watch") |?> decodePeerIdSet,
   ) {
   | (Some(src), Some(signature), Some(watch)) =>
@@ -231,8 +244,8 @@ let decodeLoginMsg = json =>
 
 let decodeChangeWatchedPeers = json =>
   switch (
-    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("signature") |?> Json.string,
+    json |> srcOfJson,
+    json |> signatureOfJson,
     json |> Json.get("watch") |?> decodePeerIdSet,
   ) {
   | (Some(src), Some(signature), Some(watch)) =>
@@ -241,20 +254,17 @@ let decodeChangeWatchedPeers = json =>
   };
 
 let decodeLogoffMsg = json =>
-  switch (
-    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("signature") |?> Json.string,
-  ) {
+  switch (json |> srcOfJson, json |> signatureOfJson) {
   | (Some(src), Some(signature)) => Ok(Logoff({src, signature}))
   | _ => Error("Logoff message invalid format")
   };
 
 let decodeOfferOrAnswer = json =>
   switch (
-    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
+    json |> srcOfJson,
+    json |> tgOfJson,
     json |> Json.get("sdp") |?> Json.string,
-    json |> Json.get("signature") |?> Json.string,
+    json |> signatureOfJson,
   ) {
   | (Some(src), Some(tg), Some(sdp), Some(signature)) =>
     Ok({src, tg, sdp, signature})
@@ -288,11 +298,7 @@ let decodeWatchedPeersChanged = json =>
   };
 
 let decodeKeyRequest = json =>
-  switch (
-    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("signature") |?> Json.string,
-  ) {
+  switch (json |> srcOfJson, json |> tgOfJson, json |> signatureOfJson) {
   | (Some(src), Some(tg), Some(signature)) =>
     Ok(KeyRequest({src, tg, signature}))
   | _ => Error("KeyRequest message invalid format")
@@ -300,10 +306,10 @@ let decodeKeyRequest = json =>
 
 let decodeKeyResponse = json =>
   switch (
-    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
-    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
+    json |> srcOfJson,
+    json |> tgOfJson,
     json |> Json.get("key") |?> Json.string,
-    json |> Json.get("signature") |?> Json.string,
+    json |> signatureOfJson,
   ) {
   | (Some(src), Some(tg), Some(key), Some(signature)) =>
     Ok(KeyResponse({src, tg, key, signature}))
