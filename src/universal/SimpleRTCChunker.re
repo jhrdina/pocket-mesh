@@ -126,7 +126,7 @@ let recv = (data, t) =>
   switch (data, t) {
   | (SimpleRTC.String(str), Idle | Receiving(_)) =>
     str
-    |> Json.parseOpt
+    |> JsonUtils.parseOpt
     |?> decodeHdr
     |?>> (
       hdr => {

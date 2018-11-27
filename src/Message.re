@@ -270,7 +270,7 @@ let decodeWatchedPeersChanged = json =>
   };
 
 let fromJSON = str =>
-  switch (str |> Json.parseOpt) {
+  switch (str |> JsonUtils.parseOpt) {
   | Some(json) =>
     let maybeVersion =
       switch (json |> Json.get("version")) {

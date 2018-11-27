@@ -224,7 +224,7 @@ let receivedMessageFromPeer =
 let receivedStringMessageFromPeer =
     (peerId, rtcConn, db, stringMessage, peerGroups) =>
   stringMessage
-  |> Json.parseOpt
+  |> JsonUtils.parseOpt
   |?> P2PMsg.decode
   |?>> (msg => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups))
   |? (
