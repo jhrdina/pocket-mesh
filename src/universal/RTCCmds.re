@@ -1,6 +1,17 @@
 open BlackTea;
 
-type t = SimpleRTC.t;
+/**
+  Wraps SimpleRTC into Cmds and adds chunking support
+*/
+
+/* TYPES */
+
+type t = {
+  simpleRtc: SimpleRTC.t,
+  mutable chunkerState: SimpleRTCChunker.t,
+};
+
+/* FUNCTIONS */
 
 let _create =
     (
@@ -14,23 +25,37 @@ let _create =
       closeToMsg,
     ) =>
   Cmd.call(callbacks => {
-    let t = SimpleRTC.create({role: role});
-    t->SimpleRTC.setOnSignal(sdp =>
-      callbacks^.enqueue(sdpToMsg(t, sdp, tag))
-    );
-    t->SimpleRTC.setOnConnect(() =>
-      callbacks^.enqueue(connectedToMsg(t, tag))
-    );
-    t->SimpleRTC.setOnData(data =>
-      callbacks^.enqueue @@ dataToMsg(t, tag, data)
-    );
-    t->SimpleRTC.setOnError(error =>
-      error |> errorToMsg(t, tag) |> callbacks^.enqueue
-    );
-    t->SimpleRTC.setOnClose(() => closeToMsg(t, tag) |> callbacks^.enqueue);
+    let t = {
+      simpleRtc: SimpleRTC.create({role: role}),
+      chunkerState: SimpleRTCChunker.make(),
+    };
+    t.simpleRtc
+    ->SimpleRTC.setOnSignal(sdp =>
+        callbacks^.enqueue(sdpToMsg(t, sdp, tag))
+      );
+    t.simpleRtc
+    ->SimpleRTC.setOnConnect(() =>
+        callbacks^.enqueue(connectedToMsg(t, tag))
+      );
+    t.simpleRtc
+    ->SimpleRTC.setOnData(data => {
+        let (newChunkerState, maybePayload) =
+          t.chunkerState |> SimpleRTCChunker.recv(data);
+        t.chunkerState = newChunkerState;
+        switch (maybePayload) {
+        | Some(payload) => callbacks^.enqueue @@ dataToMsg(t, tag, payload)
+        | None => ()
+        };
+      });
+    t.simpleRtc
+    ->SimpleRTC.setOnError(error =>
+        error |> errorToMsg(t, tag) |> callbacks^.enqueue
+      );
+    t.simpleRtc
+    ->SimpleRTC.setOnClose(() => closeToMsg(t, tag) |> callbacks^.enqueue);
 
     switch (maybeInitSignal) {
-    | Some(initSignal) => t->SimpleRTC.signal(initSignal)
+    | Some(initSignal) => t.simpleRtc->SimpleRTC.signal(initSignal)
     | None => ()
     };
   });
@@ -69,8 +94,9 @@ let createAcceptor =
   );
 
 let signal = (t, sdpAnswer) =>
-  Cmd.call(_callbacks => t->SimpleRTC.signal(sdpAnswer));
+  Cmd.call(_callbacks => t.simpleRtc->SimpleRTC.signal(sdpAnswer));
 
-let destroy = t => Cmd.call(_callbacks => t->SimpleRTC.destroy);
+let destroy = t => Cmd.call(_callbacks => t.simpleRtc->SimpleRTC.destroy);
 
-let send = (t, str) => Cmd.call(_callbacks => t->SimpleRTC.send(str));
+let send = (t, payload) =>
+  Cmd.call(_callbacks => SimpleRTCChunker.send(t.simpleRtc, payload));

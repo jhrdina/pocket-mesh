@@ -116,7 +116,7 @@ let updateStateWithId = (model, msg) => {
             let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
             [
               rtcConn->RTCCmds.send(
-                msgForPeer |> P2PMsg.encode |> Json.stringify,
+                String(msgForPeer |> P2PMsg.encode |> Json.stringify),
               ),
               ...cmdList,
             ];
@@ -125,7 +125,7 @@ let updateStateWithId = (model, msg) => {
           model.peers,
         ),
       )
-    | RtcGotData(_rtcConn, peerId, data) =>
+    | RtcGotData(_rtcConn, peerId, String(data)) =>
       Cmds.log(
         "Store: Got data from " ++ (peerId |> PeerId.toString) ++ ": " ++ data,
       )
@@ -267,7 +267,7 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
       switch (PeerId.ofString(strId) |?> (id => peers |> Peers.findOpt(id))) {
       | Some({connectionState: Connected(rtcConn, _, _), _}) => (
           model,
-          RTCCmds.send(rtcConn, msgStr),
+          RTCCmds.send(rtcConn, String(msgStr)),
         )
       | Some({connectionState: _, _}) => (
           model,

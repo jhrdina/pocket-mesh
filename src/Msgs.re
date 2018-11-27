@@ -16,16 +16,16 @@ type t =
   /* Peers - RTC */
   /* =========== */
   /* _, SDP, Acceptor ID */
-  | RtcOfferReady(SimpleRTC.t, string, PeerId.t)
+  | RtcOfferReady(RTCCmds.t, string, PeerId.t)
   /* _, SDP, Initiator ID */
-  | RtcAnswerReady(SimpleRTC.t, string, PeerId.t)
-  | RtcConnected(SimpleRTC.t, PeerId.t)
+  | RtcAnswerReady(RTCCmds.t, string, PeerId.t)
+  | RtcConnected(RTCCmds.t, PeerId.t)
   /* _, tag, data */
-  | RtcGotData(SimpleRTC.t, PeerId.t, string)
+  | RtcGotData(RTCCmds.t, PeerId.t, SimpleRTCChunker.payload)
   /* _, PeerID, errMsg */
-  | RtcError(SimpleRTC.t, PeerId.t, string)
+  | RtcError(RTCCmds.t, PeerId.t, string)
   /* _, PeerID */
-  | RtcClose(SimpleRTC.t, PeerId.t)
+  | RtcClose(RTCCmds.t, PeerId.t)
   /* PeerID */
   | RtcRetryConnection(PeerId.t)
   /* ====== */

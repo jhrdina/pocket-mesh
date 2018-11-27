@@ -1,3 +1,4 @@
+open Rex_json;
 open Json.Infix;
 
 /* CONSTANTS */
@@ -117,7 +118,9 @@ let saveToDb = (db, model) =>
 let connectionStarted = (peerId, rtcConn, peerGroups) => {
   let groupsStatuses = getGroupsStatusesForPeer(peerId, peerGroups);
   let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
-  rtcConn->RTCCmds.send(msgForPeer |> P2PMsg.encode |> Json.stringify);
+  rtcConn->RTCCmds.send(
+    String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+  );
 };
 
 let receivedChangesOffer = (peerId, rtcConn, remoteGroupsStatuses, peerGroups) => {
@@ -130,7 +133,10 @@ let receivedChangesOffer = (peerId, rtcConn, remoteGroupsStatuses, peerGroups) =
   switch (maybeRequests) {
   | Some(requests) =>
     let msgForPeer = P2PMsg.ChangesRequest(requests);
-    RTCCmds.send(rtcConn, msgForPeer |> P2PMsg.encode |> Json.stringify);
+    RTCCmds.send(
+      rtcConn,
+      String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+    );
   | None => Cmds.none
   };
 };
@@ -169,7 +175,10 @@ let receivedChangesRequest = (peerId, rtcConn, requestedChanges, peerGroups) => 
   switch (maybeChanges) {
   | Some(changes) =>
     let msgForPeer: P2PMsg.t = Changes(changes);
-    RTCCmds.send(rtcConn, msgForPeer |> P2PMsg.encode |> Json.stringify);
+    RTCCmds.send(
+      rtcConn,
+      String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+    );
   | None => Cmds.none
   };
 };
@@ -213,22 +222,17 @@ let receivedMessageFromPeer =
   };
 
 let receivedStringMessageFromPeer =
-    (peerId, rtcConn, db, stringMessage, peerGroups) => {
-  let json =
-    switch (stringMessage |> Json.parse) {
-    | json => Some(json)
-    | exception _ => None
-    };
-  switch (json |?> P2PMsg.decode) {
-  | Some(msg) => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups)
-  | None => (
-      peerGroups,
-      Cmds.log(
-        "Failed to parse message from peer " ++ (peerId |> PeerId.toString),
-      ),
-    )
-  };
-};
+    (peerId, rtcConn, db, stringMessage, peerGroups) =>
+  stringMessage
+  |> Json.parseOpt
+  |?> P2PMsg.decode
+  |?>> (msg => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups))
+  |? (
+    peerGroups,
+    Cmds.log(
+      "Failed to parse message from peer " ++ (peerId |> PeerId.toString),
+    ),
+  );
 
 let offerChangesDebounced = groupsIds =>
   Debouncer.debounceCmd(
@@ -384,7 +388,7 @@ let update = (db, thisPeerId, peerGroups, msg) =>
       connectionStarted(peerId, rtcConn, peerGroups),
     )
 
-  | RtcGotData(rtcConn, peerId, data) =>
+  | RtcGotData(rtcConn, peerId, String(data)) =>
     receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
 
   /* TODO: Debug, remove */

@@ -269,14 +269,8 @@ let decodeWatchedPeersChanged = json =>
   | None => Error("WatchedPeersChanged message invalid format")
   };
 
-let fromJSON = str => {
-  let maybeJson =
-    switch (Json.parse(str)) {
-    | json => Some(json)
-    | exception _ => None
-    };
-
-  switch (maybeJson) {
+let fromJSON = str =>
+  switch (str |> Json.parseOpt) {
   | Some(json) =>
     let maybeVersion =
       switch (json |> Json.get("version")) {
@@ -312,4 +306,3 @@ let fromJSON = str => {
     };
   | None => Error("Not a valid JSON")
   };
-};

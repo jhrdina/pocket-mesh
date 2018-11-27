@@ -9,6 +9,10 @@ type role =
   | Initiator
   | Acceptor;
 
+type data =
+  RTCMessageEvent.data =
+    | String(string) | ArrayBuffer(Js.Typed_array.array_buffer);
+
 type t = {
   role,
   connection: RTCPeerConnection.t,
@@ -19,7 +23,7 @@ type t = {
   mutable connected: bool,
   mutable destroyed: bool,
   mutable onSignal: option(string => unit),
-  mutable onData: option(string => unit),
+  mutable onData: option(data => unit),
   mutable onConnect: option(unit => unit),
   mutable onError: option(string => unit),
   mutable onClose: option(unit => unit),
@@ -103,7 +107,11 @@ let onIceCandidate = (s, e) => {
   };
 };
 
-let onChannelMessage = (s, e) => s->emitData(RTCMessageEvent.getData(e));
+let onChannelMessage = (s, e) =>
+  switch (RTCMessageEvent.getData(e)) {
+  | Some(data) => s->emitData(data)
+  | None => logDebug("Ignoring unknown incomming message type.")
+  };
 
 let onChannelOpen = s => {
   /* TODO: Do magic to workaround https://github.com/js-platform/node-webrtc/issues/339 */
@@ -262,10 +270,15 @@ let _onSignalingStateChange = () =>
     "OnSignalingStateChange",
     /* TODO */
   );
+
 let send = (s, msg) =>
-  switch (s.dataChannel) {
-  | Some(dataChannel) => RTCDataChannel.send(dataChannel, msg)
-  | None => s->emitError("Cannot send data: Data channel doesn't exist yet.")
+  switch (s.dataChannel, msg) {
+  | (Some(dataChannel), String(msgStr)) =>
+    dataChannel->RTCDataChannel.sendString(msgStr)
+  | (Some(dataChannel), ArrayBuffer(msgBuf)) =>
+    dataChannel->RTCDataChannel.sendArrayBuffer(msgBuf)
+  | (None, _) =>
+    s->emitError("Cannot send data: Data channel doesn't exist yet.")
   };
 
 let create = options => {
