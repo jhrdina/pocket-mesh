@@ -1,3 +1,4 @@
+open Rex_json.Json.Infix;
 open BlackTea;
 
 /* TYPES */
@@ -7,13 +8,18 @@ type conn = {ws: WebapiExtra.Dom.WebSocket.t};
 type peerChange = Message.peerChange;
 
 let send = (msg: Message.t, ws: WebapiExtra.Dom.WebSocket.t) =>
-  WebapiExtra.Dom.(msg |> Message.toJSON |> ws->WebSocket.sendString);
+  WebapiExtra.Dom.(
+    msg |> Message.encode |> Json.stringify |> ws->WebSocket.sendString
+  );
 
 /* COMMANDS */
 
 let sendMsg = (msg: Message.t, t: conn) =>
   Cmd.call(_callbacks =>
-    msg |> Message.toJSON |> t.ws->WebapiExtra.Dom.WebSocket.sendString
+    msg
+    |> Message.encode
+    |> Json.stringify
+    |> t.ws->WebapiExtra.Dom.WebSocket.sendString
   );
 
 let connect =
@@ -40,9 +46,12 @@ let connect =
       });
     t.ws
     ->WebSocket.setOnMessage(event =>
-        switch (Message.fromJSON(event->MessageEvent.data)) {
-        | Ok(msg) => callbacks^.enqueue(signalServerMsgToMsg(msg))
-        | Error(msg) => Js.log(msg)
+        switch (
+          event->MessageEvent.data |> JsonUtils.parseOpt |?>> Message.decode
+        ) {
+        | Some(Ok(msg)) => callbacks^.enqueue(signalServerMsgToMsg(msg))
+        | Some(Error(msg)) => Js.log(msg)
+        | None => Js.log("Received message that is not valid JSON. Skipping.")
         }
       );
     /* t.ws

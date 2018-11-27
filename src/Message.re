@@ -29,6 +29,19 @@ type peerChange =
   | WentOnline(PeerId.t)
   | WentOffline(PeerId.t);
 
+type keyRequest = {
+  src: PeerId.t,
+  tg: PeerId.t,
+  signature: string,
+};
+
+type keyResponse = {
+  src: PeerId.t,
+  tg: PeerId.t,
+  key: string,
+  signature: string,
+};
+
 type error =
   | TargetNotOnline
   | SourceNotOnline
@@ -43,134 +56,133 @@ type t =
   | Ok(PeerId.Set.t)
   | WatchedPeersChanged(list(peerChange))
   | ChangeWatchedPeers(loginOrChangeWatchedPeers)
-  | Unknown;
+  | KeyRequest(keyRequest)
+  | KeyResponse(keyResponse);
 
 type clientToServer = t;
 type serverToClient = t;
 
-/* SERIALIZATION */
-
-let toJSON =
-  fun
-  | Offer(msg) as v
-  | Answer(msg) as v => {
-      let typeString =
-        switch (v) {
-        | Offer(_) => "offer"
-        | _ => "answer"
-        };
-      Json.(
-        stringify(
-          Object([
-            ("type", String(typeString)),
-            ("src", String(msg.src |> PeerId.toString)),
-            ("tg", String(msg.tg |> PeerId.toString)),
-            ("sdp", String(msg.sdp)),
-            ("signature", String(msg.signature)),
-          ]),
-        )
-      );
-    }
-  | Error(error) =>
-    Json.(
-      stringify(
-        Object([
-          ("type", String("error")),
-          ...switch (error) {
-             | TargetNotOnline => [("code", String("TargetNotOnline"))]
-             | SourceNotOnline => [("code", String("SourceNotOnline"))]
-             | InvalidMessage(explanation) => [
-                 ("code", String("InvalidMessage")),
-                 ("explanation", String(explanation)),
-               ]
-             },
-        ]),
-      )
-    )
-  | Ok(onlinePeers) =>
-    Json.(
-      stringify(
-        Object([
-          ("type", String("ok")),
-          (
-            "onlinePeers",
-            Array(
-              onlinePeers
-              |> PeerId.Set.elements
-              |> List.rev_map(id => String(id |> PeerId.toString)),
-            ),
-          ),
-        ]),
-      )
-    )
-  | Login(msg) =>
-    Json.(
-      stringify(
-        Object([
-          ("type", String("login")),
-          ("src", String(msg.src |> PeerId.toString)),
-          (
-            "watch",
-            Array(
-              msg.watch
-              |> PeerId.Set.elements
-              |> List.rev_map(id => String(id |> PeerId.toString)),
-            ),
-          ),
-          ("signature", String(msg.signature)),
-        ]),
-      )
-    )
-  | WatchedPeersChanged(changes) =>
-    Json.(
-      stringify(
-        Object([
-          ("type", String("watchedPeersChanged")),
-          (
-            "changes",
-            Array(
-              changes
-              |> List.rev_map(
-                   fun
-                   | WentOnline(peerId) =>
-                     Array([
-                       String(peerId |> PeerId.toString),
-                       String("online"),
-                     ])
-                   | WentOffline(peerId) =>
-                     Array([
-                       String(peerId |> PeerId.toString),
-                       String("offline"),
-                     ]),
-                 ),
-            ),
-          ),
-        ]),
-      )
-    )
-  | ChangeWatchedPeers(msg) =>
-    Json.(
-      stringify(
-        Object([
-          ("type", String("changeWatchedPeers")),
-          ("src", String(msg.src |> PeerId.toString)),
-          (
-            "watch",
-            Array(
-              msg.watch
-              |> PeerId.Set.elements
-              |> List.rev_map(id => String(id |> PeerId.toString)),
-            ),
-          ),
-          ("signature", String(msg.signature)),
-        ]),
-      )
-    )
-  | _ => "decoder not implemented";
-
 type parsingResult('a) =
   | Ok('a)
   | Error(string);
+
+/* SERIALIZATION */
+
+let encode =
+  Json.(
+    fun
+    | Offer(msg) as v
+    | Answer(msg) as v => {
+        let typeString =
+          switch (v) {
+          | Offer(_) => "offer"
+          | _ => "answer"
+          };
+        Object([
+          ("type", String(typeString)),
+          ("src", String(msg.src |> PeerId.toString)),
+          ("tg", String(msg.tg |> PeerId.toString)),
+          ("sdp", String(msg.sdp)),
+          ("signature", String(msg.signature)),
+        ]);
+      }
+    | Error(error) =>
+      Object([
+        ("type", String("error")),
+        ...switch (error) {
+           | TargetNotOnline => [("code", String("TargetNotOnline"))]
+           | SourceNotOnline => [("code", String("SourceNotOnline"))]
+           | InvalidMessage(explanation) => [
+               ("code", String("InvalidMessage")),
+               ("explanation", String(explanation)),
+             ]
+           },
+      ])
+    | Ok(onlinePeers) =>
+      Object([
+        ("type", String("ok")),
+        (
+          "onlinePeers",
+          Array(
+            onlinePeers
+            |> PeerId.Set.elements
+            |> List.rev_map(id => String(id |> PeerId.toString)),
+          ),
+        ),
+      ])
+    | Login(msg) =>
+      Object([
+        ("type", String("login")),
+        ("src", String(msg.src |> PeerId.toString)),
+        (
+          "watch",
+          Array(
+            msg.watch
+            |> PeerId.Set.elements
+            |> List.rev_map(id => String(id |> PeerId.toString)),
+          ),
+        ),
+        ("signature", String(msg.signature)),
+      ])
+    | WatchedPeersChanged(changes) =>
+      Object([
+        ("type", String("watchedPeersChanged")),
+        (
+          "changes",
+          Array(
+            changes
+            |> List.rev_map(
+                 fun
+                 | WentOnline(peerId) =>
+                   Array([
+                     String(peerId |> PeerId.toString),
+                     String("online"),
+                   ])
+                 | WentOffline(peerId) =>
+                   Array([
+                     String(peerId |> PeerId.toString),
+                     String("offline"),
+                   ]),
+               ),
+          ),
+        ),
+      ])
+    | ChangeWatchedPeers(msg) =>
+      Object([
+        ("type", String("changeWatchedPeers")),
+        ("src", String(msg.src |> PeerId.toString)),
+        (
+          "watch",
+          Array(
+            msg.watch
+            |> PeerId.Set.elements
+            |> List.rev_map(id => String(id |> PeerId.toString)),
+          ),
+        ),
+        ("signature", String(msg.signature)),
+      ])
+    | KeyRequest(msg) =>
+      Object([
+        ("type", String("keyRequest")),
+        ("src", String(msg.src |> PeerId.toString)),
+        ("tg", String(msg.tg |> PeerId.toString)),
+        ("signature", String(msg.signature)),
+      ])
+    | KeyResponse(msg) =>
+      Object([
+        ("type", String("keyRequest")),
+        ("src", String(msg.src |> PeerId.toString)),
+        ("tg", String(msg.tg |> PeerId.toString)),
+        ("key", String(msg.key)),
+        ("signature", String(msg.signature)),
+      ])
+    | Logoff(msg) =>
+      Object([
+        ("type", String("logoff")),
+        ("src", String(msg.src |> PeerId.toString)),
+        ("signature", String(msg.signature)),
+      ])
+  );
 
 /* f = i => i |> Json.string */
 let decodeList = (f, json) =>
@@ -275,40 +287,62 @@ let decodeWatchedPeersChanged = json =>
   | None => Error("WatchedPeersChanged message invalid format")
   };
 
-let fromJSON = str =>
-  switch (str |> JsonUtils.parseOpt) {
-  | Some(json) =>
-    let maybeVersion =
-      switch (json |> Json.get("version")) {
-      | None => Some(latestVersion)
-      | Some(v) => v |> Json.number |?>> int_of_float
-      };
-    switch (maybeVersion) {
-    | Some(_ver) =>
-      /* TODO: Support different versions */
-      switch (json |> Json.get("type") |?> Json.string) {
-      | Some(typeStr) =>
-        switch (typeStr) {
-        | "login" => decodeLoginMsg(json)
-        | "offer" =>
-          switch (decodeOfferOrAnswer(json)) {
-          | Ok(offerPayload) => Ok(Offer(offerPayload))
-          | Error(_) as e => e
-          }
-        | "answer" =>
-          switch (decodeOfferOrAnswer(json)) {
-          | Ok(answerPayload) => Ok(Answer(answerPayload))
-          | Error(_) as e => e
-          }
-        | "logoff" => decodeLogoffMsg(json)
-        | "ok" => decodeOkMsg(json)
-        | "watchedPeersChanged" => decodeWatchedPeersChanged(json)
-        | "changeWatchedPeers" => decodeChangeWatchedPeers(json)
-        | _ => Error("Type: Unknown message type.")
-        }
-      | None => Error("Type: Missing or not string")
-      }
-    | None => Error("Version: Not a number.")
-    };
-  | None => Error("Not a valid JSON")
+let decodeKeyRequest = json =>
+  switch (
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
+    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
+    json |> Json.get("signature") |?> Json.string,
+  ) {
+  | (Some(src), Some(tg), Some(signature)) =>
+    Ok(KeyRequest({src, tg, signature}))
+  | _ => Error("KeyRequest message invalid format")
   };
+
+let decodeKeyResponse = json =>
+  switch (
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
+    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
+    json |> Json.get("key") |?> Json.string,
+    json |> Json.get("signature") |?> Json.string,
+  ) {
+  | (Some(src), Some(tg), Some(key), Some(signature)) =>
+    Ok(KeyResponse({src, tg, key, signature}))
+  | _ => Error("KeyResponse message invalid format")
+  };
+
+let decode = json => {
+  let maybeVersion =
+    switch (json |> Json.get("version")) {
+    | None => Some(latestVersion)
+    | Some(v) => v |> Json.number |?>> int_of_float
+    };
+  switch (maybeVersion) {
+  | Some(_ver) =>
+    /* TODO: Support different versions */
+    switch (json |> Json.get("type") |?> Json.string) {
+    | Some(typeStr) =>
+      switch (typeStr) {
+      | "login" => decodeLoginMsg(json)
+      | "offer" =>
+        switch (decodeOfferOrAnswer(json)) {
+        | Ok(offerPayload) => Ok(Offer(offerPayload))
+        | Error(_) as e => e
+        }
+      | "answer" =>
+        switch (decodeOfferOrAnswer(json)) {
+        | Ok(answerPayload) => Ok(Answer(answerPayload))
+        | Error(_) as e => e
+        }
+      | "logoff" => decodeLogoffMsg(json)
+      | "ok" => decodeOkMsg(json)
+      | "watchedPeersChanged" => decodeWatchedPeersChanged(json)
+      | "changeWatchedPeers" => decodeChangeWatchedPeers(json)
+      | "keyRequest" => decodeKeyRequest(json)
+      | "keyResponse" => decodeKeyResponse(json)
+      | _ => Error("Type: Unknown message type.")
+      }
+    | None => Error("Type: Missing or not string")
+    }
+  | None => Error("Version: Not a number.")
+  };
+};
