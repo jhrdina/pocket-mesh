@@ -1,3 +1,5 @@
+open Rex_json;
+open Json.Infix;
 module WS: DreamWSType.T = DreamWSCohttp;
 
 type client = {
@@ -127,93 +129,105 @@ let init = () => {
   };
 };
 
-let handleMessage = (srcSocket, msgStr, state) =>
-  switch (Message.fromJSON(msgStr)) {
-  | Ok(message) =>
-    switch (message) {
-    | Login(msg) =>
-      /* Existing peer */
-      switch (findPeer(state, msg.src)) {
-      | Some(_) =>
-        /* There is already an existing connected peer with the same ID. */
-        /* ...Let's kick him out... */
-        /* TODO: Disconnect an existing connected peer */
-        ()
-      | None => ()
-      };
+let handleMessage = (srcSocket, message: Message.t, state) =>
+  switch (message) {
+  | Login(msg) =>
+    /* Existing peer */
+    switch (findPeer(state, msg.src)) {
+    | Some(_) =>
+      /* There is already an existing connected peer with the same ID. */
+      /* ...Let's kick him out... */
+      /* TODO: Disconnect an existing connected peer */
+      ()
+    | None => ()
+    };
 
-      /* TODO: Check signature */
-      addPeer(
-        state,
-        {
-          socket: srcSocket,
-          /* TODO: Check signature */
-          isAuthenticated: false,
-          /* TODO: Support multiple protocol versions */
-          protocolVersion: 1,
-          id: msg.src,
-        },
-      );
+    /* TODO: Check signature */
+    addPeer(
+      state,
+      {
+        socket: srcSocket,
+        /* TODO: Check signature */
+        isAuthenticated: false,
+        /* TODO: Support multiple protocol versions */
+        protocolVersion: 1,
+        id: msg.src,
+      },
+    );
 
-      /* Add my watches */
+    /* Add my watches */
+    updateWatchings(state, msg.src, msg.watch);
+
+    /* Populate states of peers I'm interested in */
+    let onlinePeers = msg.watch |> PeerId.Set.filter(memPeer(state));
+    /* Notify others that are interested in my arrival */
+    let notifications =
+      makeNotificationsForInterestedPeers(state, WentOnline(msg.src));
+
+    [Emit(srcSocket, Ok(onlinePeers)), ...notifications];
+
+  | KeyRequest(payload) as msg =>
+    /* TODO: Check signature */
+    switch (findPeer(state, payload.tg)) {
+    | Some(tgClient) => [Emit(tgClient.socket, msg)]
+    | None => [Emit(srcSocket, Error(TargetNotOnline))]
+    }
+
+  | KeyResponse(payload) as msg =>
+    /* TODO: Check signature */
+    switch (findPeer(state, payload.tg)) {
+    | Some(tgClient) => [Emit(tgClient.socket, msg)]
+    | None => [Emit(srcSocket, Error(TargetNotOnline))]
+    }
+
+  | ChangeWatchedPeers(msg) =>
+    /* TODO: Check signature */
+    switch (findPeer(state, msg.src)) {
+    | Some(_) =>
       updateWatchings(state, msg.src, msg.watch);
 
       /* Populate states of peers I'm interested in */
-      let onlinePeers = msg.watch |> PeerId.Set.filter(memPeer(state));
-      /* Notify others that are interested in my arrival */
-      let notifications =
-        makeNotificationsForInterestedPeers(state, WentOnline(msg.src));
-
-      [Emit(srcSocket, Ok(onlinePeers)), ...notifications];
-
-    | ChangeWatchedPeers(msg) =>
-      /* TODO: Check signature */
-      switch (findPeer(state, msg.src)) {
-      | Some(_) =>
-        updateWatchings(state, msg.src, msg.watch);
-
-        /* Populate states of peers I'm interested in */
-        let onlinePeersIds = msg.watch |> PeerId.Set.filter(memPeer(state));
-        let peerChanges =
-          PeerId.Set.fold(
-            (peerId, acc) => [Message.WentOnline(peerId), ...acc],
-            onlinePeersIds,
-            [],
-          );
-        [Emit(srcSocket, WatchedPeersChanged(peerChanges))];
-      | None => [Emit(srcSocket, Error(SourceNotOnline))]
-      }
-
-    | Offer(payload) as msg
-    | Answer(payload) as msg =>
-      /* TODO: Check signature */
-      switch (findPeer(state, payload.tg)) {
-      | Some(tgClient) => [Emit(tgClient.socket, msg)]
-      | None => [Emit(srcSocket, Error(TargetNotOnline))]
-      }
-
-    | Logoff(msg) =>
-      /* TODO: Check signature */
-      removeAllWatchings(state, msg.src);
-      removePeer(state, msg.src);
-      [];
-    /* [Emit(srcSocket, Ok)]; */
-
-    | Error(_)
-    | Ok(_)
-    | WatchedPeersChanged(_) =>
-      Printf.eprintf(
-        "Got message type that should be sent only from server to client\n",
-      );
-      [];
-
-    | Unknown =>
-      Printf.eprintf("Unknown message type\n");
-      [];
+      let onlinePeersIds = msg.watch |> PeerId.Set.filter(memPeer(state));
+      let peerChanges =
+        PeerId.Set.fold(
+          (peerId, acc) => [Message.WentOnline(peerId), ...acc],
+          onlinePeersIds,
+          [],
+        );
+      [Emit(srcSocket, WatchedPeersChanged(peerChanges))];
+    | None => [Emit(srcSocket, Error(SourceNotOnline))]
     }
 
-  | Error(str) => [Emit(srcSocket, Error(InvalidMessage(str)))]
+  | Offer(payload) as msg
+  | Answer(payload) as msg =>
+    /* TODO: Check signature */
+    switch (findPeer(state, payload.tg)) {
+    | Some(tgClient) => [Emit(tgClient.socket, msg)]
+    | None => [Emit(srcSocket, Error(TargetNotOnline))]
+    }
+
+  | Logoff(msg) =>
+    /* TODO: Check signature */
+    removeAllWatchings(state, msg.src);
+    removePeer(state, msg.src);
+    [];
+  /* [Emit(srcSocket, Ok)]; */
+
+  | Error(_)
+  | Ok(_)
+  | WatchedPeersChanged(_) =>
+    Printf.eprintf(
+      "Got message type that should be sent only from server to client\n",
+    );
+    [];
   };
+
+let handleStringMessage = (srcSocket, msgStr, state) =>
+  switch (msgStr |> JsonUtils.parseOpt |?>> Message.decode) {
+  | Some(Ok(msg)) => handleMessage(srcSocket, msg, state)
+  | Some(Error(str)) => [Emit(srcSocket, Error(InvalidMessage(str)))]
+  | None => [Emit(srcSocket, Error(InvalidMessage("Not a valid JSON")))]
+  }
 
 let handleDisconnect = (socket, state) =>
   switch (findPeerBySocket(state, socket)) {
@@ -234,7 +248,7 @@ let state = ref(init());
 let handleEffect =
   fun
   | Emit(socket, msg) =>
-    ignore(WS.Socket.emit(socket, msg |> Message.toJSON))
+    ignore(WS.Socket.emit(socket, msg |> Message.encode |> Json.stringify))
   | Db(newState) => state := newState;
 
 WS.run(
@@ -244,7 +258,7 @@ WS.run(
     Printf.eprintf("Got a connection!\n%!");
     socket
     |> Socket.setOnMessage((_, msg) =>
-         handleMessage(socket, msg, state^) |> List.iter(handleEffect)
+         handleStringMessage(socket, msg, state^) |> List.iter(handleEffect)
        )
     |> Socket.setOnDisconnect(() =>
          handleDisconnect(socket, state^) |> List.iter(handleEffect)
