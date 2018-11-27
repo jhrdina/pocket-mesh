@@ -1,3 +1,14 @@
+/**
+  - Container for storing and querying peers list
+    - indexed by connection state for extra performance
+      (not measured, therefore it might not be necessary)
+  - Controller that handles Peers list related global messages
+    - handles peers list changes
+    - ensures changes are saved to IDB
+
+  TODO: Separate?
+ */
+
 type byConnStates = {
   notInGroup: PeerId.Set.t,
   inGroupWaitingForOnlineSignal: PeerId.Set.t,

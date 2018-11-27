@@ -1,9 +1,5 @@
 open BlackTea;
 
-/* CONSTANTS */
-
-let defaultSignalServerUrl = "ws://localhost:7777";
-
 /* TYPES */
 
 type conn = {ws: WebapiExtra.Dom.WebSocket.t};

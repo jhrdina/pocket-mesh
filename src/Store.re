@@ -1,3 +1,4 @@
+/* TODO: Remove for production */
 [%%debugger.chrome];
 
 open BlackTea;
@@ -108,23 +109,22 @@ let updateStateWithId = (model, msg) => {
   let debugCmd =
     switch (msg) {
     | Msgs.OfferChangesFromGroupsDebounced(_) =>
-      Cmds.batch(
-        Peers.foldActiveConnections(
-          (cmdList, peerId, rtcConn) => {
-            let groupsStatuses =
-              PeerGroups.getGroupsStatusesForPeer(peerId, model.peerGroups);
-            let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
-            [
-              rtcConn->RTCCmds.send(
-                String(msgForPeer |> P2PMsg.encode |> Json.stringify),
-              ),
-              ...cmdList,
-            ];
-          },
-          [],
-          model.peers,
-        ),
+      Peers.foldActiveConnections(
+        (cmdList, peerId, rtcConn) => {
+          let groupsStatuses =
+            PeerGroups.getGroupsStatusesForPeer(peerId, model.peerGroups);
+          let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
+          [
+            rtcConn->RTCCmds.send(
+              String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+            ),
+            ...cmdList,
+          ];
+        },
+        [],
+        model.peers,
       )
+      |> Cmds.batch
     | RtcGotData(_rtcConn, peerId, String(data)) =>
       Cmds.log(
         "Store: Got data from " ++ (peerId |> PeerId.toString) ++ ": " ++ data,
@@ -337,6 +337,4 @@ let create = () => {
     | None => Js.log("Invalid permissions, try crmr, crwmr, or crwmrw")
     }
   );
-  makeGlobal("addItem", text => app.pushMsg(AddItem(text)));
-  makeGlobal("printData", () => app.pushMsg(PrintData));
 };

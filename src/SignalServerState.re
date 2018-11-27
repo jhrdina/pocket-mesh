@@ -1,3 +1,8 @@
+/**
+  Signalling server connection state representation, its changes and related
+  global messages handling.
+ */
+
 /* TYPES */
 type t = {
   url: string,

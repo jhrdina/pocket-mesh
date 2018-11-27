@@ -1,7 +1,9 @@
 open Rex_json.Json.Infix;
 
+/**
+  PeerGroup representation, manipulations and queries.
+ */
 /* MODULES */
-
 module AM: Automerge.CommonAPI = Automerge.UniJs;
 
 module Id = {
@@ -63,7 +65,7 @@ let make = (id, thisPeerId, alias, initContent) => {
   };
 };
 
-/* ENCODING/DECODING */
+/* SERIALIZATION */
 
 let encodePermissions =
   fun

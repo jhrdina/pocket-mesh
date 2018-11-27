@@ -54,8 +54,6 @@ type t =
   /* ===== */
   /* Debug */
   /* ===== */
-  | PrintData
-  | AddItem(string)
   | SendToPeer(string, string)
   | OfferChangesDebouncerMsg(Debouncer.msg(t))
   | OfferChangesFromGroupsDebounced(PeerGroup.Id.Set.t)

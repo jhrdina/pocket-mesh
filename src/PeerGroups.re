@@ -1,6 +1,16 @@
 open Rex_json;
 open Json.Infix;
 
+/**
+  - Container for storing and querying groups of peers
+  - Controller that handles PeerGroups-related global messages:
+    - handles PeerGroups changes
+    - logic that negotiates/applies changes with different peers
+    - ensures changes are saved to IDB
+
+  TODO: Separate?
+ */
+
 /* CONSTANTS */
 let defaultGroupId = PeerGroup.Id.ofStringExn("aaa");
 
@@ -75,7 +85,7 @@ let getGroupsStatusesForPeer = (peerId, peerGroups) =>
     peerGroups |> getGroupsForPeer(peerId),
   );
 
-/* ENCODING/DECODING */
+/* SERIALIZATION */
 
 let encode = peerGroups =>
   Json.(
@@ -147,22 +157,17 @@ let maybeGetGroupsChangesForRequest =
     /* TODO: THINK: Isn't there some better meta-operation? */
     PeerGroup.Id.Map.fold(
       (groupId, groupChangesRequest, groupsChanges) =>
-        switch (peerGroups |> findOpt(groupId)) {
-        | Some(group) =>
-          let maybeGroupChanges =
-            P2PMsg.maybeGetGroupChangesForRequest(
+        peerGroups
+        |> findOpt(groupId)
+        |?> P2PMsg.maybeGetGroupChangesForRequest(
               peerId,
               groupChangesRequest,
-              group,
-            );
-          switch (maybeGroupChanges) {
-          | Some(groupChanges) =>
-            groupsChanges |> PeerGroup.Id.Map.add(group.id, groupChanges)
-          | None => groupsChanges
-          };
-
-        | None => groupsChanges
-        },
+            )
+        |?>> (
+          groupChanges =>
+            groupsChanges |> PeerGroup.Id.Map.add(groupId, groupChanges)
+        )
+        |? groupsChanges,
       groupsChangesRequest,
       PeerGroup.Id.Map.empty,
     );
@@ -186,21 +191,13 @@ let receivedChangesRequest = (peerId, rtcConn, requestedChanges, peerGroups) => 
 let receivedChanges = (peerId, groupsChanges, peerGroups) =>
   PeerGroup.Id.Map.fold(
     (groupId, groupChanges, newPeerGroups) =>
-      switch (peerGroups |> findOpt(groupId)) {
-      | Some(group) =>
-        let maybeNewPeerGroup =
-          P2PMsg.maybeGetPeerGroupWithAppliedChanges(
-            peerId,
-            groupChanges,
-            group,
-          );
-        switch (maybeNewPeerGroup) {
-        | Some(peerGroup) =>
-          newPeerGroups |> updateGroup(group.id, _ => peerGroup)
-        | None => newPeerGroups
-        };
-      | None => newPeerGroups
-      },
+      peerGroups
+      |> findOpt(groupId)
+      |?> P2PMsg.maybeGetPeerGroupWithAppliedChanges(peerId, groupChanges)
+      |?>> (
+        peerGroup => newPeerGroups |> updateGroup(groupId, _ => peerGroup)
+      )
+      |? newPeerGroups,
     groupsChanges,
     peerGroups,
   );
@@ -245,6 +242,7 @@ let init = (db, thisPeerId, maybeDbPeerGroups, initContent) =>
   switch (maybeDbPeerGroups |?> decode) {
   | Some(dbPeerGroups) => (dbPeerGroups, Cmds.none)
   | None =>
+    /* TODO: Don't immediately clear the DB if parsing fails. */
     let newPeerGroups =
       empty
       |> addPeerGroup(
@@ -299,7 +297,6 @@ let update = (db, thisPeerId, peerGroups, msg) =>
       let newPeerGroups =
         peerGroups |> addPeerGroup({...peersGroup, content});
 
-      /* TODO: Consider propagating changes to peers */
       (
         newPeerGroups,
         Cmds.batch([
@@ -390,46 +387,6 @@ let update = (db, thisPeerId, peerGroups, msg) =>
 
   | RtcGotData(rtcConn, peerId, String(data)) =>
     receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
-
-  /* TODO: Debug, remove */
-  | AddItem(text) =>
-    let newPeerGroups =
-      peerGroups
-      |> updateGroup(defaultGroupId, peerGroup =>
-           {
-             ...peerGroup,
-             content:
-               peerGroup.content
-               |> PeerGroup.AM.change("Add item", root =>
-                    PeerGroup.AM.Json.(
-                      switch (root |> Map.get("items") |?> List.ofJson) {
-                      | Some(list) =>
-                        root
-                        |> Map.add(
-                             "items",
-                             list
-                             |> List.prepend(string(text))
-                             |> List.toJson,
-                           )
-                      | None => root
-                      }
-                    )
-                  ),
-           }
-         );
-    (newPeerGroups, saveToDb(db, newPeerGroups));
-
-  /* TODO: Debug, remove */
-  | PrintData =>
-    switch (peerGroups |> findOpt(defaultGroupId)) {
-    | Some(peerGroup) => (
-        peerGroups,
-        Cmds.log(
-          PeerGroup.AM.(peerGroup.content |> root |> Json.Map.get("items")),
-        ),
-      )
-    | None => (peerGroups, Cmds.none)
-    }
 
   | _ => (peerGroups, Cmds.none)
   };

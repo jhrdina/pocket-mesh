@@ -1,3 +1,8 @@
+/**
+  Represents state of a peer,
+  describes transitions of the state and related side-effects
+ */
+
 /* CONSTANTS */
 let waitingTimeoutMs = 10 * 1000;
 
@@ -27,25 +32,6 @@ type peerConnectionState =
   | OnlineWaitingForInitiator(bool, SignalServerCmds.conn, RTCCmds.t)
   /* RTC conn, inGroup, signal online */
   | Connected(RTCCmds.t, bool, peerSignalState);
-
-/* Another alternative */
-
-/* type peerConnectionOnlineState =
-     | CreatingSdpOffer
-     | WaitingForSdpAnswer(RTCCmds.t)
-     | FailedRetryingAt(string, int, string);
-
-   type signallingState =
-     | WaitingForOnline
-     | Online(peerConnectionOnlineState);
-
-   type rtcConnState =
-     | Signalling(signallingState)
-     | Connected(RTCCmds.t);
-
-   type peerConnectionState =
-     | NotInGroup(peerSignalState)
-     | InGroup(rtcConnState); */
 
 type t = {
   id: PeerId.t,

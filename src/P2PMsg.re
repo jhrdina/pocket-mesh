@@ -61,7 +61,7 @@ type t =
   | Changes(PeerGroup.Id.Map.t(groupChanges));
 /*| Blob(blobInfo)*/
 
-/* ENCODING & DECODING */
+/* SERIALIZATION */
 
 let encodeGroupStatus = (t: groupStatus) =>
   Json.(

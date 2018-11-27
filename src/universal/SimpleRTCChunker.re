@@ -51,7 +51,7 @@ module Header: {
   let toString = t => t;
 };
 
-/* ENCODERS/DECODERS */
+/* SERIALIZATION */
 
 let encodePayloadType: headerPayloadType => string =
   fun

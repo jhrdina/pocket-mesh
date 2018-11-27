@@ -1,7 +1,11 @@
 open Rex_json;
 open Rex_json.Json.Infix;
 
+/* CONSTANTS */
+
 let latestVersion = 1;
+
+/* TYPES */
 
 type sdpMessage = {
   src: PeerId.t,
@@ -43,6 +47,8 @@ type t =
 
 type clientToServer = t;
 type serverToClient = t;
+
+/* SERIALIZATION */
 
 let toJSON =
   fun
