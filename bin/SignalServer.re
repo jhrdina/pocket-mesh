@@ -89,7 +89,7 @@ let makeNotificationsForInterestedPeers = (state, peerChange) => {
     ({PeerWatching.watcherPeer, watchedPeer: _}, acc) =>
       switch (findPeer(state, watcherPeer)) {
       | Some(peer) => [
-          Emit(peer.socket, WatchedPeersChanged([peerChange])),
+          Emit(peer.socket, Unsigned(WatchedPeersChanged([peerChange]))),
           ...acc,
         ]
       | None =>
@@ -131,9 +131,9 @@ let init = () => {
 
 let handleMessage = (srcSocket, message: Message.t, state) =>
   switch (message) {
-  | Login(msg) =>
+  | Signed(signature, PeerToServer(src, Login(watch))) =>
     /* Existing peer */
-    switch (findPeer(state, msg.src)) {
+    switch (findPeer(state, src)) {
     | Some(_) =>
       /* There is already an existing connected peer with the same ID. */
       /* ...Let's kick him out... */
@@ -151,71 +151,57 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
         isAuthenticated: false,
         /* TODO: Support multiple protocol versions */
         protocolVersion: 1,
-        id: msg.src,
+        id: src,
       },
     );
 
     /* Add my watches */
-    updateWatchings(state, msg.src, msg.watch);
+    updateWatchings(state, src, watch);
 
     /* Populate states of peers I'm interested in */
-    let onlinePeers = msg.watch |> PeerId.Set.filter(memPeer(state));
+    let onlinePeers = watch |> PeerId.Set.filter(memPeer(state));
     /* Notify others that are interested in my arrival */
     let notifications =
-      makeNotificationsForInterestedPeers(state, WentOnline(msg.src));
+      makeNotificationsForInterestedPeers(state, WentOnline(src));
 
-    [Emit(srcSocket, Ok(onlinePeers)), ...notifications];
+    [Emit(srcSocket, Unsigned(Ok(onlinePeers))), ...notifications];
 
-  | KeyRequest(payload) as msg =>
+  | Signed(signature, PeerToServer(src, ChangeWatchedPeers(watch))) =>
     /* TODO: Check signature */
-    switch (findPeer(state, payload.tg)) {
-    | Some(tgClient) => [Emit(tgClient.socket, msg)]
-    | None => [Emit(srcSocket, Error(TargetNotOnline))]
-    }
-
-  | KeyResponse(payload) as msg =>
-    /* TODO: Check signature */
-    switch (findPeer(state, payload.tg)) {
-    | Some(tgClient) => [Emit(tgClient.socket, msg)]
-    | None => [Emit(srcSocket, Error(TargetNotOnline))]
-    }
-
-  | ChangeWatchedPeers(msg) =>
-    /* TODO: Check signature */
-    switch (findPeer(state, msg.src)) {
+    switch (findPeer(state, src)) {
     | Some(_) =>
-      updateWatchings(state, msg.src, msg.watch);
+      updateWatchings(state, src, watch);
 
       /* Populate states of peers I'm interested in */
-      let onlinePeersIds = msg.watch |> PeerId.Set.filter(memPeer(state));
+      let onlinePeersIds = watch |> PeerId.Set.filter(memPeer(state));
       let peerChanges =
         PeerId.Set.fold(
           (peerId, acc) => [Message.WentOnline(peerId), ...acc],
           onlinePeersIds,
           [],
         );
-      [Emit(srcSocket, WatchedPeersChanged(peerChanges))];
-    | None => [Emit(srcSocket, Error(SourceNotOnline))]
+      [Emit(srcSocket, Unsigned(WatchedPeersChanged(peerChanges)))];
+    | None => [Emit(srcSocket, Unsigned(Error(SourceNotOnline)))]
     }
 
-  | Offer(payload) as msg
-  | Answer(payload) as msg =>
+  | Signed(signature, PeerToServer(src, Logoff)) =>
     /* TODO: Check signature */
-    switch (findPeer(state, payload.tg)) {
-    | Some(tgClient) => [Emit(tgClient.socket, msg)]
-    | None => [Emit(srcSocket, Error(TargetNotOnline))]
-    }
-
-  | Logoff(msg) =>
-    /* TODO: Check signature */
-    removeAllWatchings(state, msg.src);
-    removePeer(state, msg.src);
+    removeAllWatchings(state, src);
+    removePeer(state, src);
     [];
-  /* [Emit(srcSocket, Ok)]; */
 
-  | Error(_)
-  | Ok(_)
-  | WatchedPeersChanged(_) =>
+  | Signed(
+      signature,
+      PeerToPeer(src, tg, KeyRequest | KeyResponse(_) | Offer(_) | Answer(_)),
+    ) as msg =>
+    /* TODO: Check signature */
+    switch (findPeer(state, tg)) {
+    | Some(tgClient) => [Emit(tgClient.socket, msg)]
+    | None => [Emit(srcSocket, Unsigned(Error(TargetNotOnline)))]
+    }
+
+  | Unsigned(Error(_) | Ok(_) | WatchedPeersChanged(_)) =>
+    /* [Emit(srcSocket, Ok)]; */
     Printf.eprintf(
       "Got message type that should be sent only from server to client\n",
     );
@@ -225,9 +211,13 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
 let handleStringMessage = (srcSocket, msgStr, state) =>
   switch (msgStr |> JsonUtils.parseOpt |?>> Message.decode) {
   | Some(Ok(msg)) => handleMessage(srcSocket, msg, state)
-  | Some(Error(str)) => [Emit(srcSocket, Error(InvalidMessage(str)))]
-  | None => [Emit(srcSocket, Error(InvalidMessage("Not a valid JSON")))]
-  }
+  | Some(Error(str)) => [
+      Emit(srcSocket, Unsigned(Error(InvalidMessage(str)))),
+    ]
+  | None => [
+      Emit(srcSocket, Unsigned(Error(InvalidMessage("Not a valid JSON")))),
+    ]
+  };
 
 let handleDisconnect = (socket, state) =>
   switch (findPeerBySocket(state, socket)) {
