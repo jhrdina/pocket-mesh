@@ -149,6 +149,18 @@ let findByConnectionState = (connState, t) => {
   };
 };
 
+let sendSignalMessage = (thisPeer: ThisPeer.t, msg, ssConn) =>
+  Cmds.wrapPromise(
+    () =>
+      SignalServerCmds.signAndSendMsg(
+        PeerToServer(thisPeer.id, msg),
+        thisPeer.privateKey,
+        ssConn,
+      ),
+    _ => Msgs.noop,
+    Msgs.cryptoFatalError,
+  );
+
 /* PERSISTENCY */
 
 let toDb = peers => peers |> PeerId.Map.map(peer => peer |> Peer.toDb);
@@ -223,13 +235,9 @@ let update =
     let addWatchCmd =
       switch (peers |> findOpt(id), signalServerState) {
       | (None, Connected(conn, _)) =>
-        SignalServerCmds.sendMsg(
-          ChangeWatchedPeers({
-            src: thisPeer.id,
-            watch: peers |> getAllIds |> PeerId.Set.add(id),
-            /* TODO: Sign */
-            signature: "",
-          }),
+        sendSignalMessage(
+          thisPeer,
+          ChangeWatchedPeers(peers |> getAllIds |> PeerId.Set.add(id)),
           conn,
         )
       | _ => Cmds.none
@@ -256,13 +264,9 @@ let update =
     let removeWatchCmd =
       switch (peers |> findOpt(id), signalServerState) {
       | (None, Connected(conn, _)) =>
-        SignalServerCmds.sendMsg(
-          ChangeWatchedPeers({
-            src: thisPeer.id,
-            watch: peers |> getAllIds |> PeerId.Set.remove(id),
-            /* TODO: Sign */
-            signature: "",
-          }),
+        sendSignalMessage(
+          thisPeer,
+          ChangeWatchedPeers(peers |> getAllIds |> PeerId.Set.remove(id)),
           conn,
         )
       | _ => Cmds.none
@@ -309,7 +313,7 @@ let update =
       (peers, Cmds.none);
     };
 
-  | (SignalServerMessage(Ok(onlinePeers)), SigningIn(ssConn)) =>
+  | (SignalServerMessage(Unsigned(Ok(onlinePeers))), SigningIn(ssConn)) =>
     let (newPeers, cmdList) =
       PeerId.Set.fold(
         (peerId, (newPeers, cmds)) =>
@@ -342,7 +346,7 @@ let update =
     }
 
   | (
-      SignalServerMessage(WatchedPeersChanged(changes)),
+      SignalServerMessage(Unsigned(WatchedPeersChanged(changes))),
       Connected(ssConn, _),
     ) =>
     /* updatePeers(onlinePeers, thisPeers, msg) */
@@ -368,16 +372,23 @@ let update =
       );
     (newPeers, Cmds.batch(cmdList));
 
-  | (SignalServerMessage((Offer(payload) | Answer(payload)) as sdpMsg), _) =>
+  | (
+      SignalServerMessage(
+        Signed(
+          signature,
+          PeerToPeer(src, tg, (Offer(sdp) | Answer(sdp)) as sdpMsg),
+        ),
+      ),
+      _,
+    ) =>
+    /* TODO: Check signature */
     let msgForPeer =
-      Peer.ReceivedSdp(
-        switch (sdpMsg) {
-        | Offer(_) => Peer.Offer(payload)
-        | Answer(_) => Answer(payload)
-        | _ => raise(Types.InternalError)
-        },
-      );
-    peers |> updatePeer(payload.src, msgForPeer, thisPeer);
+      switch (sdpMsg) {
+      | Offer(sdp) => Peer.ReceivedSdp(Offer, sdp)
+      | Answer(sdp) => ReceivedSdp(Answer, sdp)
+      | _ => raise(Types.InternalError)
+      };
+    peers |> updatePeer(src, msgForPeer, thisPeer);
 
   | (RtcOfferReady(rtcConn, sdp, acceptorId), _) =>
     peers |> updatePeer(acceptorId, RtcOfferReady(rtcConn, sdp), thisPeer)

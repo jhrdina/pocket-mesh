@@ -47,6 +47,7 @@ type rootState =
 
 exception CannotOpenDatabase;
 exception CannotCreateIdentity;
+exception CryptoIsNotWorking;
 
 /* HELPERS */
 
@@ -194,6 +195,11 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     | (OpenDbSuccess(db), OpeningDB(initConfig)) => (
         LoadingDBData(initConfig, db),
         Db.getAll(db, Msgs.loadDataFromDBSuccess, Msgs.dbFatalError),
+      )
+
+    | (CryptoFatalError(_exn), _) => (
+        FatalError(CryptoIsNotWorking),
+        Cmds.log("Crypto operation failed"),
       )
 
     | (DbFatalError(_exn), _) => (

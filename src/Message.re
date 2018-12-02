@@ -7,60 +7,43 @@ let latestVersion = 1;
 
 /* TYPES */
 
-type sdpMessage = {
-  src: PeerId.t,
-  tg: PeerId.t,
-  sdp: string,
-  signature: string,
-};
-
-type loginOrChangeWatchedPeers = {
-  src: PeerId.t,
-  watch: PeerId.Set.t,
-  signature: string,
-};
-
-type logoff = {
-  src: PeerId.t,
-  signature: string,
-};
-
 type peerChange =
   | WentOnline(PeerId.t)
   | WentOffline(PeerId.t);
-
-type keyRequest = {
-  src: PeerId.t,
-  tg: PeerId.t,
-  signature: string,
-};
-
-type keyResponse = {
-  src: PeerId.t,
-  tg: PeerId.t,
-  key: string,
-  signature: string,
-};
 
 type error =
   | TargetNotOnline
   | SourceNotOnline
   | InvalidMessage(string);
 
-type t =
-  | Login(loginOrChangeWatchedPeers)
-  | Offer(sdpMessage)
-  | Answer(sdpMessage)
-  | Error(error)
-  | Logoff(logoff)
-  | Ok(PeerId.Set.t)
-  | WatchedPeersChanged(list(peerChange))
-  | ChangeWatchedPeers(loginOrChangeWatchedPeers)
-  | KeyRequest(keyRequest)
-  | KeyResponse(keyResponse);
+/* ALTERNATIVE TYPES */
 
-type clientToServer = t;
-type serverToClient = t;
+type sdp = string;
+type key = string;
+
+type peerToServerMsg =
+  | Login(/* Watched peers */ PeerId.Set.t)
+  | Logoff
+  | ChangeWatchedPeers(/* Watched peers */ PeerId.Set.t);
+
+type peerToPeerMsg =
+  | Offer(sdp)
+  | Answer(sdp)
+  | KeyRequest
+  | KeyResponse(key);
+
+type serverToPeerMsg =
+  | Error(error)
+  | Ok(PeerId.Set.t)
+  | WatchedPeersChanged(list(peerChange));
+
+type signedMsg =
+  | PeerToServer(PeerId.t, peerToServerMsg)
+  | PeerToPeer(PeerId.t, PeerId.t, peerToPeerMsg);
+
+type t =
+  | Signed(string, signedMsg)
+  | Unsigned(serverToPeerMsg);
 
 type parsingResult('a) =
   | Ok('a)
@@ -81,64 +64,67 @@ let tgOfJson = json =>
 let signatureToJsonKeyVal = v => ("signature", Json.String(v));
 let signatureOfJson = json => json |> Json.get("signature") |?> Json.string;
 
-let encode =
+let encodePeerToPeerMsg = msg =>
+  switch (msg) {
+  | Offer(sdp) => [
+      ("sdp", Json.String(sdp)),
+      ("type", Json.String("offer")),
+    ]
+  | Answer(sdp) => [
+      ("sdp", Json.String(sdp)),
+      ("type", Json.String("answer")),
+    ]
+  | KeyRequest => ["keyRequest" |> typeToJsonKeyVal]
+  | KeyResponse(key) => [
+      "keyResponse" |> typeToJsonKeyVal,
+      ("key", String(key)),
+    ]
+  };
+
+let encodePeerToServerMsg = msg =>
+  switch (msg) {
+  | Login(watch) => [
+      "login" |> typeToJsonKeyVal,
+      (
+        "watch",
+        Array(
+          watch
+          |> PeerId.Set.elements
+          |> List.rev_map(id => Json.String(id |> PeerId.toString)),
+        ),
+      ),
+    ]
+  | Logoff => ["logoff" |> typeToJsonKeyVal]
+  | ChangeWatchedPeers(watch) => [
+      "changeWatchedPeers" |> typeToJsonKeyVal,
+      (
+        "watch",
+        Array(
+          watch
+          |> PeerId.Set.elements
+          |> List.rev_map(id => Json.String(id |> PeerId.toString)),
+        ),
+      ),
+    ]
+  };
+
+let encodeSignedMsg = msg =>
+  switch (msg) {
+  | PeerToServer(src, payload) => [
+      src |> srcToJsonKeyVal,
+      ...payload |> encodePeerToServerMsg,
+    ]
+  | PeerToPeer(src, tg, payload) => [
+      src |> srcToJsonKeyVal,
+      tg |> tgToJsonKeyVal,
+      ...payload |> encodePeerToPeerMsg,
+    ]
+  };
+
+let encodeServerToPeerMsg = msg =>
   Json.(
-    fun
-    | Offer(msg) as v
-    | Answer(msg) as v => {
-        let typeString =
-          switch (v) {
-          | Offer(_) => "offer"
-          | _ => "answer"
-          };
-        Object([
-          typeString |> typeToJsonKeyVal,
-          msg.src |> srcToJsonKeyVal,
-          msg.tg |> tgToJsonKeyVal,
-          ("sdp", String(msg.sdp)),
-          msg.signature |> signatureToJsonKeyVal,
-        ]);
-      }
-    | Error(error) =>
-      Object([
-        "error" |> typeToJsonKeyVal,
-        ...switch (error) {
-           | TargetNotOnline => [("code", String("TargetNotOnline"))]
-           | SourceNotOnline => [("code", String("SourceNotOnline"))]
-           | InvalidMessage(explanation) => [
-               ("code", String("InvalidMessage")),
-               ("explanation", String(explanation)),
-             ]
-           },
-      ])
-    | Ok(onlinePeers) =>
-      Object([
-        "ok" |> typeToJsonKeyVal,
-        (
-          "onlinePeers",
-          Array(
-            onlinePeers
-            |> PeerId.Set.elements
-            |> List.rev_map(id => String(id |> PeerId.toString)),
-          ),
-        ),
-      ])
-    | Login(msg) =>
-      Object([
-        "login" |> typeToJsonKeyVal,
-        msg.src |> srcToJsonKeyVal,
-        (
-          "watch",
-          Array(
-            msg.watch
-            |> PeerId.Set.elements
-            |> List.rev_map(id => String(id |> PeerId.toString)),
-          ),
-        ),
-        msg.signature |> signatureToJsonKeyVal,
-      ])
-    | WatchedPeersChanged(changes) =>
-      Object([
+    switch (msg) {
+    | WatchedPeersChanged(changes) => [
         "watchedPeersChanged" |> typeToJsonKeyVal,
         (
           "changes",
@@ -159,43 +145,44 @@ let encode =
                ),
           ),
         ),
-      ])
-    | ChangeWatchedPeers(msg) =>
-      Object([
-        "changeWatchedPeers" |> typeToJsonKeyVal,
-        msg.src |> srcToJsonKeyVal,
+      ]
+    | Error(error) => [
+        "error" |> typeToJsonKeyVal,
+        ...switch (error) {
+           | TargetNotOnline => [("code", String("TargetNotOnline"))]
+           | SourceNotOnline => [("code", String("SourceNotOnline"))]
+           | InvalidMessage(explanation) => [
+               ("code", String("InvalidMessage")),
+               ("explanation", String(explanation)),
+             ]
+           },
+      ]
+    | Ok(onlinePeers) => [
+        "ok" |> typeToJsonKeyVal,
         (
-          "watch",
+          "onlinePeers",
           Array(
-            msg.watch
+            onlinePeers
             |> PeerId.Set.elements
             |> List.rev_map(id => String(id |> PeerId.toString)),
           ),
         ),
-        msg.signature |> signatureToJsonKeyVal,
-      ])
-    | KeyRequest(msg) =>
-      Object([
-        "keyRequest" |> typeToJsonKeyVal,
-        msg.src |> srcToJsonKeyVal,
-        msg.tg |> tgToJsonKeyVal,
-        msg.signature |> signatureToJsonKeyVal,
-      ])
-    | KeyResponse(msg) =>
-      Object([
-        "keyRequest" |> typeToJsonKeyVal,
-        msg.src |> srcToJsonKeyVal,
-        msg.tg |> tgToJsonKeyVal,
-        ("key", String(msg.key)),
-        msg.signature |> signatureToJsonKeyVal,
-      ])
-    | Logoff(msg) =>
-      Object([
-        "logoff" |> typeToJsonKeyVal,
-        msg.src |> srcToJsonKeyVal,
-        msg.signature |> signatureToJsonKeyVal,
-      ])
+      ]
+    }
   );
+
+let encode = msg => {
+  open Json;
+  let fields =
+    switch (msg) {
+    | Signed(signature, msg) => [
+        ("signature", String(signature)),
+        ...encodeSignedMsg(msg),
+      ]
+    | Unsigned(msg) => encodeServerToPeerMsg(msg)
+    };
+  Object(fields);
+};
 
 /* f = i => i |> Json.string */
 let decodeList = (f, json) =>
@@ -232,50 +219,38 @@ let decodePeerIdSet = json =>
   );
 
 let decodeLoginMsg = json =>
-  switch (
-    json |> srcOfJson,
-    json |> signatureOfJson,
-    json |> Json.get("watch") |?> decodePeerIdSet,
-  ) {
-  | (Some(src), Some(signature), Some(watch)) =>
-    Ok(Login({src, signature, watch}))
-  | _ => Error("Login message invalid format")
+  switch (json |> Json.get("watch") |?> decodePeerIdSet) {
+  | Some(watch) => Some(Login(watch))
+  | _ => None
   };
 
 let decodeChangeWatchedPeers = json =>
-  switch (
-    json |> srcOfJson,
-    json |> signatureOfJson,
-    json |> Json.get("watch") |?> decodePeerIdSet,
-  ) {
-  | (Some(src), Some(signature), Some(watch)) =>
-    Ok(ChangeWatchedPeers({src, signature, watch}))
-  | _ => Error("ChangeWatchedPeers message invalid format")
+  switch (json |> Json.get("watch") |?> decodePeerIdSet) {
+  | Some(watch) => Some(ChangeWatchedPeers(watch))
+  | _ => None
   };
 
-let decodeLogoffMsg = json =>
-  switch (json |> srcOfJson, json |> signatureOfJson) {
-  | (Some(src), Some(signature)) => Ok(Logoff({src, signature}))
-  | _ => Error("Logoff message invalid format")
+let decodeLogoffMsg = _ => Some(Logoff);
+
+let decodeSdp = json => json |> Json.get("sdp") |?> Json.string;
+
+let decodeOffer = json =>
+  switch (json |> decodeSdp) {
+  | Some(sdp) => Some(Offer(sdp))
+  | _ => None
   };
 
-let decodeOfferOrAnswer = json =>
-  switch (
-    json |> srcOfJson,
-    json |> tgOfJson,
-    json |> Json.get("sdp") |?> Json.string,
-    json |> signatureOfJson,
-  ) {
-  | (Some(src), Some(tg), Some(sdp), Some(signature)) =>
-    Ok({src, tg, sdp, signature})
-  | _ => Error("Offer message invalid format")
+let decodeAnswer = json =>
+  switch (json |> decodeSdp) {
+  | Some(sdp) => Some(Answer(sdp))
+  | _ => None
   };
 
-let decodeOkMsg: Rex_json.Json.t => parsingResult(t) =
+let decodeOkMsg: Json.t => option(serverToPeerMsg) =
   json =>
     switch (json |> Json.get("onlinePeers") |?> decodePeerIdSet) {
-    | Some(onlinePeers) => Ok(Ok(onlinePeers))
-    | None => Error("Ok message invalid format")
+    | Some(onlinePeers) => Some(Ok(onlinePeers))
+    | None => None
     };
 
 let decodeWatchedPeersChanged = json =>
@@ -293,28 +268,53 @@ let decodeWatchedPeersChanged = json =>
           }
         )
   ) {
-  | Some(changes) => Ok(WatchedPeersChanged(changes))
-  | None => Error("WatchedPeersChanged message invalid format")
+  | Some(changes) => Some(WatchedPeersChanged(changes))
+  | None => None
   };
 
-let decodeKeyRequest = json =>
-  switch (json |> srcOfJson, json |> tgOfJson, json |> signatureOfJson) {
-  | (Some(src), Some(tg), Some(signature)) =>
-    Ok(KeyRequest({src, tg, signature}))
-  | _ => Error("KeyRequest message invalid format")
-  };
+let decodeKeyRequest = _ => Some(KeyRequest);
 
 let decodeKeyResponse = json =>
-  switch (
-    json |> srcOfJson,
-    json |> tgOfJson,
-    json |> Json.get("key") |?> Json.string,
-    json |> signatureOfJson,
-  ) {
-  | (Some(src), Some(tg), Some(key), Some(signature)) =>
-    Ok(KeyResponse({src, tg, key, signature}))
-  | _ => Error("KeyResponse message invalid format")
+  switch (json |> Json.get("key") |?> Json.string) {
+  | Some(key) => Some(KeyResponse(key))
+  | _ => None
   };
+
+let decodePeerToServerMsg = (decodeNext, json) =>
+  switch (
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
+    decodeNext(json),
+  ) {
+  | (Some(src), Some(peerToServerPayload)) =>
+    Some(PeerToServer(src, peerToServerPayload))
+  | _ => None
+  };
+
+let decodeSignedMsg = (decodeNext, json) =>
+  switch (json |> Json.get("signature") |?> Json.string, decodeNext(json)) {
+  | (Some(signature), Some(signedMsg)) =>
+    Some(Signed(signature, signedMsg))
+  | _ => None
+  };
+
+let decodeUnsignedMsg = (decodeNext, json) =>
+  switch (decodeNext(json)) {
+  | Some(payload) => Some(Unsigned(payload))
+  | None => None
+  };
+
+let decodePeerToPeerMsg = (decodeNext, json) =>
+  switch (
+    json |> Json.get("src") |?> Json.string |?> PeerId.ofString,
+    json |> Json.get("tg") |?> Json.string |?> PeerId.ofString,
+    decodeNext(json),
+  ) {
+  | (Some(src), Some(tg), Some(payload)) =>
+    Some(PeerToPeer(src, tg, payload))
+  | _ => None
+  };
+
+let optToResult = ();
 
 let decode = json => {
   let maybeVersion =
@@ -322,29 +322,65 @@ let decode = json => {
     | None => Some(latestVersion)
     | Some(v) => v |> Json.number |?>> int_of_float
     };
+  let msgOptToResult =
+    fun
+    | Some(m) => Ok(m)
+    | None => Error("Invalid fields or format");
+
   switch (maybeVersion) {
   | Some(_ver) =>
     /* TODO: Support different versions */
     switch (json |> Json.get("type") |?> Json.string) {
     | Some(typeStr) =>
       switch (typeStr) {
-      | "login" => decodeLoginMsg(json)
+      | "login" =>
+        json
+        |> decodeSignedMsg @@
+        decodePeerToServerMsg @@
+        decodeLoginMsg
+        |> msgOptToResult
       | "offer" =>
-        switch (decodeOfferOrAnswer(json)) {
-        | Ok(offerPayload) => Ok(Offer(offerPayload))
-        | Error(_) as e => e
-        }
+        json
+        |> decodeSignedMsg @@
+        decodePeerToPeerMsg @@
+        decodeOffer
+        |> msgOptToResult
       | "answer" =>
-        switch (decodeOfferOrAnswer(json)) {
-        | Ok(answerPayload) => Ok(Answer(answerPayload))
-        | Error(_) as e => e
-        }
-      | "logoff" => decodeLogoffMsg(json)
-      | "ok" => decodeOkMsg(json)
-      | "watchedPeersChanged" => decodeWatchedPeersChanged(json)
-      | "changeWatchedPeers" => decodeChangeWatchedPeers(json)
-      | "keyRequest" => decodeKeyRequest(json)
-      | "keyResponse" => decodeKeyResponse(json)
+        json
+        |> decodeSignedMsg @@
+        decodePeerToPeerMsg @@
+        decodeAnswer
+        |> msgOptToResult
+      | "logoff" =>
+        json
+        |> decodeSignedMsg @@
+        decodePeerToServerMsg @@
+        decodeLogoffMsg
+        |> msgOptToResult
+      | "ok" => json |> decodeUnsignedMsg @@ decodeOkMsg |> msgOptToResult
+      | "watchedPeersChanged" =>
+        json
+        |> decodeUnsignedMsg @@
+        decodeWatchedPeersChanged
+        |> msgOptToResult
+      | "changeWatchedPeers" =>
+        json
+        |> decodeSignedMsg @@
+        decodePeerToServerMsg @@
+        decodeChangeWatchedPeers
+        |> msgOptToResult
+      | "keyRequest" =>
+        json
+        |> decodeSignedMsg @@
+        decodePeerToPeerMsg @@
+        decodeKeyRequest
+        |> msgOptToResult
+      | "keyResponse" =>
+        json
+        |> decodeSignedMsg @@
+        decodePeerToPeerMsg @@
+        decodeKeyResponse
+        |> msgOptToResult
       | _ => Error("Type: Unknown message type.")
       }
     | None => Error("Type: Missing or not string")

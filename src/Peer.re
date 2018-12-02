@@ -12,9 +12,9 @@ type peerSignalState =
   | Online(SignalServerCmds.conn)
   | Offline;
 
-type sdpMsg =
-  | Offer(Message.sdpMessage)
-  | Answer(Message.sdpMessage);
+type sdpMsgType =
+  | Offer
+  | Answer;
 
 type peerConnectionState =
   /* bool = online */
@@ -47,7 +47,7 @@ type msgs =
   | RemovedFromLastGroup
   | WentOnline(SignalServerCmds.conn)
   | WentOffline
-  | ReceivedSdp(sdpMsg)
+  | ReceivedSdp(sdpMsgType, Message.sdp)
   /* internal */
   | RtcRetryConnection
   | RtcClose
@@ -71,10 +71,10 @@ exception InvalidState;
 let shouldAccept = (thisPeer: ThisPeer.t, srcPeerId) =>
   thisPeer.id < srcPeerId;
 
-let createAcceptorFromOffer = (offer: Message.sdpMessage) =>
+let createAcceptorFromOffer = (src, sdp) =>
   RTCCmds.createAcceptor(
-    offer.src,
-    offer.sdp,
+    src,
+    sdp,
     Msgs.rtcAnswerReady,
     Msgs.rtcConnected,
     Msgs.rtcGotData,
@@ -90,6 +90,18 @@ let createInitiator = peerId =>
     Msgs.rtcGotData,
     Msgs.rtcError,
     Msgs.rtcClose,
+  );
+
+let sendSignalMessage = (thisPeer, tgPeer, msg, ssConn) =>
+  Cmds.wrapPromise(
+    () =>
+      SignalServerCmds.signAndSendMsg(
+        PeerToPeer(thisPeer.ThisPeer.id, tgPeer, msg),
+        thisPeer.ThisPeer.privateKey,
+        ssConn,
+      ),
+    _ => Msgs.noop,
+    Msgs.cryptoFatalError,
   );
 
 let peerSignalStateOfSignalServerState = peerId =>
@@ -162,46 +174,37 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     ) => (
       InGroupOnlineWaitingForAcceptor(ssConn, rtcConn, failedAttempts),
       Cmds.batch([
-        SignalServerCmds.sendMsg(
-          Offer({
-            src: thisPeer.ThisPeer.id,
-            tg: peerId,
-            sdp,
-            /* TODO: Sign message */
-            signature: "",
-          }),
-          ssConn,
-        ),
+        sendSignalMessage(thisPeer, peerId, Offer(sdp), ssConn),
         /* TODO: Exponential backoff */
         Cmds.timeout(Msgs.rtcRetryConnection(peerId), waitingTimeoutMs),
       ]),
     )
 
   | (
-      ReceivedSdp(Answer(msg)),
+      ReceivedSdp(Answer, sdp),
       InGroupOnlineWaitingForAcceptor(_ssConn, rtcConn, _),
     ) => (
       /* TODO: Check Signature, maybe move upwards to Peer.update */
       prevState,
       Cmds.batch([
-        RTCCmds.signal(rtcConn, msg.sdp),
+        RTCCmds.signal(rtcConn, sdp),
         /* TODO: Exponential backoff */
         Cmds.timeout(Msgs.rtcRetryConnection(peerId), waitingTimeoutMs),
       ]),
     )
 
-  | (ReceivedSdp(Offer(offer)), NotInGroup(Online(ssConn))) => (
+  | (ReceivedSdp(Offer, sdp), NotInGroup(Online(ssConn))) => (
       OnlineCreatingSdpAnswer(false, ssConn),
-      createAcceptorFromOffer(offer),
+      createAcceptorFromOffer(peerId, sdp),
     )
 
   | (
-      ReceivedSdp(Offer(offer)),
+      ReceivedSdp(Offer, sdp),
       InGroupOnlineCreatingSdpOffer(ssConn, _) |
       InGroupOnlineWaitingForAcceptor(ssConn, _, _) |
       InGroupOnlineFailedRetryingAt(ssConn, _, _, _),
     )
-      when shouldAccept(thisPeer, offer.src) =>
+      when shouldAccept(thisPeer, peerId) =>
     let destroyRtcCmd =
       switch (prevState) {
       | InGroupOnlineWaitingForAcceptor(_, rtcConn, _) =>
@@ -210,18 +213,18 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       };
     (
       OnlineCreatingSdpAnswer(true, ssConn),
-      Cmds.batch([destroyRtcCmd, createAcceptorFromOffer(offer)]),
+      Cmds.batch([destroyRtcCmd, createAcceptorFromOffer(peerId, sdp)]),
     );
 
   | (
-      ReceivedSdp(Offer(offer)),
+      ReceivedSdp(Offer, sdp),
       InGroupOnlineWaitingForAcceptor(ssConn, rtcConn, _),
     )
-      when shouldAccept(thisPeer, offer.src) => (
+      when shouldAccept(thisPeer, peerId) => (
       OnlineCreatingSdpAnswer(true, ssConn),
       Cmds.batch([
         RTCCmds.destroy(rtcConn),
-        createAcceptorFromOffer(offer),
+        createAcceptorFromOffer(peerId, sdp),
       ]),
     )
 
@@ -258,16 +261,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
   | (RtcAnswerReady(rtcConn, sdp), OnlineCreatingSdpAnswer(inGroup, ssConn)) => (
       OnlineWaitingForInitiator(inGroup, ssConn, rtcConn),
       Cmds.batch([
-        SignalServerCmds.sendMsg(
-          Answer({
-            src: thisPeer.id,
-            tg: peerId,
-            sdp,
-            /* TODO: Sign message */
-            signature: "",
-          }),
-          ssConn,
-        ),
+        sendSignalMessage(thisPeer, peerId, Answer(sdp), ssConn),
         /* TODO: Exponential backoff */
         Cmds.timeout(Msgs.rtcRetryConnection(peerId), waitingTimeoutMs),
       ]),
@@ -400,7 +394,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
   /* Matches with no change */
 
   | (
-      ReceivedSdp(Answer(_)),
+      ReceivedSdp(Answer, _),
       NotInGroup(_) | InGroupWaitingForOnlineSignal |
       InGroupOnlineCreatingSdpOffer(_) |
       InGroupOnlineFailedRetryingAt(_, _, _, _) |
@@ -409,7 +403,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       Connected(_, _, _),
     )
   | (
-      ReceivedSdp(Offer(_)),
+      ReceivedSdp(Offer, _),
       InGroupWaitingForOnlineSignal | InGroupOnlineCreatingSdpOffer(_) |
       InGroupOnlineWaitingForAcceptor(_, _, _) |
       InGroupOnlineFailedRetryingAt(_, _, _, _) |

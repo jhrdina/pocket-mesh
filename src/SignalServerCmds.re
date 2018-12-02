@@ -22,6 +22,26 @@ let sendMsg = (msg: Message.t, t: conn) =>
     |> t.ws->WebapiExtra.Dom.WebSocket.sendString
   );
 
+exception SignatureError;
+
+let signAndSendMsg = (msg: Message.signedMsg, privateKey, t: conn) =>
+  /* TODO: Sort fields */
+  /* TODO: Can Websocket.send throw or does it only fire onError event? */
+  Json.Object(msg |> Message.encodeSignedMsg)
+  |> Json.stringify
+  |> SimpleCrypto.sign(privateKey)
+  |> Js.Promise.then_(signature =>
+       Message.Signed(signature, msg)
+       |> Message.encode
+       |> Json.stringify
+       |> t.ws->WebapiExtra.Dom.WebSocket.sendString
+       |> Js.Promise.resolve
+     )
+  |> Js.Promise.catch(e => {
+       Js.log2("[SignalServerCmds] Cannot sign and send message:", e);
+       Js.Promise.reject(SignatureError);
+     });
+
 let connect =
     (
       url,
@@ -38,11 +58,15 @@ let connect =
     t.ws
     ->WebSocket.setOnOpen(_ => {
         callbacks^.enqueue(openedToMsg(t));
-        /* TODO: Sign */
-        t.ws
-        |> send(
-             Login({src: thisPeer.id, watch: watchedPeers, signature: ""}),
-           );
+        t
+        |> signAndSendMsg(
+             PeerToServer(thisPeer.id, Login(watchedPeers)),
+             thisPeer.privateKey,
+           )
+        |> Js.Promise.catch(exn =>
+             callbacks^.enqueue(errorMsg) |> Js.Promise.resolve
+           )
+        |> ignore;
       });
     t.ws
     ->WebSocket.setOnMessage(event =>

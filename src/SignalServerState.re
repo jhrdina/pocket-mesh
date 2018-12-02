@@ -80,7 +80,7 @@ let update = (thisPeer, peers, {url, connectionState}, msg) => {
         cmdConnectToSignalServer(thisPeer, peers, url),
       )
 
-    | (SignalServerMessage(Ok(onlinePeers)), SigningIn(conn)) => (
+    | (SignalServerMessage(Unsigned(Ok(onlinePeers))), SigningIn(conn)) => (
         Connected(conn, onlinePeers),
         Cmds.none,
       )
@@ -91,7 +91,7 @@ let update = (thisPeer, peers, {url, connectionState}, msg) => {
       )
 
     | (
-        SignalServerMessage(WatchedPeersChanged(changes)),
+        SignalServerMessage(Unsigned(WatchedPeersChanged(changes))),
         Connected(conn, onlinePeers),
       ) => (
         Connected(conn, applyPeerStatusChanges(onlinePeers, changes)),

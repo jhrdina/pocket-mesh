@@ -3,6 +3,7 @@ type t =
   | OpenDbSuccess(Db.t)
   | LoadDataFromDBSuccess(Db.allData)
   | DbFatalError(exn)
+  | CryptoFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | MyKeyPairGenError(exn)
   /* ========== */
