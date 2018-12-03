@@ -2,7 +2,7 @@
 type t =
   | OpenDbSuccess(Db.t)
   | LoadDataFromDBSuccess(Db.allData)
-  | DbFatalError(exn)
+  | OpenDbError(exn)
   | CryptoFatalError(exn)
   | MyKeyPairGenSuccess(SimpleCrypto.keyPair)
   | MyKeyPairGenError(exn)

@@ -164,36 +164,40 @@ let sendSignalMessage = (thisPeer: ThisPeer.t, msg, ssConn) =>
 /* PERSISTENCY */
 
 let toDb = peers => peers |> PeerId.Map.map(peer => peer |> Peer.toDb);
-let saveToDb = (db, model) =>
-  Db.setPeers(model.peers |> toDb, _ => Msgs.noop, _ => Msgs.noop, db);
+let saveToDb = (maybeDb, model) =>
+  switch (maybeDb) {
+  | Some(db) =>
+    Db.setPeers(model.peers |> toDb, _ => Msgs.noop, _ => Msgs.noop, db)
+  | None => Cmds.none
+  };
 
 /* UPDATE */
 
-let init = (db, peerGroups, signalServerState) =>
-  fun
-  | Some(dbPeers) => {
-      let (newPeers, cmdsList) =
-        PeerId.Map.fold(
-          (_, dbPeer: Types.peerInDb, (peers, cmdsList)) => {
-            let inGroup = PeerGroups.isPeerInAGroup(dbPeer.id, peerGroups);
-            let signalState =
-              Peer.peerSignalStateOfSignalServerState(
-                dbPeer.id,
-                signalServerState,
-              );
-            let (newPeer, newPeerCmd) =
-              Peer.initFromDb(dbPeer, inGroup, signalState);
-            (peers |> add(dbPeer.id, newPeer), [newPeerCmd, ...cmdsList]);
-          },
-          dbPeers,
-          (empty, []),
-        );
-      (newPeers, Cmds.batch(cmdsList));
-    }
-  | None => {
-      let newPeers = empty;
-      (newPeers, saveToDb(db, newPeers));
-    };
+let init = (dbAndDbPeers, peerGroups, signalServerState) =>
+  switch (dbAndDbPeers) {
+  | Some((_db, Some(dbPeers))) =>
+    let (newPeers, cmdsList) =
+      PeerId.Map.fold(
+        (_, dbPeer: Types.peerInDb, (peers, cmdsList)) => {
+          let inGroup = PeerGroups.isPeerInAGroup(dbPeer.id, peerGroups);
+          let signalState =
+            Peer.peerSignalStateOfSignalServerState(
+              dbPeer.id,
+              signalServerState,
+            );
+          let (newPeer, newPeerCmd) =
+            Peer.initFromDb(dbPeer, inGroup, signalState);
+          (peers |> add(dbPeer.id, newPeer), [newPeerCmd, ...cmdsList]);
+        },
+        dbPeers,
+        (empty, []),
+      );
+    (newPeers, Cmds.batch(cmdsList));
+  | Some((db, None)) =>
+    let newPeers = empty;
+    (newPeers, saveToDb(Some(db), newPeers));
+  | None => (empty, Cmds.none)
+  };
 
 let updatePeer = (peerId, peerMsg, thisPeer, peers) =>
   switch (peers |> findOpt(peerId)) {

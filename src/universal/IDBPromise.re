@@ -14,10 +14,7 @@ let open_ = (dbName, objectStoreName) =>
     req->Dom.IDBOpenDBRequest.setOnSuccess(_ =>
       resolve(. {db: req |> Dom.IDBOpenDBRequest.result, objectStoreName})
     );
-    req->Dom.IDBOpenDBRequest.setOnError(evt => {
-      Js.log(evt);
-      reject(. RequestError);
-    });
+    req->Dom.IDBOpenDBRequest.setOnError(_evt => reject(. RequestError));
     req->Dom.IDBOpenDBRequest.setOnBlocked(evt => {
       Js.log(evt);
       reject(. DatabaseAlreadyOpen);

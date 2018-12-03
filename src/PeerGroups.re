@@ -120,8 +120,12 @@ let decode = json =>
 
 /* CMDS */
 
-let saveToDb = (db, model) =>
-  Db.setPeerGroups(model |> encode, _ => Msgs.noop, _ => Msgs.noop, db);
+let saveToDb = (maybeDb, model) =>
+  switch (maybeDb) {
+  | Some(db) =>
+    Db.setPeerGroups(model |> encode, _ => Msgs.noop, _ => Msgs.noop, db)
+  | None => Cmds.none
+  };
 
 /* UPDATE */
 
@@ -238,23 +242,29 @@ let offerChangesDebounced = groupsIds =>
     3000,
   );
 
-let init = (db, thisPeerId, maybeDbPeerGroups, initContent) =>
-  switch (maybeDbPeerGroups |?> decode) {
-  | Some(dbPeerGroups) => (dbPeerGroups, Cmds.none)
-  | None =>
-    /* TODO: Don't immediately clear the DB if parsing fails. */
-    let newPeerGroups =
-      empty
-      |> addPeerGroup(
-           /* TODO: Really a fixed ID? */
-           PeerGroup.make(defaultGroupId, thisPeerId, "aaa", initContent)
-           |> PeerGroup.addPeer({
-                id: thisPeerId,
-                permissions: WriteContent(WriteMembers),
-              }),
-         );
+let initDefaultPeerGroups = (thisPeerId, initContent) =>
+  empty
+  |> addPeerGroup(
+       /* TODO: Really a fixed ID? */
+       PeerGroup.make(defaultGroupId, thisPeerId, "aaa", initContent)
+       |> PeerGroup.addPeer({
+            id: thisPeerId,
+            permissions: WriteContent(WriteMembers),
+          }),
+     );
 
-    (newPeerGroups, saveToDb(db, newPeerGroups));
+let init = (dbAndDbPeerGroups, thisPeerId, initContent) =>
+  switch (dbAndDbPeerGroups |?>> (((db, data)) => (db, data |?> decode))) {
+  | Some((_db, Some(dbPeerGroups))) => (dbPeerGroups, Cmds.none)
+  | Some((db, None)) =>
+    /* TODO: Don't immediately clear the DB if parsing fails. */
+    /* TODO: Move saveToDb somewhere else and simplify */
+    let newPeerGroups = initDefaultPeerGroups(thisPeerId, initContent);
+    (newPeerGroups, saveToDb(Some(db), newPeerGroups));
+  | None =>
+    /* DB not available (probably a private mode) */
+    let newPeerGroups = initDefaultPeerGroups(thisPeerId, initContent);
+    (newPeerGroups, Cmds.none);
   };
 
 let update = (db, thisPeerId, peerGroups, msg) =>

@@ -30,7 +30,7 @@ module InitConfig = {
 /* TYPES */
 
 type hasIdentity = {
-  db: Db.t,
+  maybeDb: option(Db.t),
   thisPeer: ThisPeer.t,
   signalServer: SignalServerState.t,
   peerGroups: Types.peerGroups,
@@ -41,7 +41,7 @@ type hasIdentity = {
 type rootState =
   | OpeningDB(InitConfig.t)
   | LoadingDBData(InitConfig.t, Db.t)
-  | GeneratingIdentity(InitConfig.t, Db.t, Db.allData)
+  | GeneratingIdentity(InitConfig.t, option((Db.t, Db.allData)))
   | FatalError(exn)
   | HasIdentity(hasIdentity);
 
@@ -66,32 +66,39 @@ let logIdAndJWT = (thisPeer: ThisPeer.t) =>
 
 /* UPDATE */
 
+let mapDbAndData = (f, dbAndData: option((Db.t, Db.allData))) =>
+  dbAndData |?>> (((db, data)) => (db, f(data)));
+
 let initStateWithId =
     (
-      db,
+      maybeDbAndData,
       thisPeer: ThisPeer.t,
-      allDbData: Db.allData,
       {contentInitializer, signalServerUrl}: InitConfig.t,
     ) => {
   let (peerGroups, peerGroupsCmd) =
     PeerGroups.init(
-      db,
+      maybeDbAndData |> mapDbAndData(data => data.peerGroups),
       thisPeer.id,
-      allDbData.peerGroups,
       contentInitializer,
     );
   let (peers, peersCmd) =
     Peers.init(
-      db,
+      maybeDbAndData |> mapDbAndData(data => data.peers),
       peerGroups,
       SignalServerState.initialConnectionState,
-      allDbData.peers,
     );
   let (signalServer, signalServerCmd) =
     SignalServerState.init(thisPeer, peers, signalServerUrl);
   let offerChangesDebouncer = Debouncer.init();
   (
-    {db, thisPeer, signalServer, peerGroups, peers, offerChangesDebouncer},
+    {
+      maybeDb: maybeDbAndData |?>> fst,
+      thisPeer,
+      signalServer,
+      peerGroups,
+      peers,
+      offerChangesDebouncer,
+    },
     Cmds.batch([signalServerCmd, peersCmd, peerGroupsCmd]),
   );
 };
@@ -141,7 +148,7 @@ let updateStateWithId = (model, msg) => {
     );
   let (peers, peersCmd) =
     Peers.update(
-      model.db,
+      model.maybeDb,
       model.thisPeer,
       model.signalServer.connectionState,
       model.peerGroups,
@@ -149,7 +156,12 @@ let updateStateWithId = (model, msg) => {
       msg,
     );
   let (peerGroups, peerGroupsCmd) =
-    PeerGroups.update(model.db, model.thisPeer.id, model.peerGroups, msg);
+    PeerGroups.update(
+      model.maybeDb,
+      model.thisPeer.id,
+      model.peerGroups,
+      msg,
+    );
   let (offerChangesDebouncer, offerChangesDebouncerCmd) =
     switch (msg) {
     | OfferChangesDebouncerMsg(msg) =>
@@ -163,7 +175,7 @@ let updateStateWithId = (model, msg) => {
     };
   (
     {
-      db: model.db,
+      maybeDb: model.maybeDb,
       thisPeer: model.thisPeer,
       signalServer,
       peerGroups,
@@ -183,7 +195,7 @@ let updateStateWithId = (model, msg) => {
 let init: InitConfig.t => (rootState, BlackTea.Cmd.t(Msgs.t)) =
   initConfig => (
     OpeningDB(initConfig),
-    Db.open_(Msgs.openDbSuccess, Msgs.dbFatalError),
+    Db.open_(Msgs.openDbSuccess, Msgs.openDbError),
   );
 
 let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
@@ -194,7 +206,13 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
     /********/
     | (OpenDbSuccess(db), OpeningDB(initConfig)) => (
         LoadingDBData(initConfig, db),
-        Db.getAll(db, Msgs.loadDataFromDBSuccess, Msgs.dbFatalError),
+        /* TODO: Remove */
+        /* Db.getAll(
+             db,
+             _ => Msgs.openDbError(CannotOpenDatabase),
+             Msgs.openDbError,
+           ), */
+        Db.getAll(db, Msgs.loadDataFromDBSuccess, Msgs.openDbError),
       )
 
     | (CryptoFatalError(_exn), _) => (
@@ -202,22 +220,28 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
         Cmds.log("Crypto operation failed"),
       )
 
-    | (DbFatalError(_exn), _) => (
-        FatalError(CannotOpenDatabase),
-        Cmds.none,
+    | (
+        OpenDbError(_exn),
+        OpeningDB(initConfig) | LoadingDBData(initConfig, _),
+      ) => (
+        GeneratingIdentity(initConfig, None),
+        CryptoCmds.generateKeyPair(
+          Msgs.myKeyPairGenSuccess,
+          Msgs.myKeyPairGenError,
+        ),
       )
 
     | (LoadDataFromDBSuccess(allDbData), LoadingDBData(initConfig, db)) =>
       switch (allDbData.thisPeer) {
       | Some(thisPeer) =>
         let (stateWithId, stateWithIdCmd) =
-          initStateWithId(db, thisPeer, allDbData, initConfig);
+          initStateWithId(Some((db, allDbData)), thisPeer, initConfig);
         (
           HasIdentity(stateWithId),
           Cmds.batch([stateWithIdCmd, logIdAndJWT(thisPeer)]),
         );
       | None => (
-          GeneratingIdentity(initConfig, db, allDbData),
+          GeneratingIdentity(initConfig, Some((db, allDbData))),
           CryptoCmds.generateKeyPair(
             Msgs.myKeyPairGenSuccess,
             Msgs.myKeyPairGenError,
@@ -227,7 +251,7 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
 
     | (
         MyKeyPairGenSuccess(keyPair),
-        GeneratingIdentity(initConfig, db, allDbData),
+        GeneratingIdentity(initConfig, maybeDbAndData),
       ) =>
       switch (PeerId.ofString(keyPair.fingerprint)) {
       | Some(thisPeerId) =>
@@ -236,13 +260,21 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
           publicKey: keyPair.publicKey,
           privateKey: keyPair.privateKey,
         };
+
+        let saveThisPeerToDbCmd =
+          maybeDbAndData
+          |?>> fst
+          |?>> Db.setThisPeer(thisPeer, _ => Msgs.noop, _ => Msgs.noop)
+          |? Cmds.none;
+
         let (stateWithId, stateWithIdCmd) =
-          initStateWithId(db, thisPeer, allDbData, initConfig);
+          initStateWithId(maybeDbAndData, thisPeer, initConfig);
+
         (
           HasIdentity(stateWithId),
           Cmd.batch([
             stateWithIdCmd,
-            db |> Db.setThisPeer(thisPeer, _ => Msgs.noop, _ => Msgs.noop),
+            saveThisPeerToDbCmd,
             /* Debug */
             logIdAndJWT(thisPeer),
           ]),
