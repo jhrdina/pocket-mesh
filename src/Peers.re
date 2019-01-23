@@ -173,7 +173,7 @@ let saveToDb = (maybeDb, model) =>
 
 /* UPDATE */
 
-let init = (dbAndDbPeers, peerGroups, signalServerState) =>
+let init = (thisPeer, dbAndDbPeers, peerGroups, signalServerState) =>
   switch (dbAndDbPeers) {
   | Some((_db, Some(dbPeers))) =>
     let (newPeers, cmdsList) =
@@ -186,7 +186,7 @@ let init = (dbAndDbPeers, peerGroups, signalServerState) =>
               signalServerState,
             );
           let (newPeer, newPeerCmd) =
-            Peer.initFromDb(dbPeer, inGroup, signalState);
+            Peer.initFromDb(thisPeer, dbPeer, inGroup, signalState);
           (peers |> add(dbPeer.id, newPeer), [newPeerCmd, ...cmdsList]);
         },
         dbPeers,
@@ -199,11 +199,13 @@ let init = (dbAndDbPeers, peerGroups, signalServerState) =>
   | None => (empty, Cmds.none)
   };
 
-let updatePeer = (peerId, peerMsg, thisPeer, peers) =>
+let updatePeer = (peerId, peerMsg, thisPeer, db, peers) =>
   switch (peers |> findOpt(peerId)) {
   | Some(peer) =>
     let (newPeer, cmd) = Peer.update(thisPeer, peer, peerMsg);
-    (peers |> add(peer.id, newPeer), cmd);
+    let newPeers = peers |> add(peer.id, newPeer);
+    /* TODO: Make this saveToDb more granural - this runs too often */
+    (newPeers, Cmds.batch([cmd, saveToDb(db, newPeers)]));
   | None => (peers, Cmds.none)
   };
 
@@ -225,6 +227,7 @@ let update =
         let peerSignalState =
           Peer.peerSignalStateOfSignalServerState(id, signalServerState);
         Peer.init(
+          ~thisPeer,
           ~id,
           ~publicKey=None,
           ~alias,
@@ -253,7 +256,8 @@ let update =
     );
 
   | (UpdatePeer(id, alias), _) =>
-    updatePeer(id, UpdateAlias(alias), thisPeer, peers)
+    updatePeer(id, UpdateAlias(alias), thisPeer, db, peers)
+
   | (RemovePeer(id), signalServerState) =>
     let (newPeers, newPeersCmd) =
       switch (peers |> findOpt(id)) {
@@ -291,7 +295,8 @@ let update =
           ((peers, cmdsList), {id: peerId, _}) =>
             if (!PeerGroups.isPeerInAGroup(peerId, peersGroupsWithoutGroup)) {
               let (newPeers, cmd) =
-                peers |> updatePeer(peerId, RemovedFromLastGroup, thisPeer);
+                peers
+                |> updatePeer(peerId, RemovedFromLastGroup, thisPeer, db);
               (newPeers, [cmd, ...cmdsList]);
             } else {
               (peers, cmdsList);
@@ -304,7 +309,7 @@ let update =
     };
 
   | (AddPeerToGroup(id, _groupId, _perms), _) =>
-    peers |> updatePeer(id, AddedToGroup, thisPeer)
+    peers |> updatePeer(id, AddedToGroup, thisPeer, db)
 
   | (RemovePeerFromGroup(peerId, groupId), _) =>
     /* Check if the group was the last one for member */
@@ -312,7 +317,7 @@ let update =
       peerGroups |> PeerGroups.removeGroup(groupId);
 
     if (!PeerGroups.isPeerInAGroup(peerId, peersGroupsWithoutTheGroup)) {
-      peers |> updatePeer(peerId, RemovedFromLastGroup, thisPeer);
+      peers |> updatePeer(peerId, RemovedFromLastGroup, thisPeer, db);
     } else {
       (peers, Cmds.none);
     };
@@ -378,40 +383,84 @@ let update =
 
   | (
       SignalServerMessage(
-        Signed(
-          signature,
-          PeerToPeer(src, tg, (Offer(sdp) | Answer(sdp)) as sdpMsg),
-        ),
+        Signed(signature, PeerToPeer(src, tg, p2pSignalMsg)),
       ),
       _,
-    ) =>
-    /* TODO: Check signature */
-    let msgForPeer =
-      switch (sdpMsg) {
-      | Offer(sdp) => Peer.ReceivedSdp(Offer, sdp)
-      | Answer(sdp) => ReceivedSdp(Answer, sdp)
-      | _ => raise(Types.InternalError)
-      };
-    peers |> updatePeer(src, msgForPeer, thisPeer);
+    )
+      when tg == thisPeer.id =>
+    let msgForPeer = Peer.ReceivedSignal(signature, p2pSignalMsg);
+    peers |> updatePeer(src, msgForPeer, thisPeer, db);
 
   | (RtcOfferReady(rtcConn, sdp, acceptorId), _) =>
-    peers |> updatePeer(acceptorId, RtcOfferReady(rtcConn, sdp), thisPeer)
-
+    peers
+    |> updatePeer(acceptorId, RtcOfferReady(rtcConn, sdp), thisPeer, db)
   | (RtcAnswerReady(rtcConn, sdp, peerId), _) =>
-    peers |> updatePeer(peerId, RtcAnswerReady(rtcConn, sdp), thisPeer)
-
+    peers |> updatePeer(peerId, RtcAnswerReady(rtcConn, sdp), thisPeer, db)
   | (RtcConnected(_rtcConn, peerId), _) =>
-    peers |> updatePeer(peerId, RtcConnected, thisPeer)
-
+    peers |> updatePeer(peerId, RtcConnected, thisPeer, db)
   | (RtcClose(_rtcConn, peerId), _) =>
-    peers |> updatePeer(peerId, RtcClose, thisPeer)
-
+    peers |> updatePeer(peerId, RtcClose, thisPeer, db)
   | (RtcRetryConnection(peerId), _) =>
-    peers |> updatePeer(peerId, RtcRetryConnection, thisPeer)
+    peers |> updatePeer(peerId, RtcRetryConnection, thisPeer, db)
+  | (ReceivedVerifiedSignal(peerId, msg), _) =>
+    peers |> updatePeer(peerId, ReceivedVerifiedSignal(msg), thisPeer, db)
+  | (SignalVerificationFailed(peerId, exn), _) =>
+    peers |> updatePeer(peerId, SignalVerificationFailed(exn), thisPeer, db)
+  | (PrepareKeyRequestFinished(peerId, result), _) =>
+    peers
+    |> updatePeer(peerId, PrepareKeyRequestFinished(result), thisPeer, db)
+  | (VerifyKeyResponseFinished(peerId, result), _) =>
+    peers
+    |> updatePeer(peerId, VerifyKeyResponseFinished(result), thisPeer, db)
+  | (VerifyKeyRequestFinished(peerId, result), _) =>
+    peers
+    |> updatePeer(peerId, VerifyKeyRequestFinished(result), thisPeer, db)
+  | (PrepareKeyResponseFinished(peerId, result), _) =>
+    peers
+    |> updatePeer(peerId, PrepareKeyResponseFinished(result), thisPeer, db)
 
-  /* DEBUG */
+  | (SignalServerMessage(Signed(_, PeerToPeer(_, _, _))), _) => (
+      peers,
+      Cmds.log(
+        "Received P2P signal message with invalid tg (not equal this peer).",
+      ),
+    )
 
-  | (_, _) => (peers, Cmds.none)
+  /* No action */
+  | (SignalServerMessage(Unsigned(Error(_))), _)
+  | (
+      SignalServerMessage(Unsigned(WatchedPeersChanged(_))),
+      Connecting | SigningIn(_) | FailedRetryingAt(_, _, _),
+    )
+  | (
+      SignalServerMessage(Unsigned(Ok(_))),
+      Connecting | Connected(_, _) | FailedRetryingAt(_, _, _),
+    )
+  | (SignalServerMessage(Signed(_, PeerToServer(_, _))), _)
+  | (
+      OpenDbSuccess(_) | LoadDataFromDBSuccess(_) | OpenDbError(_) |
+      CryptoFatalError(_) |
+      MyKeyPairGenSuccess(_) |
+      MyKeyPairGenError(_) |
+      ConnectToSignalServerSuccess(_) |
+      SignalServerRetryConnection |
+      RtcGotData(_, _, _) |
+      RtcError(_, _, _) |
+      AddGroup(_, _, _) |
+      UpdateGroupAlias(_, _) |
+      UpdateGroupContent(_, _) |
+      UpdatePeerPermissions(_, _, _) |
+      UpdateSignalServerUrl(_) |
+      RemoveThisPeerAndAllData |
+      SendToPeer(_, _) |
+      OfferChangesDebouncerMsg(_) |
+      OfferChangesFromGroupsDebounced(_) |
+      Noop,
+      _,
+    ) => (
+      peers,
+      Cmds.none,
+    )
   };
 
 let foldActiveConnections = (f, acc, peers) =>

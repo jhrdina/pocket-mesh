@@ -16,10 +16,48 @@ type error =
   | SourceNotOnline
   | InvalidMessage(string);
 
-/* ALTERNATIVE TYPES */
-
 type sdp = string;
 type key = string;
+
+/*
+       BEST-CASE SEQUENCE DIAGRAM
+       (edit at https://textik.com/#cb03768deea5c0f6)
+
+       +--------+                    +---------------+                +--------+
+       | NODE A |                    | SIGNAL SERVER |                | NODE B |
+       +--------+                    +---------------+                +--------+
+           |                                |                                |
+           | Login([B]), sig_A, id_A        |                                |
+           |------------------------------->|                                |
+           |                         Ok([]) |                                |
+           |<-------------------------------|        Login([A]), sig_B, id_B |
+           |                                |<-------------------------------|
+           |            WatchedPeersChanged | Ok([A])                        |
+           |              ([[B, 'online']]) |------------------------------->|
+           |<-------------------------------|                                |
+ +-----------------------------------------------------------------------------+
+ |IF       | KeyRequest(Pub_A),             |                                | |
+ |!Pub_B   | sig_A, id_A, id_B              | KeyRequest(pub_A),             | |
+ |         |------------------------------->| sig_A, id_A, id_B              | |
+ |         |                                |------------------------------->| |
+ |         |                                |            KeyResponse(pub_B), | |
+ |         |            KeyResponse(pub_B), |              sig_B, id_B, id_A | |
+ |         |              sig_B, id_B, id_A |<-------------------------------| |
+ |         |<-------------------------------|                                | |
+ +-----------------------------------------------------------------------------+
+ +-----------------------------------------------------------------------------+
+ |IF       | Offer(sdp),                    |                                | |
+ |B in a   | sig_A, id_A, id_B              | Offer(sdp),                    | |
+ | group   |------------------------------->| sig_A, id_A, id_B              | |
+ |&&       |                                |------------------------------->| |
+ |has      |                                |                   Answer(sig), | |
+ | Pub_B   |                   Answer(sdp), |              sig_B, id_B, id_A | |
+ |         |              sig_B, id_B, id_A |<-------------------------------| |
+ |         |<-------------------------------|                                | |
+ +-----------------------------------------------------------------------------+
+           |                                |                                |
+           |                                |                                |
+   */
 
 type peerToServerMsg =
   | Login(/* Watched peers */ PeerId.Set.t)
@@ -29,7 +67,7 @@ type peerToServerMsg =
 type peerToPeerMsg =
   | Offer(sdp)
   | Answer(sdp)
-  | KeyRequest
+  | KeyRequest(key)
   | KeyResponse(key);
 
 type serverToPeerMsg =
@@ -64,20 +102,20 @@ let tgOfJson = json =>
 let signatureToJsonKeyVal = v => ("signature", Json.String(v));
 let signatureOfJson = json => json |> Json.get("signature") |?> Json.string;
 
+let keyToJsonKeyVal = v => ("key", Json.String(v));
+let keyOfJson = json => json |> Json.get("key") |?> Json.string;
+
 let encodePeerToPeerMsg = msg =>
   switch (msg) {
-  | Offer(sdp) => [
-      ("sdp", Json.String(sdp)),
-      ("type", Json.String("offer")),
+  | Offer(sdp) => ["offer" |> typeToJsonKeyVal, ("sdp", Json.String(sdp))]
+  | Answer(sdp) => ["answer" |> typeToJsonKeyVal, ("sdp", Json.String(sdp))]
+  | KeyRequest(key) => [
+      "keyRequest" |> typeToJsonKeyVal,
+      key |> keyToJsonKeyVal,
     ]
-  | Answer(sdp) => [
-      ("sdp", Json.String(sdp)),
-      ("type", Json.String("answer")),
-    ]
-  | KeyRequest => ["keyRequest" |> typeToJsonKeyVal]
   | KeyResponse(key) => [
       "keyResponse" |> typeToJsonKeyVal,
-      ("key", String(key)),
+      key |> keyToJsonKeyVal,
     ]
   };
 
@@ -272,10 +310,20 @@ let decodeWatchedPeersChanged = json =>
   | None => None
   };
 
-let decodeKeyRequest = _ => Some(KeyRequest);
+let decodeKeyMsg = json =>
+  switch (json |> Json.get("key") |?> Json.string) {
+  | Some(key) => Some(key)
+  | _ => None
+  };
+
+let decodeKeyRequest = json =>
+  switch (keyOfJson(json)) {
+  | Some(key) => Some(KeyRequest(key))
+  | _ => None
+  };
 
 let decodeKeyResponse = json =>
-  switch (json |> Json.get("key") |?> Json.string) {
+  switch (keyOfJson(json)) {
   | Some(key) => Some(KeyResponse(key))
   | _ => None
   };

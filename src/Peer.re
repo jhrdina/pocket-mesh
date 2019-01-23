@@ -1,3 +1,5 @@
+open Json.Infix;
+
 /**
   Represents state of a peer,
   describes transitions of the state and related side-effects
@@ -15,6 +17,11 @@ type peerSignalState =
 type sdpMsgType =
   | Offer
   | Answer;
+
+type publicKeyFetchingState =
+  | MissingWaitingForOnline
+  | Fetching(SignalServerCmds.conn)
+  | Fetched(peerSignalState, SimpleCrypto.key);
 
 type peerConnectionState =
   /* bool = online */
@@ -35,36 +42,50 @@ type peerConnectionState =
 
 type t = {
   id: PeerId.t,
-  publicKey: option(SimpleCrypto.key),
+  publicKey: publicKeyFetchingState,
   alias: string,
   connectionState: peerConnectionState,
 };
 
 [@bs.deriving accessors]
 type msgs =
-  /* external */
+  /*
+   Group membership changes
+   */
   | AddedToGroup
   | RemovedFromLastGroup
+  /*
+   Online/Offline
+   */
   | WentOnline(SignalServerCmds.conn)
   | WentOffline
-  | ReceivedSdp(sdpMsgType, Message.sdp)
-  /* internal */
+  /*
+   Signal receiving & verification
+   */
+  | ReceivedSignal(string, Message.peerToPeerMsg)
+  | ReceivedVerifiedSignal(Message.peerToPeerMsg)
+  | SignalVerificationFailed(exn)
+  | PrepareKeyRequestFinished(Result.t(string, exn))
+  | VerifyKeyResponseFinished(Result.t(SimpleCrypto.key, exn))
+  | VerifyKeyRequestFinished(Result.t(SimpleCrypto.key, exn))
+  | PrepareKeyResponseFinished(Result.t(string, exn))
+  /*
+   RTC connection
+   */
   | RtcRetryConnection
   | RtcClose
   /* t, sdp */
   | RtcAnswerReady(RTCCmds.t, string)
   | RtcOfferReady(RTCCmds.t, string)
   | RtcConnected
-  /* Not influencing connection state */
+  /*
+   Alias changes
+   */
   | UpdateAlias(string);
 
-type effect =
-  | None
-  | SendSignal(string)
-  | RTCConnect
-  | RTCPlanRetry;
-
 exception InvalidState;
+exception InvalidKeyResponse;
+exception ReceivedMessageSignatureMismatch;
 
 /* HELPERS */
 
@@ -111,6 +132,89 @@ let peerSignalStateOfSignalServerState = peerId =>
     Online(ssConn)
   | _ => Offline;
 
+let verifyMessageSignature = (srcPublicKey, signature, msg) =>
+  Json.Object(Message.encodeSignedMsg(msg))
+  |> Json.stringify
+  |> SimpleCrypto.verify(srcPublicKey, signature);
+
+let verifyMessageSignatureCmd = (srcPublicKey, signature, src, tg, msg) => {
+  let msgToVerify = Message.PeerToPeer(src, tg, msg);
+  Cmds.wrapPromise(
+    () =>
+      verifyMessageSignature(srcPublicKey, signature, msgToVerify)
+      |> Js.Promise.then_(valid =>
+           valid ?
+             Js.Promise.resolve(msg) :
+             Js.Promise.reject(ReceivedMessageSignatureMismatch)
+         ),
+    Msgs.receivedVerifiedSignal(src),
+    Msgs.signalVerificationFailed(src),
+  );
+};
+
+let exportThisPeerKeyCmd = (resultToMsg, thisPeer: ThisPeer.t, peerId) =>
+  Cmds.wrapPromise(
+    () =>
+      thisPeer.publicKey
+      |> SimpleCrypto.publicKeyToJwk
+      |> Js.Promise.then_(jwk =>
+           jwk |> SimpleCrypto.jwkToString |> Js.Promise.resolve
+         ),
+    keyStr => resultToMsg(peerId, Result.Ok(keyStr)),
+    exn => resultToMsg(peerId, Error(exn)),
+  );
+
+let verifyKeyMessageCmd =
+    (
+      resultToMsg,
+      thisPeer: ThisPeer.t,
+      src,
+      signature,
+      p2pMsg: Message.peerToPeerMsg,
+    ) =>
+  switch (p2pMsg) {
+  | KeyResponse(srcKeyStr)
+  | KeyRequest(srcKeyStr) =>
+    Cmds.wrapPromise(
+      () => {
+        let srcJwk = srcKeyStr |> SimpleCrypto.stringToJwk;
+        srcJwk
+        |> SimpleCrypto.jwkToPublicKey
+        |> Js.Promise.then_(srcKey =>
+             Js.Promise.all2((
+               verifyMessageSignature(
+                 srcKey,
+                 signature,
+                 PeerToPeer(src, thisPeer.id, p2pMsg),
+               ),
+               SimpleCrypto.fingerprintForRSAJWK(srcJwk)
+               |> Js.Promise.then_(fingerprint =>
+                    fingerprint
+                    |> PeerId.ofString
+                    |?>> (==)(src)
+                    |? false
+                    |> Js.Promise.resolve
+                  ),
+             ))
+             |> Js.Promise.then_(((signatureOk, srcMatchesKey)) =>
+                  if (signatureOk && srcMatchesKey) {
+                    srcKey |> Js.Promise.resolve;
+                  } else {
+                    Js.Promise.reject(InvalidKeyResponse);
+                  }
+                )
+           );
+      },
+      srcKey => resultToMsg(src, Result.Ok(srcKey)),
+      exn => resultToMsg(src, Error(exn)),
+    )
+  | Offer(_)
+  | Answer(_) =>
+    Cmds.log(
+      "Invalid usage: verifyKeyMessageCmd called with weird message type.",
+    )
+  };
+
 /* UPDATES */
 
 let initConnState = (peerId, inGroup, peerSignalState) =>
@@ -123,7 +227,7 @@ let initConnState = (peerId, inGroup, peerSignalState) =>
     )
   };
 
-let updateConnState = (thisPeer, peerId, prevState, msg) =>
+let updateConnState = (thisPeer, peerId, peerKey, prevState, msg) =>
   switch (msg, prevState) {
   | (AddedToGroup, NotInGroup(Online(ssConn)))
   | (WentOnline(ssConn), InGroupWaitingForOnlineSignal) => (
@@ -181,7 +285,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     )
 
   | (
-      ReceivedSdp(Answer, sdp),
+      ReceivedVerifiedSignal(Answer(sdp)),
       InGroupOnlineWaitingForAcceptor(_ssConn, rtcConn, _),
     ) => (
       /* TODO: Check Signature, maybe move upwards to Peer.update */
@@ -193,13 +297,13 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       ]),
     )
 
-  | (ReceivedSdp(Offer, sdp), NotInGroup(Online(ssConn))) => (
+  | (ReceivedVerifiedSignal(Offer(sdp)), NotInGroup(Online(ssConn))) => (
       OnlineCreatingSdpAnswer(false, ssConn),
       createAcceptorFromOffer(peerId, sdp),
     )
 
   | (
-      ReceivedSdp(Offer, sdp),
+      ReceivedVerifiedSignal(Offer(sdp)),
       InGroupOnlineCreatingSdpOffer(ssConn, _) |
       InGroupOnlineWaitingForAcceptor(ssConn, _, _) |
       InGroupOnlineFailedRetryingAt(ssConn, _, _, _),
@@ -217,7 +321,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
     );
 
   | (
-      ReceivedSdp(Offer, sdp),
+      ReceivedVerifiedSignal(Offer(sdp)),
       InGroupOnlineWaitingForAcceptor(ssConn, rtcConn, _),
     )
       when shouldAccept(thisPeer, peerId) => (
@@ -394,7 +498,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
   /* Matches with no change */
 
   | (
-      ReceivedSdp(Answer, _),
+      ReceivedVerifiedSignal(Answer(_)),
       NotInGroup(_) | InGroupWaitingForOnlineSignal |
       InGroupOnlineCreatingSdpOffer(_) |
       InGroupOnlineFailedRetryingAt(_, _, _, _) |
@@ -403,7 +507,7 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       Connected(_, _, _),
     )
   | (
-      ReceivedSdp(Offer, _),
+      ReceivedVerifiedSignal(Offer(_)),
       InGroupWaitingForOnlineSignal | InGroupOnlineCreatingSdpOffer(_) |
       InGroupOnlineWaitingForAcceptor(_, _, _) |
       InGroupOnlineFailedRetryingAt(_, _, _, _) |
@@ -480,7 +584,21 @@ let updateConnState = (thisPeer, peerId, prevState, msg) =>
       InGroupOnlineFailedRetryingAt(_) | InGroupWaitingForOnlineSignal |
       NotInGroup(_),
     )
-  | (UpdateAlias(_), _) => (prevState, Cmds.none)
+  | (
+      UpdateAlias(_) | ReceivedVerifiedSignal(KeyRequest(_) | KeyResponse(_)),
+      _,
+    )
+  | (ReceivedSignal(_), _)
+  | (
+      SignalVerificationFailed(_) | PrepareKeyRequestFinished(_) |
+      VerifyKeyResponseFinished(_) |
+      VerifyKeyRequestFinished(_) |
+      PrepareKeyResponseFinished(_),
+      _,
+    ) => (
+      prevState,
+      Cmds.none,
+    )
   };
 
 let updateAlias = alias =>
@@ -488,29 +606,222 @@ let updateAlias = alias =>
   | UpdateAlias(newAlias) => newAlias
   | _ => alias;
 
-let init = (~id, ~publicKey, ~alias, ~inGroup, ~peerSignalState) => {
-  let (connectionState, cmd) = initConnState(id, inGroup, peerSignalState);
-  ({id, publicKey, alias, connectionState}, cmd);
+let initPublicKey =
+    (thisPeer, peerId, peerSignalState: peerSignalState, maybePublicKey) =>
+  switch (maybePublicKey, peerSignalState) {
+  | (Some(key), _) => (Fetched(peerSignalState, key), Cmds.none)
+  | (None, Online(ssConn)) => (
+      Fetching(ssConn),
+      exportThisPeerKeyCmd(Msgs.prepareKeyRequestFinished, thisPeer, peerId),
+    )
+  | (None, Offline) => (MissingWaitingForOnline, Cmds.none)
+  };
+
+let updatePublicKey =
+    (thisPeer: ThisPeer.t, peerId, model: publicKeyFetchingState, msg) =>
+  switch (msg, model) {
+  /* Request peer's public key if missing */
+  | (WentOnline(ssConn), MissingWaitingForOnline) => (
+      Fetching(ssConn),
+      exportThisPeerKeyCmd(Msgs.prepareKeyRequestFinished, thisPeer, peerId),
+    )
+  | (WentOnline(ssConn), Fetched(Offline, key)) => (
+      Fetched(Online(ssConn), key),
+      Cmds.none,
+    )
+
+  | (PrepareKeyRequestFinished(Ok(keyStr)), Fetching(ssConn)) => (
+      model,
+      sendSignalMessage(thisPeer, peerId, KeyRequest(keyStr), ssConn),
+    )
+  | (PrepareKeyRequestFinished(Error(_)), _) => (
+      model,
+      Cmds.log("PrepareKeyRequest failed"),
+    )
+
+  | (WentOffline, Fetching(_) | Fetched(_, _) | MissingWaitingForOnline) => (
+      MissingWaitingForOnline,
+      Cmds.none,
+    )
+
+  /* Verify public key response */
+  | (
+      ReceivedSignal(signature, KeyResponse(_srcKeyStr) as p2pMsg),
+      Fetching(_),
+    ) => (
+      model,
+      verifyKeyMessageCmd(
+        Msgs.verifyKeyResponseFinished,
+        thisPeer,
+        peerId,
+        signature,
+        p2pMsg,
+      ),
+    )
+
+  | (VerifyKeyResponseFinished(Ok(srcKey)), Fetching(ssConn)) => (
+      Fetched(Online(ssConn), srcKey),
+      Cmds.none,
+    )
+
+  | (VerifyKeyResponseFinished(Ok(srcKey)), MissingWaitingForOnline) => (
+      Fetched(Offline, srcKey),
+      Cmds.none,
+    )
+
+  | (
+      VerifyKeyResponseFinished(Error(_)),
+      MissingWaitingForOnline | Fetching(_),
+    ) => (
+      MissingWaitingForOnline,
+      Cmds.log("VerifyKeyResponse failed"),
+    )
+
+  /* Verify public key request */
+
+  | (ReceivedSignal(signature, KeyRequest(_) as p2pMsg), _) => (
+      model,
+      verifyKeyMessageCmd(
+        Msgs.verifyKeyRequestFinished,
+        thisPeer,
+        peerId,
+        signature,
+        p2pMsg,
+      ),
+    )
+
+  | (
+      VerifyKeyRequestFinished(Ok(srcKey)),
+      Fetched(Online(ssConn), _) | Fetching(ssConn),
+    ) => (
+      Fetched(Online(ssConn), srcKey),
+      /* TODO: Send response */
+      exportThisPeerKeyCmd(Msgs.prepareKeyResponseFinished, thisPeer, peerId),
+    )
+  | (
+      VerifyKeyRequestFinished(Ok(srcKey)),
+      MissingWaitingForOnline | Fetched(Offline, _),
+    ) => (
+      Fetched(Offline, srcKey),
+      /* TODO: Send response */
+      exportThisPeerKeyCmd(Msgs.prepareKeyResponseFinished, thisPeer, peerId),
+    )
+  | (VerifyKeyRequestFinished(Error(_)), _) => (
+      model,
+      Cmds.log("VerifyKeyRequest failed"),
+    )
+
+  | (
+      PrepareKeyResponseFinished(Ok(thisPeerKeyStr)),
+      Fetching(ssConn) | Fetched(Online(ssConn), _),
+    ) => (
+      model,
+      sendSignalMessage(
+        thisPeer,
+        peerId,
+        KeyResponse(thisPeerKeyStr),
+        ssConn,
+      ),
+    )
+
+  | (PrepareKeyResponseFinished(Error(_)), _) => (
+      model,
+      Cmds.log("PrepareKeyResponse failed"),
+    )
+
+  /* Check signature if we have peer's public key */
+  | (
+      ReceivedSignal(signature, (Offer(_) | Answer(_)) as msg),
+      Fetched(_, srcKey),
+    ) => (
+      /* TODO: Messages shouldn't get lost during key exchange, should they? */
+      model,
+      verifyMessageSignatureCmd(srcKey, signature, peerId, thisPeer.id, msg),
+    )
+
+  | (ReceivedSignal(_, Offer(_) | Answer(_)), MissingWaitingForOnline) => (
+      model,
+      Cmds.log("Received Offer, but I don't have a key yet."),
+    )
+
+  | (SignalVerificationFailed(exn), _) => (model, Cmds.log(exn))
+
+  /* No action */
+  | (WentOnline(_), Fetching(_) | Fetched(Online(_), _))
+  | (PrepareKeyRequestFinished(Ok(_)), MissingWaitingForOnline | Fetched(_))
+  | (
+      AddedToGroup | RemovedFromLastGroup | ReceivedVerifiedSignal(_) |
+      RtcRetryConnection |
+      RtcClose |
+      RtcAnswerReady(_, _) |
+      RtcOfferReady(_, _) |
+      RtcConnected |
+      UpdateAlias(_),
+      _,
+    )
+  | (ReceivedSignal(_, Offer(_) | Answer(_)), Fetching(_))
+  | (ReceivedSignal(_, KeyResponse(_)), Fetched(_) | MissingWaitingForOnline)
+  | (
+      PrepareKeyResponseFinished(Ok(_)),
+      MissingWaitingForOnline | Fetched(Offline, _),
+    )
+  | (VerifyKeyResponseFinished(_), Fetched(_)) => (model, Cmds.none)
+  };
+
+/* MAIN */
+
+let init = (~thisPeer, ~id, ~publicKey, ~alias, ~inGroup, ~peerSignalState) => {
+  let (connectionState, connStateCmd) =
+    initConnState(id, inGroup, peerSignalState);
+  let (publicKey, publicKeyCmd) =
+    initPublicKey(thisPeer, id, peerSignalState, publicKey);
+  (
+    {id, publicKey, alias, connectionState},
+    Cmds.batch([connStateCmd, publicKeyCmd]),
+  );
 };
 
 let update = (thisPeer, model: t, msg) => {
   let newAlias = updateAlias(model.alias, msg);
 
+  let (newPublicKey, publicKeyCmd) =
+    updatePublicKey(thisPeer, model.id, model.publicKey, msg);
+
   let (newConnectionState, connectionStateCmd) =
-    updateConnState(thisPeer, model.id, model.connectionState, msg);
+    updateConnState(
+      thisPeer,
+      model.id,
+      model.publicKey,
+      model.connectionState,
+      msg,
+    );
 
   (
-    {...model, alias: newAlias, connectionState: newConnectionState},
-    connectionStateCmd,
+    {
+      ...model,
+      publicKey: newPublicKey,
+      alias: newAlias,
+      connectionState: newConnectionState,
+    },
+    Cmds.batch([publicKeyCmd, connectionStateCmd]),
   );
 };
 
 /* PERSISTENCY */
 
-let initFromDb = ({Types.id, publicKey, alias}, inGroup, peerSignalState) =>
-  init(~id, ~publicKey, ~alias, ~inGroup, ~peerSignalState);
+let initFromDb =
+    (thisPeer, {Types.id, publicKey, alias}, inGroup, peerSignalState) =>
+  init(~thisPeer, ~id, ~publicKey, ~alias, ~inGroup, ~peerSignalState);
 
-let toDb = ({id, publicKey, alias, _}: t) => {Types.id, publicKey, alias};
+let toDb = ({id, publicKey: publicKeyFetchingState, alias, _}: t) => {
+  let publicKey =
+    switch (publicKeyFetchingState) {
+    | Fetched(_, key) => Some(key)
+    | MissingWaitingForOnline
+    | Fetching(_) => None
+    };
+  {Types.id, publicKey, alias};
+};
 
 /* QUERIES */
 

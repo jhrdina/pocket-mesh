@@ -83,6 +83,7 @@ let initStateWithId =
     );
   let (peers, peersCmd) =
     Peers.init(
+      thisPeer,
       maybeDbAndData |> mapDbAndData(data => data.peers),
       peerGroups,
       SignalServerState.initialConnectionState,
@@ -322,7 +323,7 @@ let update: (rootState, Msgs.t) => (rootState, BlackTea.Cmd.t(Msgs.t)) =
       }
     | (msg, HasIdentity(stateWithId)) =>
       let (newStateWithId, cmd) = updateStateWithId(stateWithId, msg);
-      (HasIdentity(newStateWithId), cmd);
+      (HasIdentity(newStateWithId), Cmds.batch([cmd, Cmds.log(msg)]));
     | (Noop, _) => (model, Cmds.none)
     | (_, _) => (model, Cmds.none)
     };

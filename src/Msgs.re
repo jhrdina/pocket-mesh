@@ -13,6 +13,12 @@ type t =
   | SignalServerConnectionError
   | SignalServerRetryConnection
   | SignalServerMessage(Message.t)
+  | ReceivedVerifiedSignal(PeerId.t, Message.peerToPeerMsg)
+  | SignalVerificationFailed(PeerId.t, exn)
+  | PrepareKeyRequestFinished(PeerId.t, Result.t(string, exn))
+  | VerifyKeyResponseFinished(PeerId.t, Result.t(SimpleCrypto.key, exn))
+  | VerifyKeyRequestFinished(PeerId.t, Result.t(SimpleCrypto.key, exn))
+  | PrepareKeyResponseFinished(PeerId.t, Result.t(string, exn))
   /* =========== */
   /* Peers - RTC */
   /* =========== */
