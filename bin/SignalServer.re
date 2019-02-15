@@ -192,7 +192,7 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
 
   | Signed(
       signature,
-      PeerToPeer(src, tg, KeyRequest | KeyResponse(_) | Offer(_) | Answer(_)),
+      PeerToPeer(src, tg, KeyRequest(_) | KeyResponse(_) | Offer(_) | Answer(_)),
     ) as msg =>
     /* TODO: Check signature */
     switch (findPeer(state, tg)) {
