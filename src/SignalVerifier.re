@@ -1,4 +1,5 @@
 open BlackTea;
+open Rex_json.Json.Infix;
 
 type Msgs.t +=
   /* Input */
@@ -50,7 +51,7 @@ let signMsg = (msg: Message.signedMsg, privateKey) =>
        Message.Signed(signature, msg) |> Js.Promise.resolve
      );
 
-let update = (~thisPeer: ThisPeer.t, msg) =>
+let update = (~thisPeer: ThisPeer.t, ~peers: Peers.t, msg) =>
   switch (msg) {
   | SignAndSendMsg(signedMsgPayload) =>
     Cmds.wrapResPromise(
@@ -60,5 +61,17 @@ let update = (~thisPeer: ThisPeer.t, msg) =>
   | CompletedSignMessage(Ok(signedMsg)) =>
     Cmd.msg(SignalServerState.Send(signedMsg))
   | CompletedSignMessage(Error(_e)) => Cmds.log("Could not sign message")
+
+  | SignalServerState.GotMessage(
+      Signed(signature, PeerToPeer(src, _tg, Offer(_) | Answer(_)) as msg),
+    ) =>
+    // KeyRequest and KeyResponse are verified directly in PeersKeysFetcherAndSender
+    peers
+    |> Peers.findOpt(src)
+    |?> (peer => peer.publicKey)
+    |?>> (srcKey => verifyMessageSignatureCmd(srcKey, signature, msg))
+    // TODO: Messages shouldn't get lost during key exchange, should they?
+    |? Cmds.log("Received Offer or Answer, but I don't have a key yet.")
+
   | _ => Cmd.none
   };

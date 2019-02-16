@@ -2,7 +2,6 @@
 [%%debugger.chrome];
 
 open BlackTea;
-open Json.Infix;
 
 /* TYPES */
 
@@ -29,9 +28,9 @@ let update = (model, msg) => {
       Db.InitializationComplete(dbState),
       WaitingForDbAndIdentity(db, initConfig, signalServer),
     ) =>
-    let runtimeState =
+    let (runtimeState, runtimeStateCmd) =
       RuntimeState.init(~initConfig, ~dbState, ~signalServer);
-    (HasIdentity(db, dbState, runtimeState), Cmd.none);
+    (HasIdentity(db, dbState, runtimeState), runtimeStateCmd);
 
   // | (Db.Changed(newDbState), HasIdentity(db, dbState, runtimeState)) =>
   //   HasIdentity(db, newDbState, runtimeState)

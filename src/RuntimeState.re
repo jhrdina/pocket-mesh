@@ -31,22 +31,37 @@ type t = {
   signalChannelAuth: SignalChannelAuth.t,
   // peersConnections,
   // peersGroupsSynchronizer,
-  // peersKeysFetcherAndSender,
+  peersKeysFetcherAndSender: PeersKeysFetcherAndSender.t,
   peersStatuses: PeersStatuses.t,
   // signalVerifierAndSigner,
   thisPeerKeyExporter: ThisPeerKeyExporter.t,
 };
 
 let init = (~dbState: DbState.t, ~signalServer, ~initConfig) => {
-  initConfig,
-  signalServer,
-  signalChannelAuth: SignalChannelAuth.init(),
-  // peersConnections,
-  // peersGroupsSynchronizer,
-  // peersKeysFetcherAndSender,
-  peersStatuses: PeersStatuses.init(),
-  // signalVerifierAndSigner,
-  thisPeerKeyExporter: ThisPeerKeyExporter.init(~thisPeer=dbState.thisPeer),
+  let thisPeerKeyExporter =
+    ThisPeerKeyExporter.init(~thisPeer=dbState.thisPeer);
+  let peersStatuses = PeersStatuses.init();
+  let (peersKeysFetcherAndSender, peersKeysFetcherAndSenderCmd) =
+    PeersKeysFetcherAndSender.init(
+      ~thisPeer=dbState.thisPeer,
+      ~peers=dbState.peers,
+      ~thisPeerKeyExporter,
+      ~peersStatuses,
+    );
+  (
+    {
+      initConfig,
+      signalServer,
+      signalChannelAuth: SignalChannelAuth.init(),
+      // peersConnections,
+      // peersGroupsSynchronizer,
+      peersKeysFetcherAndSender,
+      peersStatuses,
+      // signalVerifierAndSigner,
+      thisPeerKeyExporter,
+    },
+    peersKeysFetcherAndSenderCmd,
+  );
 };
 
 let update = (dbState: DbState.t, msg, model) => {
@@ -61,7 +76,11 @@ let update = (dbState: DbState.t, msg, model) => {
       model.signalChannelAuth,
     );
   let signalVerifierCmd =
-    SignalVerifier.update(~thisPeer=dbState.thisPeer, msg);
+    SignalVerifier.update(
+      ~thisPeer=dbState.thisPeer,
+      ~peers=dbState.peers,
+      msg,
+    );
   let (peersStatuses, peersStatusesCmd) =
     PeersStatuses.update(
       ~thisPeer=dbState.thisPeer,
@@ -74,6 +93,15 @@ let update = (dbState: DbState.t, msg, model) => {
       ~thisPeer=dbState.thisPeer,
       msg,
       model.thisPeerKeyExporter,
+    );
+  let (peersKeysFetcherAndSender, peersKeysFetcherAndSenderCmd) =
+    PeersKeysFetcherAndSender.update(
+      ~thisPeer=dbState.thisPeer,
+      ~peers=dbState.peers,
+      ~thisPeerKeyExporter,
+      ~peersStatuses,
+      msg,
+      model.peersKeysFetcherAndSender,
     );
   // let (peersConnections, peersCmd) =
   //   PeersConnections.update(
@@ -103,7 +131,7 @@ let update = (dbState: DbState.t, msg, model) => {
       signalChannelAuth,
       // peersConnections,
       // peersGroupsSynchronizer,
-      // peersKeysFetcherAndSender,
+      peersKeysFetcherAndSender,
       peersStatuses,
       // signalVerifierAndSigner,
       thisPeerKeyExporter,
@@ -116,6 +144,7 @@ let update = (dbState: DbState.t, msg, model) => {
       // debugCmd,
       // offerChangesDebouncerCmd,
       thisPeerKeyExporterCmd,
+      peersKeysFetcherAndSenderCmd,
     ]),
   );
 };
