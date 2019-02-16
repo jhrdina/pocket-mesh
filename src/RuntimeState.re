@@ -29,7 +29,7 @@ type t = {
   initConfig: InitConfig.t,
   signalServer: SignalServerState.t,
   signalChannelAuth: SignalChannelAuth.t,
-  // peersConnections,
+  peersConnections: PeersConnections.t,
   // peersGroupsSynchronizer,
   peersKeysFetcherAndSender: PeersKeysFetcherAndSender.t,
   peersStatuses: PeersStatuses.t,
@@ -48,12 +48,14 @@ let init = (~dbState: DbState.t, ~signalServer, ~initConfig) => {
       ~thisPeerKeyExporter,
       ~peersStatuses,
     );
+  let peersConnections =
+    PeersConnections.init(~peersStatuses, ~peersGroups=dbState.peersGroups);
   (
     {
       initConfig,
       signalServer,
       signalChannelAuth: SignalChannelAuth.init(),
-      // peersConnections,
+      peersConnections,
       // peersGroupsSynchronizer,
       peersKeysFetcherAndSender,
       peersStatuses,
@@ -103,15 +105,14 @@ let update = (dbState: DbState.t, msg, model) => {
       msg,
       model.peersKeysFetcherAndSender,
     );
-  // let (peersConnections, peersCmd) =
-  //   PeersConnections.update(
-  //     model.maybeDb,
-  //     model.thisPeer,
-  //     model.signalServer.connectionState,
-  //     model.peerGroups,
-  //     model.peers,
-  //     msg,
-  //   );
+  let (peersConnections, peersConnectionsCmd) =
+    PeersConnections.update(
+      ~thisPeer=dbState.thisPeer,
+      ~peersGroups=dbState.peersGroups,
+      ~peersStatuses,
+      msg,
+      model.peersConnections,
+    );
 
   // let (offerChangesDebouncer, offerChangesDebouncerCmd) =
   //   switch (msg) {
@@ -129,7 +130,7 @@ let update = (dbState: DbState.t, msg, model) => {
       initConfig: model.initConfig,
       signalServer,
       signalChannelAuth,
-      // peersConnections,
+      peersConnections,
       // peersGroupsSynchronizer,
       peersKeysFetcherAndSender,
       peersStatuses,
@@ -143,6 +144,7 @@ let update = (dbState: DbState.t, msg, model) => {
       peersStatusesCmd,
       // debugCmd,
       // offerChangesDebouncerCmd,
+      peersConnectionsCmd,
       thisPeerKeyExporterCmd,
       peersKeysFetcherAndSenderCmd,
     ]),
@@ -153,4 +155,5 @@ let subscriptions = model =>
   Sub.batch([
     SignalServerState.subscriptions(model.signalServer),
     ThisPeerKeyExporter.subscriptions(model.thisPeerKeyExporter),
+    PeersConnections.subscriptions(model.peersConnections),
   ]);
