@@ -18,7 +18,8 @@
     "bs-webapi-extra",
     "bs-black-tea",
     "bs-automerge",
-    "rex-json"
+    "rex-json",
+    "wonka"
   ],
   "warnings": {
     "error": "+101"

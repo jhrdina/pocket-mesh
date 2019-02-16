@@ -1,53 +1,59 @@
 /* CONSTANTS */
 
-let defaultSignalServerUrl = Store.defaultSignalServerUrl;
+let defaultSignalServerUrl = RuntimeState.defaultSignalServerUrl;
 
 /* MODULES */
 
 module Crdt = PeerGroup.AM;
-module InitConfig = Store.InitConfig;
+module InitConfig = RuntimeState.InitConfig;
 
 module Peer = {
   module Id = PeerId;
-
-  type signalState =
-    | Online
-    | Offline;
-  type connectionState =
-    | NotInGroup(signalState)
-    | InGroupWaitingForOnlineSignal
-    | InGroupOnlineInitiatingConnection(int)
-    | OnlineAcceptingConnection(bool)
-    | InGroupOnlineFailedRetryingAt(int, int, string)
-    | Connected(bool, signalState);
 
   type t = Peer.t;
 
   /* Helpers */
 
-  let decodeSignalState =
-    fun
-    | Peer.Online(_) => Online
-    | Offline => Offline;
-
   let id = t => t.Peer.id;
   let alias = t => t.Peer.alias;
-  let connectionState = t =>
-    switch (t.Peer.connectionState) {
-    | NotInGroup(signalState) => NotInGroup(signalState |> decodeSignalState)
-    | InGroupWaitingForOnlineSignal => InGroupWaitingForOnlineSignal
-    | InGroupOnlineCreatingSdpOffer(_, failedAttempts)
-    | InGroupOnlineWaitingForAcceptor(_, _, failedAttempts) =>
-      InGroupOnlineInitiatingConnection(failedAttempts)
-    | InGroupOnlineFailedRetryingAt(_, timeoutSec, failedAttempts, lastErrMsg) =>
-      InGroupOnlineFailedRetryingAt(timeoutSec, failedAttempts, lastErrMsg)
-    | OnlineCreatingSdpAnswer(inGroup, _)
-    | OnlineWaitingForInitiator(inGroup, _, _) =>
-      OnlineAcceptingConnection(inGroup)
-    | Connected(_, inGroup, signalState) =>
-      Connected(inGroup, signalState |> decodeSignalState)
-    };
 };
+
+// module PeersConnections = {
+//   type connectionState =
+//     | NotInGroup(signalState)
+//     | InGroupWaitingForOnlineSignal
+//     | InGroupOnlineInitiatingConnection(int)
+//     | OnlineAcceptingConnection(bool)
+//     | InGroupOnlineFailedRetryingAt(int, int, string)
+//     | Connected(bool, signalState);
+
+//   let connectionState = t =>
+//     switch (t.Peer.connectionState) {
+//     | NotInGroup(signalState) => NotInGroup(signalState |> decodeSignalState)
+//     | InGroupWaitingForOnlineSignal => InGroupWaitingForOnlineSignal
+//     | InGroupOnlineCreatingSdpOffer(_, failedAttempts)
+//     | InGroupOnlineWaitingForAcceptor(_, _, failedAttempts) =>
+//       InGroupOnlineInitiatingConnection(failedAttempts)
+//     | InGroupOnlineFailedRetryingAt(_, timeoutSec, failedAttempts, lastErrMsg) =>
+//       InGroupOnlineFailedRetryingAt(timeoutSec, failedAttempts, lastErrMsg)
+//     | OnlineCreatingSdpAnswer(inGroup, _)
+//     | OnlineWaitingForInitiator(inGroup, _, _) =>
+//       OnlineAcceptingConnection(inGroup)
+//     | Connected(_, inGroup, signalState) =>
+//       Connected(inGroup, signalState |> decodeSignalState)
+//     };
+// };
+
+// module PeersStatuses = {
+//   type signalState =
+//     | Online
+//     | Offline;
+
+//   let decodeSignalState =
+//     fun
+//     | Peer.Online(_) => Online
+//     | Offline => Offline;
+// };
 
 module Peers = {
   type t = Peers.t;
@@ -70,7 +76,7 @@ module PeerInGroup = {
 
 module PeersGroup = PeerGroup;
 
-module PeersGroups = PeerGroups;
+module PeersGroups = PeersGroups;
 
 module ThisPeer = ThisPeer;
 
@@ -78,49 +84,60 @@ module SignalServer = {
   type t = SignalServerState.t;
   type connectionState =
     | Connecting
-    | SigningIn
-    | FailedRetryingAt(int, int, string)
     | Connected;
 
   let url = (t: t) => t.url;
 
   let connectionState = (t: t) =>
     switch (t.connectionState) {
-    | Types.Connecting => Connecting
-    | SigningIn(_) => SigningIn
-    | FailedRetryingAt(intervalSec, failedAttempts, lastErrorMessage) =>
-      FailedRetryingAt(intervalSec, failedAttempts, lastErrorMessage)
-    | Connected(_, _) => Connected
+    | Connecting => Connecting
+    | Connected(_) => Connected
     };
 };
 
-module StateWithId = {
-  type t = Store.hasIdentity;
-  let groups = t => t.Store.peerGroups;
-  let peers = t => t.Store.peers;
-  let thisPeer = t => t.Store.thisPeer;
-  let signalServer = t => t.Store.signalServer;
+module DbState = {
+  type t = DbState.t;
+  let groups = t => t.DbState.peersGroups;
+  let peers = t => t.DbState.peers;
+  let thisPeer = t => t.DbState.thisPeer;
+};
+
+module RuntimeState = {
+  type t = RuntimeState.t;
+  let signalServer = t => t.RuntimeState.signalServer;
 };
 
 module State = {
-  type t = Store.rootState;
+  type t = Store.t;
   type taggedT =
-    | OpeningDB
-    | LoadingDBData
-    | GeneratingIdentity
-    | FatalError(exn)
-    | HasIdentity(StateWithId.t);
+    | WaitingForDbAndIdentity(SignalServer.t)
+    | HasIdentity(DbState.t, RuntimeState.t);
 
   let classify =
     fun
-    | Store.OpeningDB(_) => OpeningDB
-    | LoadingDBData(_) => LoadingDBData
-    | GeneratingIdentity(_) => GeneratingIdentity
-    | FatalError(exn) => FatalError(exn)
-    | HasIdentity(stateWithId) => HasIdentity(stateWithId);
+    | Store.WaitingForDbAndIdentity(_, _, signalServer) =>
+      WaitingForDbAndIdentity(signalServer)
+    | HasIdentity(_, dbState, runtimeState) =>
+      HasIdentity(dbState, runtimeState);
 };
 
-module Msg = Msgs;
+module Msg = {
+  type t = Msgs.t;
+  let addPeer = PocketmeshPeer.Peers.addPeer;
+  let updatePeer = PocketmeshPeer.Peers.updateAlias;
+  let removePeer = PocketmeshPeer.Peers.removePeer;
+  let updateSignalServerUrl = SignalServerState.updateUrl;
+
+  let removePeerFromGroup = PocketmeshPeer.PeersGroups.removePeerFromGroupMsg;
+  let updatePeerPermissions = PocketmeshPeer.PeersGroups.updatePeerPermissionsMsg;
+  let addPeerToGroup = PocketmeshPeer.PeersGroups.addPeerToGroupMsg;
+  let removeGroup = PocketmeshPeer.PeersGroups.removeGroupMsg;
+  let updateGroupContent = PocketmeshPeer.PeersGroups.updateGroupContentMsg;
+  let updateGroupAlias = PocketmeshPeer.PeersGroups.updateGroupAliasMsg;
+  let addGroup = PocketmeshPeer.PeersGroups.addGroupMsg;
+  // let removeThisPeerAndAllData
+};
 
 let init = Store.init;
 let update = Store.update;
+let subscriptions = Store.subscriptions;

@@ -7,6 +7,8 @@ type conn = {ws: WebapiExtra.Dom.WebSocket.t};
 
 type peerChange = Message.peerChange;
 
+/* HELPERS */
+
 let send = (msg: Message.t, ws: WebapiExtra.Dom.WebSocket.t) =>
   WebapiExtra.Dom.(
     msg |> Message.encode |> Json.stringify |> ws->WebSocket.sendString
@@ -14,28 +16,22 @@ let send = (msg: Message.t, ws: WebapiExtra.Dom.WebSocket.t) =>
 
 /* COMMANDS */
 
-let sendMsg = (msg: Message.t, t: conn) =>
-  Cmd.call(_callbacks =>
-    msg
-    |> Message.encode
-    |> Json.stringify
-    |> t.ws->WebapiExtra.Dom.WebSocket.sendString
-  );
-
 exception SignatureError;
 
-let signAndSendMsg = (msg: Message.signedMsg, privateKey, t: conn) =>
-  /* TODO: Sort fields */
-  /* TODO: Can Websocket.send throw or does it only fire onError event? */
+let signMsg = (msg: Message.signedMsg, privateKey) =>
   Json.Object(msg |> Message.encodeSignedMsg)
   |> Json.stringify
   |> SimpleCrypto.sign(privateKey)
   |> Js.Promise.then_(signature =>
-       Message.Signed(signature, msg)
-       |> Message.encode
-       |> Json.stringify
-       |> t.ws->WebapiExtra.Dom.WebSocket.sendString
-       |> Js.Promise.resolve
+       Message.Signed(signature, msg) |> Js.Promise.resolve
+     );
+
+let signAndSendMsg = (msg: Message.signedMsg, privateKey, t: conn) =>
+  /* TODO: Sort fields */
+  /* TODO: Can Websocket.send throw or does it only fire onError event? */
+  signMsg(msg, privateKey)
+  |> Js.Promise.then_(signedMsg =>
+       send(signedMsg, t.ws) |> Js.Promise.resolve
      )
   |> Js.Promise.catch(e => {
        Js.log2("[SignalServerCmds] Cannot sign and send message:", e);

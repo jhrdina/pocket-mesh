@@ -1,111 +1,79 @@
+open BlackTea;
+open Rex_json.Json.Infix;
+
 /**
   Signalling server connection state representation, its changes and related
   global messages handling.
  */
 
 /* TYPES */
+type connectionState =
+  | Connecting
+  | Connected(WebSocketsSub.conn);
+
 type t = {
   url: string,
-  connectionState: Types.signalServerState,
+  connectionState,
 };
 
-/* HELPERS */
+type Msgs.t +=
+  | UpdateUrl(string)
+  | WebSocketsMsg(option(WebSocketsSub.msg))
+  /* Output: */
+  | GotMessage(Message.t)
+  /* Input: */
+  | Send(Message.t);
 
-let cmdConnectToSignalServer = (thisPeer, peers, url) =>
-  SignalServerCmds.connect(
-    url,
-    thisPeer,
-    peers |> Peers.getAllIds,
-    Msgs.connectToSignalServerSuccess,
-    Msgs.signalServerMessage,
-    Msgs.signalServerConnectionError,
-  );
-
-let applyPeerStatusChanges = (onlinePeers, changes) =>
-  List.fold_left(
-    (prevOnlinePeers, change) =>
-      /* TODO: Care only about those I have in my contacts */
-      switch (change) {
-      | Message.WentOnline(peerId) =>
-        prevOnlinePeers |> PeerId.Set.add(peerId)
-      | WentOffline(peerId) =>
-        prevOnlinePeers |> PeerId.Set.filter(oldPeer => oldPeer !== peerId)
-      },
-    onlinePeers,
-    changes,
-  );
+let updateUrl = url => UpdateUrl(url);
+let connected = ssConn => Connected(ssConn);
+let gotMessage = msg => GotMessage(msg);
+let webSocketsMsg = msg => WebSocketsMsg(msg);
 
 /* INIT, UPDATE */
-
-let initialConnectionState = Types.Connecting;
-
-let init = (thisPeer, peers, url) => (
-  {url, connectionState: initialConnectionState},
-  cmdConnectToSignalServer(thisPeer, peers, url),
-);
-
-let update = (thisPeer, peers, {url, connectionState}, msg) => {
-  let (newConnectionState, cmd) =
-    switch (msg, connectionState) {
-    | (Msgs.ConnectToSignalServerSuccess(connection), _) => (
-        Types.SigningIn(connection),
-        Cmds.none,
-      )
-
-    | (
-        SignalServerConnectionError,
-        FailedRetryingAt(_, attemptsMade, lastErr),
-      ) =>
-      let newFailedAttempts = attemptsMade + 1;
-      let timeoutMs = Retry.getTimeoutMs(newFailedAttempts);
-      (
-        Types.FailedRetryingAt(
-          timeoutMs |> Retry.msToSec,
-          newFailedAttempts,
-          lastErr,
-        ),
-        Cmds.timeout(Msgs.signalServerRetryConnection, timeoutMs),
-      );
-
-    | (SignalServerConnectionError, _signalServerState) =>
-      let failedAttempts = 1;
-      let timeoutMs = Retry.getTimeoutMs(failedAttempts);
-      (
-        FailedRetryingAt(timeoutMs |> Retry.msToSec, failedAttempts, ""),
-        Cmds.timeout(Msgs.signalServerRetryConnection, timeoutMs),
-      );
-
-    | (SignalServerRetryConnection, FailedRetryingAt(_, _, _)) => (
-        connectionState,
-        cmdConnectToSignalServer(thisPeer, peers, url),
-      )
-
-    | (SignalServerMessage(Unsigned(Ok(onlinePeers))), SigningIn(conn)) => (
-        Connected(conn, onlinePeers),
-        Cmds.none,
-      )
-
-    | (UpdateSignalServerUrl(url), _) => (
-        Connecting,
-        cmdConnectToSignalServer(thisPeer, peers, url),
-      )
-
-    | (
-        SignalServerMessage(Unsigned(WatchedPeersChanged(changes))),
-        Connected(conn, onlinePeers),
-      ) => (
-        Connected(conn, applyPeerStatusChanges(onlinePeers, changes)),
-        Cmds.none,
-      )
-
-    | (_, signalServerState) => (signalServerState, Cmds.none)
-    };
-
-  let newUrl =
-    switch (msg) {
-    | UpdateSignalServerUrl(newUrl) => newUrl
-    | _ => url
-    };
-
-  ({connectionState: newConnectionState, url: newUrl}, cmd);
+let init = url => {
+  Js.log("reseting");
+  {url, connectionState: Connecting};
 };
+
+let update = (model, msg) => {
+  switch (msg, model.connectionState) {
+  | (WebSocketsMsg(Some(Connected(conn))), _) => (
+      {...model, connectionState: Connected(conn)},
+      Cmd.none,
+    )
+
+  | (WebSocketsMsg(Some(Received(strMsg))), Connected(_)) =>
+    switch (strMsg |> JsonUtils.parseOpt |?>> Message.decode) {
+    | Some(Ok(msg)) => (model, Cmd.msg(GotMessage(msg)))
+    | Some(Error(msg)) => (
+        model,
+        Cmds.log("Cannot parse received message: " ++ msg),
+      )
+    | None => (
+        model,
+        Cmds.log("Received message is not a valid JSON. Skipping."),
+      )
+    }
+
+  | (WebSocketsMsg(None), _) => (
+      {...model, connectionState: Connecting},
+      Cmd.none,
+    )
+
+  | (UpdateUrl(url), _) => ({url, connectionState: Connecting}, Cmd.none)
+
+  | (Send(msg), Connected(conn)) =>
+    let msgAsStr = msg |> Message.encode |> Json.stringify;
+    (model, WebSocketsSub.sendCmd(msgAsStr, conn));
+
+  | (_, _) => (model, Cmd.none)
+  };
+};
+
+let subscriptions = model =>
+  WebSocketsSub.sub(
+    "SignalServer/connection/" ++ model.url,
+    model.url,
+    Retry.getTimeoutMs,
+    webSocketsMsg,
+  );

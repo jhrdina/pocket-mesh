@@ -28,22 +28,10 @@ module Peer: {
     let ofString: string => option(t);
   };
 
-  type signalState =
-    | Online
-    | Offline;
-  type connectionState =
-    | NotInGroup(signalState)
-    | InGroupWaitingForOnlineSignal
-    | InGroupOnlineInitiatingConnection(int)
-    | OnlineAcceptingConnection(bool)
-    | InGroupOnlineFailedRetryingAt(int, int, string)
-    | Connected(bool, signalState);
-
   type t;
 
   let id: t => Id.t;
   let alias: t => string;
-  let connectionState: t => connectionState;
 };
 
 module Peers: {
@@ -51,6 +39,24 @@ module Peers: {
   let findOpt: (Peer.Id.t, t) => option(Peer.t);
   let fold: (('acc, Peer.t) => 'acc, 'acc, t) => 'acc;
 };
+
+// module PeersConnections: {
+//   type connectionState =
+//     | NotInGroup(signalState)
+//     | InGroupWaitingForOnlineSignal
+//     | InGroupOnlineInitiatingConnection(int)
+//     | OnlineAcceptingConnection(bool)
+//     | InGroupOnlineFailedRetryingAt(int, int, string)
+//     | Connected(bool, signalState);
+
+//   let connectionState: t => connectionState;
+// };
+
+// module PeersStatuses: {
+//   type signalState =
+//     | Online
+//     | Offline;
+// };
 
 module PeerInGroup: {
   type membersChangingPerms =
@@ -95,20 +101,10 @@ module SignalServer: {
   type t;
   type connectionState =
     | Connecting
-    | SigningIn
-    | FailedRetryingAt(int, int, string)
     | Connected;
 
   let url: t => string;
   let connectionState: t => connectionState;
-};
-
-module StateWithId: {
-  type t;
-  let groups: t => PeersGroups.t;
-  let peers: t => Peers.t;
-  let thisPeer: t => ThisPeer.t;
-  let signalServer: t => SignalServer.t;
 };
 
 module Msg: {
@@ -134,20 +130,30 @@ module Msg: {
 
   /* Others */
   let updateSignalServerUrl: string => t;
-  let removeThisPeerAndAllData: t;
+  // let removeThisPeerAndAllData: t;
+};
+
+module DbState: {
+  type t;
+  let groups: t => PeersGroups.t;
+  let peers: t => Peers.t;
+  let thisPeer: t => ThisPeer.t;
+};
+
+module RuntimeState: {
+  type t;
+  let signalServer: t => SignalServer.t;
 };
 
 module State: {
   type t;
   type taggedT =
-    | OpeningDB
-    | LoadingDBData
-    | GeneratingIdentity
-    | FatalError(exn)
-    | HasIdentity(StateWithId.t);
+    | WaitingForDbAndIdentity(SignalServer.t)
+    | HasIdentity(DbState.t, RuntimeState.t);
 
   let classify: t => taggedT;
 };
 
 let init: InitConfig.t => (State.t, BlackTea.Cmd.t(Msg.t));
 let update: (State.t, Msg.t) => (State.t, BlackTea.Cmd.t(Msg.t));
+let subscriptions: State.t => BlackTea.Sub.t(Msg.t);

@@ -35,6 +35,7 @@
     "bs-automerge": "file:../bs-automerge",
     "bs-black-tea": "file:../../bs-black-tea/bs-black-tea",
     "bs-webapi-extra": "file:../bs-webapi-extra",
-    "rex-json": "^1.4.0"
+    "rex-json": "^1.4.0",
+    "wonka": "^2.0.0"
   }
 }

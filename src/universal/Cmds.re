@@ -10,6 +10,22 @@ let wrapPromise = (runPromise, successToMsg, exnToMsg) =>
        )
     |> ignore
   );
+
+let wrapResPromise = (runPromise, completedToMsg) =>
+  Cmd.call(callbacks =>
+    runPromise()
+    |> then_(value =>
+         callbacks^.enqueue(completedToMsg(Result.Ok(value))) |> resolve
+       )
+    |> catch(error =>
+         callbacks^.enqueue(
+           completedToMsg(Error(error |> JsUtils.promiseErrorToExn)),
+         )
+         |> resolve
+       )
+    |> ignore
+  );
+
 let wrapPairPromise = (runPromise, successToMsg, exnToMsg) =>
   Cmd.call(callbacks =>
     runPromise()

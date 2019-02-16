@@ -1,0 +1,462 @@
+open Json.Infix;
+
+/**
+  Represents state of a peer,
+  describes transitions of the state and related side-effects
+ */
+
+/* CONSTANTS */
+let waitingTimeoutMs = 10 * 1000;
+
+type sdpMsgType =
+  | Offer
+  | Answer;
+
+type t =
+  /* bool = online */
+  | NotInGroup(PeersStatuses.peerStatus)
+  | InGroupWaitingForOnlineSignal
+  /* ssConn, failedAttempts */
+  | InGroupOnlineCreatingSdpOffer(int)
+  /* ssConn, rtcConn, failedAttempts */
+  | InGroupOnlineWaitingForAcceptor(RTCCmds.t, int)
+  /* ssConn, intervalSec, failedAttempts, lastErrorMessage */
+  /* | Connecting */
+  | InGroupOnlineFailedRetryingAt(int, int, string)
+  /* inGroup, ssConn */
+  | OnlineCreatingSdpAnswer(bool)
+  | OnlineWaitingForInitiator(bool, RTCCmds.t)
+  /* RTC conn, inGroup, signal online */
+  | Connected(RTCCmds.t, bool, PeersStatuses.peerStatus);
+
+[@bs.deriving accessors]
+type msgs =
+  /*
+   Group membership changes
+   */
+  | AddedToGroup
+  | RemovedFromLastGroup
+  /*
+   Online/Offline
+   */
+  | WentOnline
+  | WentOffline
+  /*
+   Signal receiving & verification
+   */
+  | ReceivedSignal(string, Message.peerToPeerMsg)
+  | ReceivedVerifiedSignal(Message.peerToPeerMsg)
+  | SignalVerificationFailed(exn)
+  | PrepareKeyRequestFinished(Result.t(string, exn))
+  | VerifyKeyResponseFinished(Result.t(SimpleCrypto.key, exn))
+  | VerifyKeyRequestFinished(Result.t(SimpleCrypto.key, exn))
+  | PrepareKeyResponseFinished(Result.t(string, exn))
+  /*
+   RTC connection
+   */
+  | RtcRetryConnection
+  | RtcClose
+  /* t, sdp */
+  | RtcAnswerReady(RTCCmds.t, string)
+  | RtcOfferReady(RTCCmds.t, string)
+  | RtcConnected
+  /*
+   Alias changes
+   */
+  | UpdateAlias(string);
+
+exception InvalidState;
+
+/* HELPERS */
+
+let shouldAccept = (thisPeer: ThisPeer.t, srcPeerId) =>
+  thisPeer.id < srcPeerId;
+
+let sendSignalMessage = (thisPeer, tgPeer, msg, ssConn) =>
+  Cmds.wrapPromise(
+    () =>
+      SignalServerCmds.signAndSendMsg(
+        PeerToPeer(thisPeer.ThisPeer.id, tgPeer, msg),
+        thisPeer.ThisPeer.privateKey,
+        ssConn,
+      ),
+    _ => Msgs.noop,
+    Msgs.cryptoFatalError,
+  );
+
+
+
+/* UPDATES */
+
+let init = (peerId, inGroup, peerSignalState: PeersStatuses.peerStatus) =>
+  switch (inGroup, peerSignalState) {
+  | (false, peerSignalState) => (NotInGroup(peerSignalState), Cmds.none)
+  | (true, Offline) => (InGroupWaitingForOnlineSignal, Cmds.none)
+  | (true, Online) => (
+      InGroupOnlineCreatingSdpOffer(0),
+      createInitiator(peerId),
+    )
+  };
+
+let update = (thisPeer, peerId, peerKey, prevState, msg) =>
+  switch (msg, prevState) {
+  | (AddedToGroup, NotInGroup(Online))
+  | (WentOnline, InGroupWaitingForOnlineSignal) => (
+      InGroupOnlineCreatingSdpOffer(0),
+      createInitiator(peerId),
+    )
+
+  | (RtcRetryConnection, InGroupOnlineFailedRetryingAt(_, failedAttempts, _)) => (
+      InGroupOnlineCreatingSdpOffer(failedAttempts),
+      createInitiator(peerId),
+    )
+
+  /* Waiting timeout */
+  | (
+      RtcRetryConnection,
+      InGroupOnlineWaitingForAcceptor(rtcConn, failedAttempts),
+    ) => (
+      InGroupOnlineCreatingSdpOffer(failedAttempts + 1),
+      Cmds.batch([RTCCmds.destroy(rtcConn), createInitiator(peerId)]),
+    )
+
+  | (AddedToGroup, NotInGroup(Offline))
+  | (
+      WentOffline,
+      InGroupOnlineCreatingSdpOffer(_) | InGroupOnlineFailedRetryingAt(_) |
+      OnlineCreatingSdpAnswer(true, _),
+    ) => (
+      InGroupWaitingForOnlineSignal,
+      Cmds.none,
+    )
+
+  | (RtcClose, Connected(rtcConn, true, Offline))
+  | (
+      WentOffline,
+      InGroupOnlineWaitingForAcceptor(_, rtcConn, _) |
+      OnlineWaitingForInitiator(true, _, rtcConn),
+    ) => (
+      InGroupWaitingForOnlineSignal,
+      RTCCmds.destroy(rtcConn),
+    )
+
+  | (
+      RtcOfferReady(rtcConn, sdp),
+      InGroupOnlineCreatingSdpOffer(failedAttempts),
+    ) => (
+      InGroupOnlineWaitingForAcceptor(rtcConn, failedAttempts),
+      Cmds.batch([
+        sendSignalMessage(thisPeer, peerId, Offer(sdp), ssConn),
+        /* TODO: Exponential backoff */
+        Cmds.timeout(Msgs.rtcRetryConnection(peerId), waitingTimeoutMs),
+      ]),
+    )
+
+  | (
+      ReceivedVerifiedSignal(Answer(sdp)),
+      InGroupOnlineWaitingForAcceptor(rtcConn, _),
+    ) => (
+      /* TODO: Check Signature, maybe move upwards to Peer.update */
+      prevState,
+      Cmds.batch([
+        RTCCmds.signal(rtcConn, sdp),
+        /* TODO: Exponential backoff */
+        Cmds.timeout(Msgs.rtcRetryConnection(peerId), waitingTimeoutMs),
+      ]),
+    )
+
+  | (ReceivedVerifiedSignal(Offer(sdp)), NotInGroup(Online)) => (
+      OnlineCreatingSdpAnswer(false),
+      createAcceptorFromOffer(peerId, sdp),
+    )
+
+  | (
+      ReceivedVerifiedSignal(Offer(sdp)),
+      InGroupOnlineCreatingSdpOffer(_) | InGroupOnlineWaitingForAcceptor(_, _) |
+      InGroupOnlineFailedRetryingAt(_, _, _),
+    )
+      when shouldAccept(thisPeer, peerId) =>
+    let destroyRtcCmd =
+      switch (prevState) {
+      | InGroupOnlineWaitingForAcceptor(_, rtcConn, _) =>
+        RTCCmds.destroy(rtcConn)
+      | _ => Cmds.none
+      };
+    (
+      OnlineCreatingSdpAnswer(true),
+      Cmds.batch([destroyRtcCmd, createAcceptorFromOffer(peerId, sdp)]),
+    );
+
+  | (
+      ReceivedVerifiedSignal(Offer(sdp)),
+      InGroupOnlineWaitingForAcceptor(rtcConn, _),
+    )
+      when shouldAccept(thisPeer, peerId) => (
+      OnlineCreatingSdpAnswer(true),
+      Cmds.batch([
+        RTCCmds.destroy(rtcConn),
+        createAcceptorFromOffer(peerId, sdp),
+      ]),
+    )
+
+  | (AddedToGroup, OnlineCreatingSdpAnswer(false)) => (
+      OnlineCreatingSdpAnswer(true),
+      Cmds.none,
+    )
+
+  | (RtcConnected, OnlineWaitingForInitiator(inGroup, rtcConn)) => (
+      Connected(rtcConn, inGroup, Online),
+      Cmds.none,
+    )
+
+  | (RtcConnected, InGroupOnlineWaitingForAcceptor(rtcConn, _)) => (
+      Connected(rtcConn, true, Online),
+      Cmds.none,
+    )
+
+  | (WentOnline, Connected(rtcConn, inGroup, Offline)) => (
+      Connected(rtcConn, inGroup, Online),
+      Cmds.none,
+    )
+
+  | (WentOffline, Connected(rtcConn, true, Online(_))) => (
+      Connected(rtcConn, true, Offline),
+      Cmds.none,
+    )
+
+  | (AddedToGroup, Connected(rtcConn, false, signalState)) => (
+      Connected(rtcConn, true, signalState),
+      Cmds.none,
+    )
+
+  | (RtcAnswerReady(rtcConn, sdp), OnlineCreatingSdpAnswer(inGroup)) => (
+      OnlineWaitingForInitiator(inGroup, rtcConn),
+      Cmds.batch([
+        sendSignalMessage(thisPeer, peerId, Answer(sdp), ssConn),
+        /* TODO: Exponential backoff */
+        Cmds.timeout(Msgs.rtcRetryConnection(peerId), waitingTimeoutMs),
+      ]),
+    )
+
+  | (AddedToGroup, OnlineWaitingForInitiator(false, rtcConn)) => (
+      OnlineWaitingForInitiator(true, rtcConn),
+      Cmds.none,
+    )
+
+  | (RtcClose, OnlineCreatingSdpAnswer(true)) =>
+    let newFailedAttempts = 1;
+    let timeoutMs = Retry.getTimeoutMs(newFailedAttempts);
+    (
+      InGroupOnlineFailedRetryingAt(
+        timeoutMs |> Retry.msToSec,
+        newFailedAttempts,
+        "",
+      ),
+      Cmds.timeout(Msgs.rtcRetryConnection(peerId), timeoutMs),
+    );
+
+  | (RtcClose, InGroupOnlineCreatingSdpOffer(failedAttempts)) =>
+    let newFailedAttempts = failedAttempts + 1;
+    let timeoutMs = Retry.getTimeoutMs(newFailedAttempts);
+    (
+      InGroupOnlineFailedRetryingAt(
+        timeoutMs |> Retry.msToSec,
+        newFailedAttempts,
+        "",
+      ),
+      Cmds.timeout(Msgs.rtcRetryConnection(peerId), timeoutMs),
+    );
+
+  | (
+      RtcClose,
+      OnlineWaitingForInitiator(true, rtcConn) |
+      Connected(rtcConn, true, Online),
+    ) =>
+    let newFailedAttempts = 1;
+    let timeoutMs = Retry.getTimeoutMs(newFailedAttempts);
+    (
+      InGroupOnlineFailedRetryingAt(
+        timeoutMs |> Retry.msToSec,
+        newFailedAttempts,
+        "",
+      ),
+      Cmds.batch([
+        RTCCmds.destroy(rtcConn),
+        Cmds.timeout(Msgs.rtcRetryConnection(peerId), timeoutMs),
+      ]),
+    );
+
+  | (RtcClose, InGroupOnlineWaitingForAcceptor(rtcConn, failedAttempts)) =>
+    let newFailedAttempts = failedAttempts + 1;
+    let timeoutMs = Retry.getTimeoutMs(newFailedAttempts);
+    (
+      InGroupOnlineFailedRetryingAt(
+        timeoutMs |> Retry.msToSec,
+        newFailedAttempts,
+        "",
+      ),
+      Cmds.batch([
+        RTCCmds.destroy(rtcConn),
+        Cmds.timeout(Msgs.rtcRetryConnection(peerId), timeoutMs),
+      ]),
+    );
+
+  | (RtcClose | WentOffline, OnlineCreatingSdpAnswer(false)) => (
+      NotInGroup(Online),
+      Cmds.none,
+    )
+
+  | (RtcClose | WentOffline, OnlineWaitingForInitiator(false, rtcConn)) => (
+      NotInGroup(Online),
+      RTCCmds.destroy(rtcConn),
+    )
+
+  | (RtcClose | WentOffline, Connected(rtcConn, false, peerSignalState)) => (
+      NotInGroup(peerSignalState),
+      RTCCmds.destroy(rtcConn),
+    )
+
+  | (RemovedFromLastGroup, Connected(rtcConn, true, online))
+  /* TODO: Really? Don't we need to tell him first? */
+  | (RemovedFromLastGroup, Connected(rtcConn, false, online)) => (
+      NotInGroup(online),
+      RTCCmds.destroy(rtcConn),
+    )
+  | (RemovedFromLastGroup, InGroupWaitingForOnlineSignal)
+  | (WentOffline, NotInGroup(Online)) => (NotInGroup(Offline), Cmds.none)
+
+  | (WentOnline, NotInGroup(Offline)) => (NotInGroup(Online), Cmds.none)
+
+  | (
+      RemovedFromLastGroup,
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineFailedRetryingAt(_, _, _) |
+      OnlineCreatingSdpAnswer(true),
+    ) => (
+      NotInGroup(Online),
+      Cmds.none,
+    )
+
+  | (
+      RemovedFromLastGroup,
+      InGroupOnlineWaitingForAcceptor(rtcConn, _) |
+      OnlineWaitingForInitiator(true, rtcConn),
+    ) => (
+      NotInGroup(Online),
+      RTCCmds.destroy(rtcConn),
+    )
+
+  /* Matches with no change */
+
+  | (
+      ReceivedVerifiedSignal(Answer(_)),
+      NotInGroup(_) | InGroupWaitingForOnlineSignal |
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineFailedRetryingAt(_, _, _, _) |
+      OnlineCreatingSdpAnswer(_, _) |
+      OnlineWaitingForInitiator(_, _, _) |
+      Connected(_, _, _),
+    )
+  | (
+      ReceivedVerifiedSignal(Offer(_)),
+      InGroupWaitingForOnlineSignal | InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineWaitingForAcceptor(_, _, _) |
+      InGroupOnlineFailedRetryingAt(_, _, _, _) |
+      OnlineCreatingSdpAnswer(_, _) |
+      OnlineWaitingForInitiator(_, _, _) |
+      Connected(_, _, _) |
+      NotInGroup(Offline),
+    )
+  | (
+      WentOffline,
+      NotInGroup(Offline) | InGroupWaitingForOnlineSignal |
+      Connected(_, _, Offline),
+    )
+  | (
+      WentOnline(_),
+      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _) |
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineWaitingForAcceptor(_) |
+      InGroupOnlineFailedRetryingAt(_) |
+      Connected(_, _, Online(_)) |
+      NotInGroup(Online(_)),
+    )
+  | (
+      RtcRetryConnection,
+      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _) |
+      InGroupWaitingForOnlineSignal |
+      InGroupOnlineCreatingSdpOffer(_) |
+      Connected(_, _, _) |
+      NotInGroup(_),
+    )
+  | (
+      RtcOfferReady(_, _),
+      OnlineCreatingSdpAnswer(_, _) | OnlineWaitingForInitiator(_, _, _) |
+      InGroupOnlineFailedRetryingAt(_) |
+      Connected(_, _, _) |
+      InGroupOnlineWaitingForAcceptor(_) |
+      InGroupWaitingForOnlineSignal |
+      NotInGroup(_),
+    )
+  | (
+      RtcAnswerReady(_, _),
+      NotInGroup(_) | InGroupWaitingForOnlineSignal |
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineWaitingForAcceptor(_, _, _) |
+      InGroupOnlineFailedRetryingAt(_, _, _, _) |
+      OnlineWaitingForInitiator(_, _, _) |
+      Connected(_, _, _),
+    )
+  | (
+      RtcConnected,
+      OnlineCreatingSdpAnswer(_, _) | InGroupOnlineFailedRetryingAt(_) |
+      InGroupOnlineCreatingSdpOffer(_) |
+      Connected(_, _, _) |
+      InGroupWaitingForOnlineSignal |
+      NotInGroup(_),
+    )
+  | (
+      RemovedFromLastGroup,
+      OnlineCreatingSdpAnswer(false, _) |
+      OnlineWaitingForInitiator(false, _, _) |
+      NotInGroup(_),
+    )
+  | (
+      AddedToGroup,
+      OnlineCreatingSdpAnswer(true, _) | Connected(_, true, _) |
+      OnlineWaitingForInitiator(true, _, _) |
+      InGroupWaitingForOnlineSignal |
+      InGroupOnlineCreatingSdpOffer(_) |
+      InGroupOnlineWaitingForAcceptor(_) |
+      InGroupOnlineFailedRetryingAt(_),
+    )
+  | (
+      RtcClose,
+      InGroupOnlineFailedRetryingAt(_) | InGroupWaitingForOnlineSignal |
+      NotInGroup(_),
+    )
+  | (
+      UpdateAlias(_) | ReceivedVerifiedSignal(KeyRequest(_) | KeyResponse(_)),
+      _,
+    )
+  | (ReceivedSignal(_), _)
+  | (
+      SignalVerificationFailed(_) | PrepareKeyRequestFinished(_) |
+      VerifyKeyResponseFinished(_) |
+      VerifyKeyRequestFinished(_) |
+      PrepareKeyResponseFinished(_),
+      _,
+    ) => (
+      prevState,
+      Cmds.none,
+    )
+  };
+
+/* PERSISTENCY */
+/* QUERIES */
+
+let getActiveConnection = peer =>
+  switch (peer.connectionState) {
+  | Connected(rtcConn, _, _) => Some(rtcConn)
+  | _ => None
+  };

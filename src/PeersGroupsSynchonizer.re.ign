@@ -1,0 +1,77 @@
+type t = {offerChangesDebouncer: Debouncer.t(Msgs.t)};
+
+type Msgs.t +=
+  | OfferChangesDebouncerMsg(Debouncer.msg(Msgs.t))
+  | OfferChangesFromGroupsDebounced(PeerGroup.Id.Set.t);
+
+let offerChangesDebouncerMsg = msg => OfferChangesDebouncerMsg(msg);
+let offerChangesFromGroupsDebounced = groups =>
+  OfferChangesFromGroupsDebounced(groups);
+
+let offerChangesDebounced = groupsIds =>
+  Debouncer.debounceCmd(
+    OfferChangesFromGroupsDebounced(groupsIds),
+    offerChangesDebouncerMsg,
+    3000,
+  );
+
+let receivedMessageFromPeer =
+    (peerId, rtcConn, db, message: P2PMsg.t, peerGroups) =>
+  switch (message) {
+  | ChangesOffer(changesOffer) => (
+      peerGroups,
+      receivedChangesOffer(peerId, rtcConn, changesOffer, peerGroups),
+    )
+  | ChangesRequest(requestedChanges) => (
+      peerGroups,
+      receivedChangesRequest(peerId, rtcConn, requestedChanges, peerGroups),
+    )
+  | Changes(groupsChanges) =>
+    let newPeerGroups = receivedChanges(peerId, groupsChanges, peerGroups);
+    (newPeerGroups, saveToDb(db, newPeerGroups));
+  };
+
+let receivedStringMessageFromPeer =
+    (peerId, rtcConn, db, stringMessage, peerGroups) =>
+  stringMessage
+  |> JsonUtils.parseOpt
+  |?> P2PMsg.decode
+  |?>> (msg => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups))
+  |? (
+    peerGroups,
+    Cmds.log(
+      "Failed to parse message from peer " ++ (peerId |> PeerId.toString),
+    ),
+  );
+
+let update = (peerGroups, model, msg) =>
+  switch (msg) {
+  | PeersConnections.RtcConnected(rtcConn, peerId) => (
+      model,
+      connectionStarted(peerId, rtcConn, peerGroups),
+    )
+  | PeersConnections.RtcGotData(rtcConn, peerId, String(data)) =>
+    receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
+
+  | PeerGroups.PeersGroupsChanged(groupsIds) => (
+      model,
+      offerChangesDebounced(groupsIds),
+    )
+  | Msgs.OfferChangesFromGroupsDebounced(_) =>
+    PeersConnections.foldActiveConnections(
+      (cmdList, peerId, rtcConn) => {
+        let groupsStatuses =
+          PeerGroups.getGroupsStatusesForPeer(peerId, model.peerGroups);
+        let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
+        [
+          rtcConn->RTCCmds.send(
+            String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+          ),
+          ...cmdList,
+        ];
+      },
+      [],
+      model.peers,
+    )
+    |> Cmds.batch
+  };

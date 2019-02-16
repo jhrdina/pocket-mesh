@@ -5,4 +5,4 @@ let thenl = cb =>
   });
 
 let promiseErrorToExn: Js.Promise.error => exn =
-  x => Js.Exn.internalToOCamlException(Obj.magic(x));
+  x => Caml_js_exceptions.internalToOCamlException(Obj.magic(x));
