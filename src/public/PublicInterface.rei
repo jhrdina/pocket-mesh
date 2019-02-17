@@ -40,23 +40,28 @@ module Peers: {
   let fold: (('acc, Peer.t) => 'acc, 'acc, t) => 'acc;
 };
 
-// module PeersConnections: {
-//   type connectionState =
-//     | NotInGroup(signalState)
-//     | InGroupWaitingForOnlineSignal
-//     | InGroupOnlineInitiatingConnection(int)
-//     | OnlineAcceptingConnection(bool)
-//     | InGroupOnlineFailedRetryingAt(int, int, string)
-//     | Connected(bool, signalState);
+module PeersConnections: {
+  type t;
+  type connectionState;
 
-//   let connectionState: t => connectionState;
-// };
+  type taggedConnectionState =
+    | InitiatingConnection
+    | AcceptingConnection
+    | Connected;
 
-// module PeersStatuses: {
-//   type signalState =
-//     | Online
-//     | Offline;
-// };
+  let classifyConnectionState: connectionState => taggedConnectionState;
+
+  let getPeerConnectionState: (Peer.Id.t, t) => option(connectionState);
+};
+
+module PeersStatuses: {
+  type t;
+  type peerStatus =
+    | Online
+    | Offline;
+
+  let getPeerStatus: (Peer.Id.t, t) => peerStatus;
+};
 
 module PeerInGroup: {
   type membersChangingPerms =
@@ -90,6 +95,7 @@ module PeersGroups: {
   type t;
   let findOpt: (PeersGroup.Id.t, t) => option(PeersGroup.t);
   let fold: (('acc, PeersGroup.t) => 'acc, 'acc, t) => 'acc;
+  let isPeerInAGroup: (Peer.Id.t, t) => bool;
 };
 
 module ThisPeer: {
@@ -143,6 +149,8 @@ module DbState: {
 module RuntimeState: {
   type t;
   let signalServer: t => SignalServer.t;
+  let peersStatuses: t => PeersStatuses.t;
+  let peersConnections: t => PeersConnections.t;
 };
 
 module State: {

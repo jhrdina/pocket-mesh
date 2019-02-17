@@ -46,7 +46,7 @@ let diffStatuses = (onlineSet1, onlineSet2) => {
 /* QUERIES */
 
 let getPeerStatus = (peerId, t) =>
-  PeerId.Set.mem(peerId, t) ? Online : Offline;
+  t.onlinePeers |> PeerId.Set.mem(peerId) ? Online : Offline;
 
 let getOnlinePeers = t => t.onlinePeers;
 

@@ -18,42 +18,24 @@ module Peer = {
   let alias = t => t.Peer.alias;
 };
 
-// module PeersConnections = {
-//   type connectionState =
-//     | NotInGroup(signalState)
-//     | InGroupWaitingForOnlineSignal
-//     | InGroupOnlineInitiatingConnection(int)
-//     | OnlineAcceptingConnection(bool)
-//     | InGroupOnlineFailedRetryingAt(int, int, string)
-//     | Connected(bool, signalState);
+module PeersConnections = {
+  include PeersConnections;
 
-//   let connectionState = t =>
-//     switch (t.Peer.connectionState) {
-//     | NotInGroup(signalState) => NotInGroup(signalState |> decodeSignalState)
-//     | InGroupWaitingForOnlineSignal => InGroupWaitingForOnlineSignal
-//     | InGroupOnlineCreatingSdpOffer(_, failedAttempts)
-//     | InGroupOnlineWaitingForAcceptor(_, _, failedAttempts) =>
-//       InGroupOnlineInitiatingConnection(failedAttempts)
-//     | InGroupOnlineFailedRetryingAt(_, timeoutSec, failedAttempts, lastErrMsg) =>
-//       InGroupOnlineFailedRetryingAt(timeoutSec, failedAttempts, lastErrMsg)
-//     | OnlineCreatingSdpAnswer(inGroup, _)
-//     | OnlineWaitingForInitiator(inGroup, _, _) =>
-//       OnlineAcceptingConnection(inGroup)
-//     | Connected(_, inGroup, signalState) =>
-//       Connected(inGroup, signalState |> decodeSignalState)
-//     };
-// };
+  type taggedConnectionState =
+    | InitiatingConnection
+    | AcceptingConnection
+    | Connected;
 
-// module PeersStatuses = {
-//   type signalState =
-//     | Online
-//     | Offline;
+  let classifyConnectionState =
+    fun
+    | PeersConnections.CreatingSdpOffer(_)
+    | WaitingForAcceptor(_) => InitiatingConnection
+    | CreatingSdpAnswer(_)
+    | WaitingForInitiator(_) => AcceptingConnection
+    | Connected(_) => Connected;
+};
 
-//   let decodeSignalState =
-//     fun
-//     | Peer.Online(_) => Online
-//     | Offline => Offline;
-// };
+module PeersStatuses = PeersStatuses;
 
 module Peers = {
   type t = Peers.t;
@@ -105,6 +87,8 @@ module DbState = {
 module RuntimeState = {
   type t = RuntimeState.t;
   let signalServer = t => t.RuntimeState.signalServer;
+  let peersConnections = t => t.RuntimeState.peersConnections;
+  let peersStatuses = t => t.RuntimeState.peersStatuses;
 };
 
 module State = {

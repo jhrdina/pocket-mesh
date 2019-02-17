@@ -9,17 +9,17 @@ module PM = PublicInterface;
 type model = {
   p2p: PM.State.t,
   counter: int,
-  // itemsGeneratorGroup: option(PM.PeersGroup.Id.t),
+  itemsGeneratorGroup: option(PM.PeersGroup.Id.t),
   itemsGenerator: InputEmulator.t,
 };
 
 [@bs.deriving accessors]
 type msg =
   | PMMsg(PM.Msg.t)
-  // | StartItemsGenerator(PM.PeersGroup.Id.t)
+  | StartItemsGenerator(PM.PeersGroup.Id.t)
   | StopItemsGenerator
   | ItemGenerated(string)
-  // | ClearContent(PM.PeersGroup.Id.t)
+  | ClearContent(PM.PeersGroup.Id.t)
   | Increment;
 
 /* STUPID HTML RENDERER */
@@ -159,34 +159,41 @@ let vKeyVal = (key, value) =>
     ],
   );
 
-let viewPeer = peer => {
+let viewPeer = (~peersGroups, ~peersStatuses, ~peersConnections, peer) => {
+  let id = peer |> PM.Peer.id;
   let alias =
     (
       peer |> PM.Peer.alias == "" ?
         {js|– no alias –|js} : peer |> PM.Peer.alias
     )
     |> txt;
-  // let connectionState =
-  //   (
-  //     switch (peer |> PM.Peer.connectionState) {
-  //     | NotInGroup(Online) => "not in group, online"
-  //     | NotInGroup(Offline) => "not in group, offline"
-  //     | InGroupWaitingForOnlineSignal => "in group, offline"
-  //     | InGroupOnlineInitiatingConnection(_) => "in group, online, initiating connection..."
-  //     | OnlineAcceptingConnection(true) => "in group, online, accepting connection..."
-  //     | OnlineAcceptingConnection(false) => "not in group, online, accepting connection..."
-  //     | InGroupOnlineFailedRetryingAt(intervalSec, _, _msg) =>
-  //       "in group, online, connection failed, retrying in "
-  //       ++ (intervalSec |> string_of_int)
-  //       ++ "s..."
-  //     | Connected(true, Online) => "in group, online, CONNECTED"
-  //     | Connected(true, Offline) => "in group, offline, CONNECTED"
-  //     | Connected(false, Online) => "not in group, online, CONNECTED"
-  //     | Connected(false, Offline) => "not in group, offline, CONNECTED"
-  //     }
-  //   )
-  //   |> txt;
-  let id = peer |> PM.Peer.id |> PM.Peer.Id.toString;
+  let signalStatusStr =
+    switch (peersStatuses |> PM.PeersStatuses.getPeerStatus(id)) {
+    | Online => "online"
+    | Offline => "offline"
+    };
+
+  let inGroupStr =
+    peersGroups |> PM.PeersGroups.isPeerInAGroup(id) ?
+      "in group" : "not in group";
+
+  let p2pConnStatusStr =
+    switch (
+      peersConnections
+      |> PM.PeersConnections.getPeerConnectionState(id)
+      |?>> PM.PeersConnections.classifyConnectionState
+    ) {
+    | Some(InitiatingConnection) => "initiating connection..."
+    | Some(AcceptingConnection) => "accepting connection..."
+    | Some(Connected) => "CONNECTED"
+    | None => "not connected"
+    };
+
+  let peerStateStr =
+    String.concat(", ", [signalStatusStr, inGroupStr, p2pConnStatusStr])
+    |> txt;
+
+  let idStr = peer |> PM.Peer.id |> PM.Peer.Id.toString;
 
   hac(
     div,
@@ -197,11 +204,11 @@ let viewPeer = peer => {
         [(cls, "peer__line")],
         [
           hac(div, [(cls, "peer__alias")], [alias]),
-          // hac(div, [(cls, "peer__connection-state")], [connectionState]),
+          hac(div, [(cls, "peer__connection-state")], [peerStateStr]),
           hace(
             btn,
             [],
-            "removePeerBtn_" ++ id,
+            "removePeerBtn_" ++ idStr,
             [("click", PMMsg(PM.Msg.removePeer(peer |> PM.Peer.id)))],
             [txt("x")],
           ),
@@ -210,17 +217,29 @@ let viewPeer = peer => {
       hac(
         div,
         [(cls, "peer__line")],
-        [hac(div, [(cls, "peer__id")], [id |> txt])],
+        [hac(div, [(cls, "peer__id")], [idStr |> txt])],
       ),
     ],
   );
 };
 
-let viewPeers = peers =>
+let viewPeers = (m: PM.DbState.t, r: PM.RuntimeState.t, peers) =>
   vSection(
     "Peers",
     peers
-    |> PM.Peers.fold((acc, peer) => [viewPeer(peer), ...acc], [])
+    |> PM.Peers.fold(
+         (acc, peer) =>
+           [
+             viewPeer(
+               ~peersGroups=m |> PM.DbState.groups,
+               ~peersStatuses=r |> PM.RuntimeState.peersStatuses,
+               ~peersConnections=r |> PM.RuntimeState.peersConnections,
+               peer,
+             ),
+             ...acc,
+           ],
+         [],
+       )
     |> List.append([
          hace("input", [(placeholder, "ID")], "addPeerIdInput", [], []),
          hace(btn, [], "addPeerIdBtn", [], [txt("Add")]),
@@ -301,27 +320,27 @@ let viewGroup = group => {
             ],
             [txt("Remove group")],
           ),
-          // hace(
-          //   btn,
-          //   [],
-          //   "startItemsGeneratorBtn_" ++ groupId,
-          //   [("click", StartItemsGenerator(group |> PM.PeersGroup.id))],
-          //   [txt("Start Gen.")],
-          // ),
-          // hace(
-          //   btn,
-          //   [],
-          //   "stopItemsGeneratorBtn_" ++ groupId,
-          //   [("click", StopItemsGenerator)],
-          //   [txt("Stop Gen.")],
-          // ),
-          // hace(
-          //   btn,
-          //   [],
-          //   "clearContentBtn_" ++ groupId,
-          //   [("click", ClearContent(group |> PM.PeersGroup.id))],
-          //   [txt("Clear content")],
-          // ),
+          hace(
+            btn,
+            [],
+            "startItemsGeneratorBtn_" ++ groupId,
+            [("click", StartItemsGenerator(group |> PM.PeersGroup.id))],
+            [txt("Start Gen.")],
+          ),
+          hace(
+            btn,
+            [],
+            "stopItemsGeneratorBtn_" ++ groupId,
+            [("click", StopItemsGenerator)],
+            [txt("Stop Gen.")],
+          ),
+          hace(
+            btn,
+            [],
+            "clearContentBtn_" ++ groupId,
+            [("click", ClearContent(group |> PM.PeersGroup.id))],
+            [txt("Clear content")],
+          ),
         ],
       ),
       hac(
@@ -457,7 +476,7 @@ let p2pView = (m: PM.DbState.t, r: PM.RuntimeState.t) => {
           vKeyVal("Connection state", ssState),
         ],
       ),
-      viewPeers(peers),
+      viewPeers(m, r, peers),
       viewGroups(groups),
     ],
   );
@@ -486,7 +505,7 @@ let init = () => {
     {
       p2p,
       counter: 42,
-      // itemsGeneratorGroup: None,
+      itemsGeneratorGroup: None,
       itemsGenerator: InputEmulator.create(),
     },
     p2pCmd |> Cmd.map(pMMsg),
@@ -499,58 +518,58 @@ let update = model =>
       let (newP2P, p2pCmd) = PM.update(model.p2p, msg);
       ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
     }
-  | Increment => ({...model, counter: model.counter + 1}, Cmd.none);
-// | StartItemsGenerator(groupId) => {
-//     let generatedItemPrefix = getThisPeerIdStart(model);
-//     (
-//       {...model, itemsGeneratorGroup: Some(groupId)},
-//       model.itemsGenerator
-//       |> InputEmulator.Cmds.start(itemGenerated, generatedItemPrefix),
-//     );
-//   }
-// | StopItemsGenerator => (
-//     {...model, itemsGeneratorGroup: None},
-//     model.itemsGenerator |> InputEmulator.Cmds.stop,
-//   )
-// | ItemGenerated(text) =>
-//   switch (
-//     model.itemsGeneratorGroup,
-//     model.itemsGeneratorGroup
-//     |?> (groupId => model |> getGroupContentOpt(groupId)),
-//   ) {
-//   | (Some(itemsGeneratorGroup), Some(content)) =>
-//     let newContent =
-//       content
-//       |> PM.Crdt.change("Add item", root =>
-//            PM.Crdt.Json.(
-//              switch (root |> Map.get("items") |?> List.ofJson) {
-//              | Some(list) =>
-//                root
-//                |> Map.add(
-//                     "items",
-//                     list |> List.prepend(string(text)) |> List.toJson,
-//                   )
-//              | None => root
-//              }
-//            )
-//          );
-//     let (newP2P, p2pCmd) =
-//       PM.update(
-//         model.p2p,
-//         PM.Msg.updateGroupContent(itemsGeneratorGroup, newContent),
-//       );
-//     ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
-//   | _ => (model, Cmd.none)
-//   }
-// | ClearContent(groupId) =>
-//   switch (model |> getGroupContentOpt(groupId)) {
-//   | Some(content) =>
-//     let newContent = removeAllGroupContentItems(content);
-//     let (newP2P, p2pCmd) =
-//       PM.update(model.p2p, PM.Msg.updateGroupContent(groupId, newContent));
-//     ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
-//   | None => (model, Cmd.none)
-//   };
+  | Increment => ({...model, counter: model.counter + 1}, Cmd.none)
+  | StartItemsGenerator(groupId) => {
+      let generatedItemPrefix = getThisPeerIdStart(model);
+      (
+        {...model, itemsGeneratorGroup: Some(groupId)},
+        model.itemsGenerator
+        |> InputEmulator.Cmds.start(itemGenerated, generatedItemPrefix),
+      );
+    }
+  | StopItemsGenerator => (
+      {...model, itemsGeneratorGroup: None},
+      model.itemsGenerator |> InputEmulator.Cmds.stop,
+    )
+  | ItemGenerated(text) =>
+    switch (
+      model.itemsGeneratorGroup,
+      model.itemsGeneratorGroup
+      |?> (groupId => model |> getGroupContentOpt(groupId)),
+    ) {
+    | (Some(itemsGeneratorGroup), Some(content)) =>
+      let newContent =
+        content
+        |> PM.Crdt.change("Add item", root =>
+             PM.Crdt.Json.(
+               switch (root |> Map.get("items") |?> List.ofJson) {
+               | Some(list) =>
+                 root
+                 |> Map.add(
+                      "items",
+                      list |> List.prepend(string(text)) |> List.toJson,
+                    )
+               | None => root
+               }
+             )
+           );
+      let (newP2P, p2pCmd) =
+        PM.update(
+          model.p2p,
+          PM.Msg.updateGroupContent(itemsGeneratorGroup, newContent),
+        );
+      ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
+    | _ => (model, Cmd.none)
+    }
+  | ClearContent(groupId) =>
+    switch (model |> getGroupContentOpt(groupId)) {
+    | Some(content) =>
+      let newContent = removeAllGroupContentItems(content);
+      let (newP2P, p2pCmd) =
+        PM.update(model.p2p, PM.Msg.updateGroupContent(groupId, newContent));
+      ({...model, p2p: newP2P}, p2pCmd |> Cmd.map(pMMsg));
+    | None => (model, Cmd.none)
+    };
 
 let renderSub = (model, pushMsg) => {
   let (html, evts) = model |> view;

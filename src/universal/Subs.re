@@ -1,3 +1,5 @@
+open BlackTea;
+
 let ofStream = (key, streamCreator) => {
   // BlackTea.Sub.registration(key, enableCall);
   let enableCall: (VdomRe.applicationCallbacks('a), unit) => unit =
@@ -6,5 +8,19 @@ let ofStream = (key, streamCreator) => {
         streamCreator() |> Wonka.subscribe((. msg) => callbacks.enqueue(msg));
       streamSub.unsubscribe;
     };
-  BlackTea.Sub.registration(key, enableCall);
+  Sub.registration(key, enableCall);
+};
+
+let timeout = (key, msTime, tagger) => {
+  open VdomRe;
+  let enableCall = callbacks => {
+    let id =
+      Js.Global.setTimeout(
+        // () => callbacks.enqueue(tagger(Js.Date.now())),
+        () => callbacks.enqueue(tagger),
+        msTime,
+      );
+    () => Js.Global.clearTimeout(id);
+  };
+  Sub.registration(key, enableCall);
 };
