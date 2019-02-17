@@ -65,6 +65,7 @@ let sub = (key, peerId, ~initSignal=?, role, rtcMsgToMsg) => {
   Subs.ofStream(
     key ++ "/" ++ stringOfRole(role) ++ "/" ++ (peerId |> PeerId.toString), () =>
     rtcSource(~initSignal, role)
+    |> StreamOps.retryWhen(Retry.getTimeoutMs)
     |> Wonka.map((. s) => rtcMsgToMsg(peerId, s))
   );
 };

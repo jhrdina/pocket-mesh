@@ -5,7 +5,7 @@ type peerStatus =
   | Offline;
 
 type t = {
-  allPeersIds: PeerId.Set.t,
+  lastAllPeersIds: PeerId.Set.t,
   onlinePeers: PeerId.Set.t,
 };
 
@@ -54,9 +54,16 @@ let getOnlinePeers = t => t.onlinePeers;
 
 let init = () =>
   // TODO: Derive peers immediately
-  {allPeersIds: PeerId.Set.empty, onlinePeers: PeerId.Set.empty};
+  {lastAllPeersIds: PeerId.Set.empty, onlinePeers: PeerId.Set.empty};
 
-let update = (~thisPeer: ThisPeer.t, ~peers, msg, model) => {
+let update =
+    (
+      ~thisPeer: ThisPeer.t,
+      ~peers,
+      ~signalServer: SignalServerState.t,
+      msg,
+      model,
+    ) => {
   let (model, cmd) =
     switch (msg) {
     | SignalServerState.GotMessage(Unsigned(Ok(onlinePeers))) => (
@@ -74,19 +81,43 @@ let update = (~thisPeer: ThisPeer.t, ~peers, msg, model) => {
     | _ => (model, Cmds.none)
     };
 
-  let newAllPeersIds = peers |> Peers.getAllIds;
+  // Derive
+  //   peers i got info they are online
+  //   INTERSECTION
+  //   peers
+
+  let allPeersIds = peers |> Peers.getAllIds;
   let (model, derivedCmd) =
-    if (newAllPeersIds != model.allPeersIds) {
-      (
-        {...model, allPeersIds: newAllPeersIds},
+    switch (signalServer.connectionState) {
+    | Connecting => (
+        {lastAllPeersIds: allPeersIds, onlinePeers: PeerId.Set.empty},
+        Cmd.none,
+      )
+    | Connected(_) when allPeersIds != model.lastAllPeersIds => (
+        {
+          onlinePeers:
+            PeerId.Set.symmetric_diff(
+              model.lastAllPeersIds,
+              allPeersIds,
+              ~f=
+                (diffRes, onlinePeers) =>
+                  switch (diffRes) {
+                  // Remove peer from online peers if it was removed from friends
+                  | Left(peerId) => onlinePeers |> PeerId.Set.remove(peerId)
+                  | Right(_) => onlinePeers
+                  },
+              ~acc=model.onlinePeers,
+            ),
+          lastAllPeersIds: allPeersIds,
+        },
         Cmd.msg(
           SignalVerifier.SignAndSendMsg(
-            PeerToServer(thisPeer.id, ChangeWatchedPeers(newAllPeersIds)),
+            PeerToServer(thisPeer.id, ChangeWatchedPeers(allPeersIds)),
           ),
         ),
-      );
-    } else {
-      (model, Cmd.none);
+      )
+    | Connected(_) => (model, Cmd.none)
     };
+
   (model, Cmd.batch([cmd, derivedCmd]));
 };

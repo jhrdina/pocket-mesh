@@ -49,7 +49,11 @@ let init = (~dbState: DbState.t, ~signalServer, ~initConfig) => {
       ~peersStatuses,
     );
   let peersConnections =
-    PeersConnections.init(~peersStatuses, ~peersGroups=dbState.peersGroups);
+    PeersConnections.init(
+      ~peers=dbState.peers,
+      ~peersStatuses,
+      ~peersGroups=dbState.peersGroups,
+    );
   (
     {
       initConfig,
@@ -87,6 +91,7 @@ let update = (dbState: DbState.t, msg, model) => {
     PeersStatuses.update(
       ~thisPeer=dbState.thisPeer,
       ~peers=dbState.peers,
+      ~signalServer,
       msg,
       model.peersStatuses,
     );
@@ -107,6 +112,7 @@ let update = (dbState: DbState.t, msg, model) => {
     );
   let (peersConnections, peersConnectionsCmd) =
     PeersConnections.update(
+      ~peers=dbState.peers,
       ~thisPeer=dbState.thisPeer,
       ~peersGroups=dbState.peersGroups,
       ~peersStatuses,

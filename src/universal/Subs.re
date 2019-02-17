@@ -24,3 +24,13 @@ let timeout = (key, msTime, tagger) => {
   };
   Sub.registration(key, enableCall);
 };
+
+let interval = (~key, interval, tagger) => {
+  open VdomRe;
+  let enableCall = callbacks => {
+    let id =
+      Js.Global.setInterval(() => callbacks.enqueue(tagger), interval);
+    () => Js.Global.clearInterval(id);
+  };
+  Sub.registration(key, enableCall);
+};
