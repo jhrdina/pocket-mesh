@@ -45,7 +45,7 @@ let verifyKeyMessageCmd =
   switch (p2pMsg) {
   | KeyResponse(srcKeyStr)
   | KeyRequest(srcKeyStr) =>
-    Cmds.wrapPromise(
+    Cmds.wrapResPromise(
       () => {
         let srcJwk = srcKeyStr |> SimpleCrypto.stringToJwk;
         srcJwk
@@ -76,8 +76,7 @@ let verifyKeyMessageCmd =
                 )
            );
       },
-      srcKey => resultToMsg(src, Result.Ok(srcKey)),
-      exn => resultToMsg(src, Error(exn)),
+      resultToMsg(src),
     )
   | Offer(_)
   | Answer(_) =>
