@@ -15,43 +15,124 @@ let offerChangesDebounced = groupsIds =>
     3000,
   );
 
+let connectionStarted = (peerId, rtcConn, peersGroups) => {
+  let groupsStatuses =
+    PeersGroups.getGroupsStatusesForPeer(peerId, peersGroups);
+  let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
+  rtcConn->RTCCmds.send(
+    String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+  );
+};
+
+let receivedChangesOffer =
+    (peerId, rtcConn, remoteGroupsStatuses, peersGroups) => {
+  let localGroupsStatuses = getGroupsStatusesForPeer(peerId, peersGroups);
+  let maybeRequests =
+    P2PMsg.maybeCreateRequestsForMissingChanges(
+      remoteGroupsStatuses,
+      localGroupsStatuses,
+    );
+  switch (maybeRequests) {
+  | Some(requests) =>
+    let msgForPeer = P2PMsg.ChangesRequest(requests);
+    RTCCmds.send(
+      rtcConn,
+      String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+    );
+  | None => Cmds.none
+  };
+};
+
+let maybeGetGroupsChangesForRequest =
+    (peerId, groupsChangesRequest, peersGroups) => {
+  let groupsChanges =
+    /* TODO: THINK: Isn't there some better meta-operation? */
+    PeerGroup.Id.Map.fold(
+      (groupId, groupChangesRequest, groupsChanges) =>
+        peersGroups
+        |> findOpt(groupId)
+        |?> P2PMsg.maybeGetGroupChangesForRequest(
+              peerId,
+              groupChangesRequest,
+            )
+        |?>> (
+          groupChanges =>
+            groupsChanges |> PeerGroup.Id.Map.add(groupId, groupChanges)
+        )
+        |? groupsChanges,
+      groupsChangesRequest,
+      PeerGroup.Id.Map.empty,
+    );
+  groupsChanges |> PeerGroup.Id.Map.is_empty ? None : Some(groupsChanges);
+};
+
+let receivedChangesRequest = (peerId, rtcConn, requestedChanges, peersGroups) => {
+  let maybeChanges =
+    maybeGetGroupsChangesForRequest(peerId, requestedChanges, peersGroups);
+  switch (maybeChanges) {
+  | Some(changes) =>
+    let msgForPeer: P2PMsg.t = Changes(changes);
+    RTCCmds.send(
+      rtcConn,
+      String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+    );
+  | None => Cmds.none
+  };
+};
+
+let receivedChanges = (peerId, groupsChanges, peersGroups) =>
+  PeerGroup.Id.Map.fold(
+    (groupId, groupChanges, newPeerGroups) =>
+      peersGroups
+      |> findOpt(groupId)
+      |?> P2PMsg.maybeGetPeerGroupWithAppliedChanges(peerId, groupChanges)
+      |?>> (
+        peerGroup => newPeerGroups |> updateGroup(groupId, _ => peerGroup)
+      )
+      |? newPeerGroups,
+    groupsChanges,
+    peersGroups,
+  );
+
 let receivedMessageFromPeer =
-    (peerId, rtcConn, db, message: P2PMsg.t, peerGroups) =>
+    (peerId, rtcConn, db, message: P2PMsg.t, peersGroups) =>
   switch (message) {
   | ChangesOffer(changesOffer) => (
-      peerGroups,
-      receivedChangesOffer(peerId, rtcConn, changesOffer, peerGroups),
+      peersGroups,
+      receivedChangesOffer(peerId, rtcConn, changesOffer, peersGroups),
     )
   | ChangesRequest(requestedChanges) => (
-      peerGroups,
-      receivedChangesRequest(peerId, rtcConn, requestedChanges, peerGroups),
+      peersGroups,
+      receivedChangesRequest(peerId, rtcConn, requestedChanges, peersGroups),
     )
   | Changes(groupsChanges) =>
-    let newPeerGroups = receivedChanges(peerId, groupsChanges, peerGroups);
+    let newPeerGroups = receivedChanges(peerId, groupsChanges, peersGroups);
     (newPeerGroups, saveToDb(db, newPeerGroups));
   };
 
 let receivedStringMessageFromPeer =
-    (peerId, rtcConn, db, stringMessage, peerGroups) =>
+    (peerId, rtcConn, db, stringMessage, peersGroups) =>
   stringMessage
   |> JsonUtils.parseOpt
   |?> P2PMsg.decode
-  |?>> (msg => receivedMessageFromPeer(peerId, rtcConn, db, msg, peerGroups))
+  |?>> (
+    msg => receivedMessageFromPeer(peerId, rtcConn, db, msg, peersGroups)
+  )
   |? (
-    peerGroups,
+    peersGroups,
     Cmds.log(
       "Failed to parse message from peer " ++ (peerId |> PeerId.toString),
     ),
   );
 
-let update = (peerGroups, model, msg) =>
+let update = (peersGroups, model, msg) =>
   switch (msg) {
   | PeersConnections.RtcConnected(rtcConn, peerId) => (
       model,
-      connectionStarted(peerId, rtcConn, peerGroups),
+      connectionStarted(peerId, rtcConn, peersGroups),
     )
   | PeersConnections.RtcGotData(rtcConn, peerId, String(data)) =>
-    receivedStringMessageFromPeer(peerId, rtcConn, db, data, peerGroups)
+    receivedStringMessageFromPeer(peerId, rtcConn, db, data, peersGroups)
 
   | PeerGroups.PeersGroupsChanged(groupsIds) => (
       model,
@@ -61,7 +142,7 @@ let update = (peerGroups, model, msg) =>
     PeersConnections.foldActiveConnections(
       (cmdList, peerId, rtcConn) => {
         let groupsStatuses =
-          PeerGroups.getGroupsStatusesForPeer(peerId, model.peerGroups);
+          PeerGroups.getGroupsStatusesForPeer(peerId, model.peersGroups);
         let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
         [
           rtcConn->RTCCmds.send(
