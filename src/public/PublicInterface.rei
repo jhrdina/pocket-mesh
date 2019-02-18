@@ -103,7 +103,7 @@ module ThisPeer: {
   let id: t => Peer.Id.t;
 };
 
-module SignalServer: {
+module SignalChannel: {
   type t;
   type connectionState =
     | Connecting
@@ -148,7 +148,7 @@ module DbState: {
 
 module RuntimeState: {
   type t;
-  let signalServer: t => SignalServer.t;
+  let signalChannel: t => SignalChannel.t;
   let peersStatuses: t => PeersStatuses.t;
   let peersConnections: t => PeersConnections.t;
 };
@@ -156,7 +156,7 @@ module RuntimeState: {
 module State: {
   type t;
   type taggedT =
-    | WaitingForDbAndIdentity(SignalServer.t)
+    | WaitingForDbAndIdentity(SignalChannel.t)
     | HasIdentity(DbState.t, RuntimeState.t);
 
   let classify: t => taggedT;

@@ -62,8 +62,8 @@ module PeersGroups = PeersGroups;
 
 module ThisPeer = ThisPeer;
 
-module SignalServer = {
-  type t = SignalServerState.t;
+module SignalChannel = {
+  type t = SignalChannel.t;
   type connectionState =
     | Connecting
     | Connected;
@@ -86,7 +86,7 @@ module DbState = {
 
 module RuntimeState = {
   type t = RuntimeState.t;
-  let signalServer = t => t.RuntimeState.signalServer;
+  let signalChannel = t => t.RuntimeState.signalChannel;
   let peersConnections = t => t.RuntimeState.peersConnections;
   let peersStatuses = t => t.RuntimeState.peersStatuses;
 };
@@ -94,13 +94,13 @@ module RuntimeState = {
 module State = {
   type t = Store.t;
   type taggedT =
-    | WaitingForDbAndIdentity(SignalServer.t)
+    | WaitingForDbAndIdentity(SignalChannel.t)
     | HasIdentity(DbState.t, RuntimeState.t);
 
   let classify =
     fun
-    | Store.WaitingForDbAndIdentity(_, _, signalServer) =>
-      WaitingForDbAndIdentity(signalServer)
+    | Store.WaitingForDbAndIdentity(_, _, signalChannel) =>
+      WaitingForDbAndIdentity(signalChannel)
     | HasIdentity(_, dbState, runtimeState) =>
       HasIdentity(dbState, runtimeState);
 };
@@ -110,7 +110,7 @@ module Msg = {
   let addPeer = PocketmeshPeer.Peers.addPeer;
   let updatePeer = PocketmeshPeer.Peers.updateAlias;
   let removePeer = PocketmeshPeer.Peers.removePeer;
-  let updateSignalServerUrl = SignalServerState.updateUrl;
+  let updateSignalServerUrl = PocketmeshPeer.SignalChannel.updateUrl;
 
   let removePeerFromGroup = PocketmeshPeer.PeersGroups.removePeerFromGroupMsg;
   let updatePeerPermissions = PocketmeshPeer.PeersGroups.updatePeerPermissionsMsg;

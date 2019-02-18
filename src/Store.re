@@ -6,19 +6,15 @@ open BlackTea;
 /* TYPES */
 
 type t =
-  | WaitingForDbAndIdentity(
-      Db.t,
-      RuntimeState.InitConfig.t,
-      SignalServerState.t,
-    )
+  | WaitingForDbAndIdentity(Db.t, RuntimeState.InitConfig.t, SignalChannel.t)
   | HasIdentity(Db.t, DbState.t, RuntimeState.t);
 
 /* UPDATE */
 
 let init = (initConfig: RuntimeState.InitConfig.t) => {
   let (db, dbCmd) = Db.init();
-  let signalServer = SignalServerState.init(initConfig.signalServerUrl);
-  (WaitingForDbAndIdentity(db, initConfig, signalServer), dbCmd);
+  let signalChannel = SignalChannel.init(initConfig.signalServerUrl);
+  (WaitingForDbAndIdentity(db, initConfig, signalChannel), dbCmd);
 };
 
 let update = (model, msg) => {
@@ -26,10 +22,10 @@ let update = (model, msg) => {
   switch (msg, model) {
   | (
       Db.InitializationComplete(dbState),
-      WaitingForDbAndIdentity(db, initConfig, signalServer),
+      WaitingForDbAndIdentity(db, initConfig, signalChannel),
     ) =>
     let (runtimeState, runtimeStateCmd) =
-      RuntimeState.init(~initConfig, ~dbState, ~signalServer);
+      RuntimeState.init(~initConfig, ~dbState, ~signalChannel);
     (HasIdentity(db, dbState, runtimeState), runtimeStateCmd);
 
   // | (Db.Changed(newDbState), HasIdentity(db, dbState, runtimeState)) =>
@@ -51,7 +47,7 @@ let update = (model, msg) => {
       Cmd.batch([dbStateCmd, runtimeStateCmd, dbCmd]),
     );
 
-  | (msg, WaitingForDbAndIdentity(db, initConfig, signalServer)) =>
+  | (msg, WaitingForDbAndIdentity(db, initConfig, signalChannel)) =>
     let (db, dbCmd) =
       Db.update(
         ~dbState=None,
@@ -59,11 +55,11 @@ let update = (model, msg) => {
         msg,
         db,
       );
-    let (signalServer, signalServerCmd) =
-      SignalServerState.update(signalServer, msg);
+    let (signalChannel, signalChannelCmd) =
+      SignalChannel.update(signalChannel, msg);
     (
-      WaitingForDbAndIdentity(db, initConfig, signalServer),
-      Cmd.batch([dbCmd, signalServerCmd]),
+      WaitingForDbAndIdentity(db, initConfig, signalChannel),
+      Cmd.batch([dbCmd, signalChannelCmd]),
     );
   };
 };
@@ -75,8 +71,8 @@ let makeGlobal = (name, value) => makeGlobal(Webapi.Dom.window, name, value);
 let subscriptions = model => {
   makeGlobal("model", model);
   switch (model) {
-  | WaitingForDbAndIdentity(_, _, signalServer) =>
-    SignalServerState.subscriptions(signalServer)
+  | WaitingForDbAndIdentity(_, _, signalChannel) =>
+    SignalChannel.subscriptions(signalChannel)
   | HasIdentity(_db, _dbState, runtimeState) =>
     RuntimeState.subscriptions(runtimeState)
   };

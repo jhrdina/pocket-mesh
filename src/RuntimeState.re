@@ -27,7 +27,7 @@ module InitConfig = {
 
 type t = {
   initConfig: InitConfig.t,
-  signalServer: SignalServerState.t,
+  signalChannel: SignalChannel.t,
   signalChannelAuth: SignalChannelAuth.t,
   peersConnections: PeersConnections.t,
   // peersGroupsSynchronizer,
@@ -37,7 +37,7 @@ type t = {
   thisPeerKeyExporter: ThisPeerKeyExporter.t,
 };
 
-let init = (~dbState: DbState.t, ~signalServer, ~initConfig) => {
+let init = (~dbState: DbState.t, ~signalChannel, ~initConfig) => {
   let thisPeerKeyExporter =
     ThisPeerKeyExporter.init(~thisPeer=dbState.thisPeer);
   let peersStatuses = PeersStatuses.init();
@@ -57,7 +57,7 @@ let init = (~dbState: DbState.t, ~signalServer, ~initConfig) => {
   (
     {
       initConfig,
-      signalServer,
+      signalChannel,
       signalChannelAuth: SignalChannelAuth.init(),
       peersConnections,
       // peersGroupsSynchronizer,
@@ -71,12 +71,12 @@ let init = (~dbState: DbState.t, ~signalServer, ~initConfig) => {
 };
 
 let update = (dbState: DbState.t, msg, model) => {
-  let (signalServer, signalServerCmd) =
-    SignalServerState.update(model.signalServer, msg);
+  let (signalChannel, signalChannelCmd) =
+    SignalChannel.update(model.signalChannel, msg);
   let (signalChannelAuth, signalChannelAuthCmd) =
     SignalChannelAuth.update(
       ~peers=dbState.peers,
-      ~signalChannel=signalServer,
+      ~signalChannel,
       ~thisPeer=dbState.thisPeer,
       msg,
       model.signalChannelAuth,
@@ -91,7 +91,7 @@ let update = (dbState: DbState.t, msg, model) => {
     PeersStatuses.update(
       ~thisPeer=dbState.thisPeer,
       ~peers=dbState.peers,
-      ~signalServer,
+      ~signalChannel,
       msg,
       model.peersStatuses,
     );
@@ -134,7 +134,7 @@ let update = (dbState: DbState.t, msg, model) => {
   (
     {
       initConfig: model.initConfig,
-      signalServer,
+      signalChannel,
       signalChannelAuth,
       peersConnections,
       // peersGroupsSynchronizer,
@@ -144,7 +144,7 @@ let update = (dbState: DbState.t, msg, model) => {
       thisPeerKeyExporter,
     },
     Cmd.batch([
-      signalServerCmd,
+      signalChannelCmd,
       signalChannelAuthCmd,
       signalVerifierCmd,
       peersStatusesCmd,
@@ -159,7 +159,7 @@ let update = (dbState: DbState.t, msg, model) => {
 
 let subscriptions = model =>
   Sub.batch([
-    SignalServerState.subscriptions(model.signalServer),
+    SignalChannel.subscriptions(model.signalChannel),
     ThisPeerKeyExporter.subscriptions(model.thisPeerKeyExporter),
     PeersConnections.subscriptions(model.peersConnections),
   ]);

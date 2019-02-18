@@ -2,7 +2,7 @@ open BlackTea;
 open Rex_json.Json.Infix;
 
 /**
-  Signalling server connection state representation, its changes and related
+  Signalling channel connection state representation, its changes and related
   global messages handling.
  */
 
@@ -72,7 +72,7 @@ let update = (model, msg) => {
 
 let subscriptions = model =>
   WebSocketsSub.sub(
-    "SignalServer/connection/" ++ model.url,
+    "SignalChannel/connection/" ++ model.url,
     model.url,
     Retry.getTimeoutMs,
     webSocketsMsg,

@@ -59,10 +59,10 @@ let update = (~thisPeer: ThisPeer.t, ~peers: Peers.t, msg) =>
       completedSignMessage,
     )
   | CompletedSignMessage(Ok(signedMsg)) =>
-    Cmd.msg(SignalServerState.Send(signedMsg))
+    Cmd.msg(SignalChannel.Send(signedMsg))
   | CompletedSignMessage(Error(_e)) => Cmds.log("Could not sign message")
 
-  | SignalServerState.GotMessage(
+  | SignalChannel.GotMessage(
       Signed(signature, PeerToPeer(src, _tg, Offer(_) | Answer(_)) as msg),
     ) =>
     // KeyRequest and KeyResponse are verified directly in PeersKeysFetcherAndSender

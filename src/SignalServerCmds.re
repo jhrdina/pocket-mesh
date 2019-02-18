@@ -44,7 +44,7 @@ let connect =
       thisPeer: ThisPeer.t,
       watchedPeers,
       openedToMsg,
-      signalServerMsgToMsg,
+      signalChannelMsgToMsg,
       errorMsg,
     ) =>
   Cmd.call(callbacks => {
@@ -69,7 +69,7 @@ let connect =
         switch (
           event->MessageEvent.data |> JsonUtils.parseOpt |?>> Message.decode
         ) {
-        | Some(Ok(msg)) => callbacks^.enqueue(signalServerMsgToMsg(msg))
+        | Some(Ok(msg)) => callbacks^.enqueue(signalChannelMsgToMsg(msg))
         | Some(Error(msg)) => Js.log(msg)
         | None => Js.log("Received message that is not valid JSON. Skipping.")
         }

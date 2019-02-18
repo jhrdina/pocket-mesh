@@ -454,7 +454,7 @@ let p2pView = (m: PM.DbState.t, r: PM.RuntimeState.t) => {
 
   let ssState =
     switch (
-      r |> PM.RuntimeState.signalServer |> PM.SignalServer.connectionState
+      r |> PM.RuntimeState.signalChannel |> PM.SignalChannel.connectionState
     ) {
     | Connecting => "connecting"
     | Connected => "CONNECTED"
@@ -471,7 +471,7 @@ let p2pView = (m: PM.DbState.t, r: PM.RuntimeState.t) => {
         [
           vKeyVal(
             "URL",
-            r |> PM.RuntimeState.signalServer |> PM.SignalServer.url,
+            r |> PM.RuntimeState.signalChannel |> PM.SignalChannel.url,
           ),
           vKeyVal("Connection state", ssState),
         ],
@@ -484,7 +484,7 @@ let p2pView = (m: PM.DbState.t, r: PM.RuntimeState.t) => {
 
 let view = (m: model) =>
   switch (m.p2p |> PM.State.classify) {
-  | WaitingForDbAndIdentity(_signalServer) =>
+  | WaitingForDbAndIdentity(_signalChannel) =>
     hc(div, ["Waiting for IDB and identity..." |> txt])
   | HasIdentity(dbState, runtimeState) => p2pView(dbState, runtimeState)
   };

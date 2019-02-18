@@ -211,7 +211,7 @@ let update =
   let (model, verifCmd) =
     switch (msg) {
     /* Verify public key response */
-    | SignalServerState.GotMessage(
+    | SignalChannel.GotMessage(
         Signed(
           signature,
           PeerToPeer(src, _tg, KeyResponse(_srcKeyStr) as p2pMsg),
@@ -245,7 +245,7 @@ let update =
 
     /* Verify public key request */
 
-    | SignalServerState.GotMessage(
+    | SignalChannel.GotMessage(
         Signed(signature, PeerToPeer(src, _tg, KeyRequest(_) as p2pMsg)),
       ) => (
         model,

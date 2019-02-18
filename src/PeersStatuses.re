@@ -60,18 +60,18 @@ let update =
     (
       ~thisPeer: ThisPeer.t,
       ~peers,
-      ~signalServer: SignalServerState.t,
+      ~signalChannel: SignalChannel.t,
       msg,
       model,
     ) => {
   let (model, cmd) =
     switch (msg) {
-    | SignalServerState.GotMessage(Unsigned(Ok(onlinePeers))) => (
+    | SignalChannel.GotMessage(Unsigned(Ok(onlinePeers))) => (
         {...model, onlinePeers},
         Cmds.none,
       )
 
-    | SignalServerState.GotMessage(Unsigned(WatchedPeersChanged(changes))) => (
+    | SignalChannel.GotMessage(Unsigned(WatchedPeersChanged(changes))) => (
         {
           ...model,
           onlinePeers: applyPeerStatusChanges(model.onlinePeers, changes),
@@ -88,7 +88,7 @@ let update =
 
   let allPeersIds = peers |> Peers.getAllIds;
   let (model, derivedCmd) =
-    switch (signalServer.connectionState) {
+    switch (signalChannel.connectionState) {
     | Connecting => (
         {lastAllPeersIds: allPeersIds, onlinePeers: PeerId.Set.empty},
         Cmd.none,

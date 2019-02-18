@@ -1,4 +1,3 @@
-open Rex_json.Json.Infix;
 open BlackTea;
 
 /* TYPES */
@@ -33,7 +32,7 @@ let signAndSendMsg = (msg: Message.signedMsg, privateKey, t: conn) =>
   signMsg(msg, privateKey)
   |> Js.Promise.then_(signedMsg => send(signedMsg, t) |> Js.Promise.resolve)
   |> Js.Promise.catch(e => {
-       Js.log2("[SignalServerCmds] Cannot sign and send message:", e);
+       Js.log2("[WebSocketsSub] Cannot sign and send message:", e);
        Js.Promise.reject(SignatureError);
      });
 

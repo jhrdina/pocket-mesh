@@ -8,7 +8,7 @@ type t =
 let applyMsg = (msg, model) => {
   switch (msg, model) {
   | (
-      SignalServerState.GotMessage(Unsigned(Ok(onlinePeers))),
+      SignalChannel.GotMessage(Unsigned(Ok(onlinePeers))),
       SigningIn | SignedIn,
     ) =>
     SignedIn
@@ -21,7 +21,7 @@ let init = () => WaitingForSignalChannel;
 let update =
     (
       ~peers: Peers.t,
-      ~signalChannel: SignalServerState.t,
+      ~signalChannel: SignalChannel.t,
       ~thisPeer: ThisPeer.t,
       msg,
       model,
