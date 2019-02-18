@@ -78,9 +78,9 @@ let setThisPeer = (thisPeer: ThisPeer.t, resultToMsg, t) =>
 let setPeers = (peers: Peers.t, resultToMsg, t) =>
   Cmds.wrapPromise(() => IDBPromise.setKey(peersKey, peers, t), resultToMsg);
 
-let setPeerGroups = (peerGroups: Json.t, resultToMsg, t) =>
+let setPeersGroups = (peersGroups: Json.t, resultToMsg, t) =>
   Cmds.wrapPromise(
-    () => IDBPromise.setKey(peersGroupsKey, peerGroups, t),
+    () => IDBPromise.setKey(peersGroupsKey, peersGroups, t),
     resultToMsg,
   );
 

@@ -4,8 +4,8 @@ open BlackTea;
 
 /**
   - Container for storing and querying groups of peers
-  - Controller that handles PeerGroups-related global messages:
-    - handles PeerGroups changes
+  - Controller that handles PeersGroups-related global messages:
+    - handles PeersGroups changes
     - logic that negotiates/applies changes with different peers
     - ensures changes are saved to IDB
 
@@ -76,12 +76,12 @@ let addPeerToGroup = (peerId, groupId, t) =>
 
 let removePeerFromAllGroups = (peerId, t) =>
   fold(
-    (newPeerGroups, group) =>
+    (newPeersGroups, group) =>
       if (group |> PeerGroup.containsPeer(peerId)) {
         let newGroup = group |> PeerGroup.removePeer(peerId);
-        newPeerGroups |> addPeerGroup(newGroup);
+        newPeersGroups |> addPeerGroup(newGroup);
       } else {
-        newPeerGroups;
+        newPeersGroups;
       },
     t,
     t,
@@ -103,7 +103,7 @@ let findOpt = (groupId, t) =>
   | exception Not_found => None
   };
 
-let getGroupsStatusesForPeer = (peerId, peerGroups) =>
+let getGroupsStatusesForPeer = (peerId, peersGroups) =>
   fold(
     (groupStatuses, group) =>
       switch (P2PMsg.getGroupStatusForPeer(peerId, group)) {
@@ -112,15 +112,15 @@ let getGroupsStatusesForPeer = (peerId, peerGroups) =>
       | None => groupStatuses
       },
     PeerGroup.Id.Map.empty,
-    peerGroups |> getGroupsForPeer(peerId),
+    peersGroups |> getGroupsForPeer(peerId),
   );
 
 /* SERIALIZATION */
 
-let encode = peerGroups =>
+let encode = peersGroups =>
   Json.(
     Array(
-      peerGroups
+      peersGroups
       |> fold(
            (groupsList, peerGroup) =>
              [peerGroup |> PeerGroup.encode, ...groupsList],
@@ -134,13 +134,13 @@ let decode = json =>
     json
     |> array
     |?> List.fold_left(
-          (newPeerGroups, jsonItem) =>
-            newPeerGroups
+          (newPeersGroups, jsonItem) =>
+            newPeersGroups
             |?> (
-              newPeerGroups =>
+              newPeersGroups =>
                 jsonItem
                 |> PeerGroup.decode
-                |?>> (peerGroup => newPeerGroups |> addPeerGroup(peerGroup))
+                |?>> (peerGroup => newPeersGroups |> addPeerGroup(peerGroup))
             ),
           Some(empty),
         )
@@ -148,7 +148,7 @@ let decode = json =>
 
 /* UPDATE */
 
-let initDefaultPeerGroups = (thisPeerId, initContent) =>
+let initDefaultPeersGroups = (thisPeerId, initContent) =>
   empty
   |> addPeerGroup(
        /* TODO: Really a fixed ID? */
@@ -160,7 +160,7 @@ let initDefaultPeerGroups = (thisPeerId, initContent) =>
      );
 
 let init = (~thisPeer: ThisPeer.t, ~initContent) =>
-  initDefaultPeerGroups(thisPeer.id, initContent);
+  initDefaultPeersGroups(thisPeer.id, initContent);
 
 let update = (~thisPeer: ThisPeer.t, msg, model) =>
   switch (msg) {
@@ -221,21 +221,21 @@ let update = (~thisPeer: ThisPeer.t, msg, model) =>
     | None => (model, Cmds.none)
     }
   | RemovePeerFromGroup(peerId, groupId) =>
-    let newPeerGroups =
+    let newPeersGroups =
       model
       |> updateGroup(groupId, group => group |> PeerGroup.removePeer(peerId));
-    (newPeerGroups, Cmd.none);
+    (newPeersGroups, Cmd.none);
   | Peers.RemovePeer(peerId) =>
     let groups = model |> getGroupsForPeer(peerId);
-    let newPeerGroups =
+    let newPeersGroups =
       groups
       |> fold(
-           (newPeerGroups, group) =>
-             newPeerGroups
+           (newPeersGroups, group) =>
+             newPeersGroups
              |> addPeerGroup(group |> PeerGroup.removePeer(peerId)),
            model,
          );
-    /* let newPeerGroups = model |> removePeerFromAllGroups(peerId); */
-    (newPeerGroups, Cmd.none);
+    /* let newPeersGroups = model |> removePeerFromAllGroups(peerId); */
+    (newPeersGroups, Cmd.none);
   | _ => (model, Cmd.none)
   };

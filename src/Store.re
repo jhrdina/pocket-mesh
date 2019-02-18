@@ -108,7 +108,7 @@ let create = () => {
   //   app.pushMsg(
   //     AddPeerToGroup(
   //       id,
-  //       PeerGroups.defaultGroupId,
+  //       PeersGroups.defaultGroupId,
   //       PeerGroup.ReadContentAndMembers,
   //     ),
   //   )
