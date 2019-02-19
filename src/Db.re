@@ -12,19 +12,25 @@ type openedDb = IDBPromise.t;
 
 type allData = {
   thisPeer: option(ThisPeer.t),
-  peersGroups: option(Json.t),
+  peersGroups: option(PeersGroups.t),
   peers: option(Peers.t),
 };
+
+type loaded =
+  | WithoutDb
+  // db, lastDbStateForDiffs
+  | WithDb(openedDb, allData);
 
 type t =
   | Opening
   | LoadingData(openedDb)
-  | GeneratingIdentity(option(openedDb), allData)
-  | Loaded(option(openedDb))
+  | GeneratingIdentity(loaded, allData)
+  | Loaded(loaded)
   | FatalError(exn);
 
 exception CannotOpenDatabase;
 exception CannotCreateIdentity;
+exception CannotSave(list(exn));
 
 /* MESSAGES */
 
@@ -33,6 +39,7 @@ type Msgs.t +=
   | CompletedOpenDb(Result.t(openedDb, exn))
   | CompletedLoadDataFromDb(Result.t(allData, exn))
   | CompletedKeyPairGeneration(Result.t(SimpleCrypto.keyPair, exn))
+  | CompletedSaveData(DbState.t, Result.t(unit, exn))
   // Output
   | InitializationComplete(DbState.t);
 
@@ -65,97 +72,177 @@ let getAll = db =>
       db |> IDBPromise.getKey(peersKey),
     ))
     |> Js.Promise.then_(((thisPeer, peersGroups, peers)) =>
-         Js.Promise.resolve({thisPeer, peersGroups, peers})
+         Js.Promise.resolve({
+           thisPeer,
+           peersGroups: peersGroups |?> PeersGroups.decode,
+           peers,
+         })
        )
   );
 
-let setThisPeer = (thisPeer: ThisPeer.t, resultToMsg, t) =>
-  Cmds.wrapPromise(
-    () => IDBPromise.setKey(thisPeerKey, thisPeer, t),
-    resultToMsg,
-  );
+let setThisPeer = (thisPeer: ThisPeer.t, db) =>
+  IDBPromise.setKey(thisPeerKey, thisPeer, db);
 
-let setPeers = (peers: Peers.t, resultToMsg, t) =>
-  Cmds.wrapPromise(() => IDBPromise.setKey(peersKey, peers, t), resultToMsg);
+let setPeers = (peers: Peers.t, db) =>
+  IDBPromise.setKey(peersKey, peers, db);
 
-let setPeersGroups = (peersGroups: Json.t, resultToMsg, t) =>
-  Cmds.wrapPromise(
-    () => IDBPromise.setKey(peersGroupsKey, peersGroups, t),
-    resultToMsg,
+let setPeersGroups = (peersGroups: PeersGroups.t, db) =>
+  IDBPromise.setKey(peersGroupsKey, peersGroups |> PeersGroups.encode, db);
+
+let someEqual = (aOpt, b) =>
+  switch (aOpt) {
+  | Some(a) => a === b
+  | None => false
+  };
+
+let writeRequestToPromise = (request, setter, db) =>
+  switch (request) {
+  | Some(data) => setter(data, db)
+  | None => JsUtils.emptyPromise()
+  };
+
+let saveDbStateIfChanged = (dbState: DbState.t, lastAllData, db) => {
+  let writeRequests = {
+    thisPeer:
+      !someEqual(lastAllData.thisPeer, dbState.thisPeer) ?
+        Some(dbState.thisPeer) : None,
+    peersGroups:
+      !someEqual(lastAllData.peersGroups, dbState.peersGroups) ?
+        Some(dbState.peersGroups) : None,
+    peers:
+      !someEqual(lastAllData.peers, dbState.peers) ?
+        Some(dbState.peers) : None,
+  };
+
+  let writeNeeded =
+    writeRequests.thisPeer != None
+    || writeRequests.peersGroups != None
+    || writeRequests.peers != None;
+
+  // DEBUG
+  // if (writeNeeded) {
+  //   Js.log("[Db] Writing to DB");
+  // };
+
+  let writeCmd =
+    if (writeNeeded) {
+      Cmds.wrapResPromise(
+        () =>
+          Js.Promise.all([|
+            writeRequestToPromise(writeRequests.thisPeer, setThisPeer, db),
+            writeRequestToPromise(
+              writeRequests.peersGroups,
+              setPeersGroups,
+              db,
+            ),
+            writeRequestToPromise(writeRequests.peers, setPeers, db),
+          |]),
+        res => CompletedSaveData(dbState, res |> Result.mapOk(_ => ())),
+      );
+    } else {
+      Cmd.none;
+    };
+
+  (
+    {
+      thisPeer: Some(dbState.thisPeer),
+      peersGroups: Some(dbState.peersGroups),
+      peers: Some(dbState.peers),
+    },
+    writeCmd,
   );
+};
 
 let initStateWithIdentity = (~allData, ~thisPeer, ~initContent) => {
+  // We need to detect state when some data has to be repaired
   DbState.thisPeer,
   peersGroups:
-    PeersGroups.(
-      allData.peersGroups |?> decode |? init(~thisPeer, ~initContent)
-    ),
+    PeersGroups.(allData.peersGroups |? init(~thisPeer, ~initContent)),
   peers: allData.peers |? Peers.init(),
 };
 
 let allDataEmpty = {thisPeer: None, peersGroups: None, peers: None};
 
+let finishInit = (~db, ~allData, ~thisPeer, ~initContent) => {
+  let dbState = initStateWithIdentity(~allData, ~thisPeer, ~initContent);
+  (
+    Loaded(db),
+    Some(dbState),
+    Cmd.batch([
+      Cmds.log("My ID: " ++ (thisPeer.id |> PeerId.toString)),
+      Cmd.msg(InitializationComplete(dbState)),
+    ]),
+  );
+};
+
 // UPDATE
 
 let init = () => (Opening, open_(completedOpenDb));
 
-let update = (~dbState, ~initContent, msg, model) =>
-  switch (msg, model) {
-  | (CompletedOpenDb(Ok(db)), Opening) => (
-      LoadingData(db),
-      getAll(db, completedLoadDataFromDb),
-    )
-  | (CompletedOpenDb(Error(_exn)), Opening | LoadingData(_)) => (
-      GeneratingIdentity(None, allDataEmpty),
-      CryptoCmds.generateKeyPair(completedKeyPairGeneration),
-    )
-
-  | (CompletedLoadDataFromDb(Ok(allData)), LoadingData(db)) =>
-    switch (allData.thisPeer) {
-    | Some(thisPeer) => (
-        Loaded(Some(db)),
-        Cmd.msg(
-          InitializationComplete(
-            initStateWithIdentity(~allData, ~thisPeer, ~initContent),
-          ),
-        ),
+let update = (~dbState, ~initContent, msg, model) => {
+  let (model, dbState, cmd) =
+    switch (msg, model) {
+    | (CompletedOpenDb(Ok(db)), Opening) => (
+        LoadingData(db),
+        None,
+        getAll(db, completedLoadDataFromDb),
       )
-    | None => (
-        GeneratingIdentity(Some(db), allData),
+    | (CompletedOpenDb(Error(_exn)), Opening | LoadingData(_)) => (
+        GeneratingIdentity(WithoutDb, allDataEmpty),
+        None,
         CryptoCmds.generateKeyPair(completedKeyPairGeneration),
       )
-    }
 
-  | (CompletedLoadDataFromDb(Error(_exn)), LoadingData(_)) => (
-      GeneratingIdentity(None, allDataEmpty),
-      Cmds.batch([
-        Cmds.log("Error loading DB data"),
-        CryptoCmds.generateKeyPair(completedKeyPairGeneration),
-      ]),
-    )
-  | (
-      CompletedKeyPairGeneration(Ok(keyPair)),
-      GeneratingIdentity(mDb, allData),
-    ) =>
-    switch (thisPeerOfKeyPair(keyPair)) {
-    | Some(thisPeer) => (
-        Loaded(mDb),
-        // DEBUG
-        Cmd.batch([
-          Cmds.log("My ID: " ++ (thisPeer.id |> PeerId.toString)),
-          Cmd.msg(
-            InitializationComplete(
-              initStateWithIdentity(~allData, ~thisPeer, ~initContent),
-            ),
-          ),
+    | (CompletedLoadDataFromDb(Ok(allData)), LoadingData(db)) =>
+      switch (allData.thisPeer) {
+      | Some(thisPeer) =>
+        finishInit(
+          ~db=WithDb(db, allData),
+          ~allData,
+          ~thisPeer,
+          ~initContent,
+        )
+      | None => (
+          GeneratingIdentity(WithDb(db, allData), allData),
+          None,
+          CryptoCmds.generateKeyPair(completedKeyPairGeneration),
+        )
+      }
+
+    | (CompletedLoadDataFromDb(Error(_exn)), LoadingData(_)) => (
+        GeneratingIdentity(WithoutDb, allDataEmpty),
+        None,
+        Cmds.batch([
+          Cmds.log("Error loading DB data"),
+          CryptoCmds.generateKeyPair(completedKeyPairGeneration),
         ]),
       )
-    | None => (FatalError(CannotCreateIdentity), Cmds.none)
-    }
+    | (
+        CompletedKeyPairGeneration(Ok(keyPair)),
+        GeneratingIdentity(mDb, allData),
+      ) =>
+      switch (thisPeerOfKeyPair(keyPair)) {
+      | Some(thisPeer) =>
+        finishInit(~db=mDb, ~allData, ~thisPeer, ~initContent)
+      | None => (FatalError(CannotCreateIdentity), None, Cmds.none)
+      }
 
-  | (CompletedKeyPairGeneration(Error(exn)), LoadingData(_)) => (
-      FatalError(exn),
-      Cmds.none,
-    )
-  | (_, _) => (model, Cmd.none)
-  };
+    | (CompletedKeyPairGeneration(Error(exn)), LoadingData(_)) => (
+        FatalError(exn),
+        None,
+        Cmds.none,
+      )
+    | (_, _) => (model, dbState, Cmd.none)
+    };
+
+  let (model, derivedCmd) =
+    switch (model, dbState) {
+    | (Loaded(WithDb(db, lastAllData)), Some(dbState)) =>
+      let (allData, saveCmd) =
+        saveDbStateIfChanged(dbState, lastAllData, db);
+      (Loaded(WithDb(db, allData)), saveCmd);
+    | _ => (model, Cmd.none)
+    };
+
+  (model, Cmd.batch([cmd, derivedCmd]));
+};

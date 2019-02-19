@@ -8,3 +8,9 @@ let mapOk = (f, t) =>
   | Ok(x) => Ok(f(x))
   | Error(x) => Error(x)
   };
+
+let bind = (f, t) =>
+  switch (t) {
+  | Ok(x) => f(x)
+  | Error(x) => Error(x)
+  };

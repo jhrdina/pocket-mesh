@@ -51,9 +51,10 @@ let setKey = (id, value, t) =>
       Js.log(evt);
       reject(. TransactionAbort);
     });
-    transaction->Dom.IDBTransaction.setOnComplete(_ =>
-      resolve(. Js.undefined)
-    );
+    transaction->Dom.IDBTransaction.setOnComplete(_ => {
+      let s = ();
+      resolve(. s);
+    });
 
     transaction
     |> Dom.IDBTransaction.objectStore(t.objectStoreName)

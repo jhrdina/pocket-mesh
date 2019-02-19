@@ -6,3 +6,9 @@ let thenl = cb =>
 
 let promiseErrorToExn: Js.Promise.error => exn =
   x => Caml_js_exceptions.internalToOCamlException(Obj.magic(x));
+
+let emptyPromise = () =>
+  Js.Promise.make((~resolve, ~reject) => {
+    let n = ();
+    resolve(. n);
+  });
