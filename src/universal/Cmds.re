@@ -1,17 +1,7 @@
 open BlackTea;
 open Js.Promise;
-let wrapPromise = (runPromise, successToMsg, exnToMsg) =>
-  Cmd.call(callbacks =>
-    runPromise()
-    |> then_(value => callbacks^.enqueue(successToMsg(value)) |> resolve)
-    |> catch(error =>
-         callbacks^.enqueue(error |> JsUtils.promiseErrorToExn |> exnToMsg)
-         |> resolve
-       )
-    |> ignore
-  );
 
-let wrapResPromise = (runPromise, completedToMsg) =>
+let fromPromise = (runPromise, completedToMsg) =>
   Cmd.call(callbacks =>
     runPromise()
     |> then_(value =>
@@ -21,19 +11,6 @@ let wrapResPromise = (runPromise, completedToMsg) =>
          callbacks^.enqueue(
            completedToMsg(Error(error |> JsUtils.promiseErrorToExn)),
          )
-         |> resolve
-       )
-    |> ignore
-  );
-
-let wrapPairPromise = (runPromise, successToMsg, exnToMsg) =>
-  Cmd.call(callbacks =>
-    runPromise()
-    |> then_(((a, b)) =>
-         callbacks^.enqueue(successToMsg(a, b)) |> resolve
-       )
-    |> catch(error =>
-         callbacks^.enqueue(error |> JsUtils.promiseErrorToExn |> exnToMsg)
          |> resolve
        )
     |> ignore

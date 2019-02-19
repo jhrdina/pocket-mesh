@@ -26,7 +26,7 @@ let verifyMessageSignature = (srcPublicKey, signature, msg) =>
 let verifyMessageSignatureCmd = (srcPublicKey, signature, msg) =>
   switch (msg) {
   | Message.PeerToPeer(_) =>
-    Cmds.wrapResPromise(
+    Cmds.fromPromise(
       () =>
         verifyMessageSignature(srcPublicKey, signature, msg)
         |> Js.Promise.then_(valid =>
@@ -54,7 +54,7 @@ let signMsg = (msg: Message.signedMsg, privateKey) =>
 let update = (~thisPeer: ThisPeer.t, ~peers: Peers.t, msg) =>
   switch (msg) {
   | SignAndSendMsg(signedMsgPayload) =>
-    Cmds.wrapResPromise(
+    Cmds.fromPromise(
       () => signMsg(signedMsgPayload, thisPeer.privateKey),
       completedSignMessage,
     )

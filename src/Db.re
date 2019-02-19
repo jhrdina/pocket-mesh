@@ -62,10 +62,10 @@ let thisPeerOfKeyPair = (keyPair: SimpleCrypto.keyPair) =>
 /* COMMANDS */
 
 let open_ = resultToMsg =>
-  Cmds.wrapResPromise(() => IDBPromise.open_(dbName, "all"), resultToMsg);
+  Cmds.fromPromise(() => IDBPromise.open_(dbName, "all"), resultToMsg);
 
 let getAll = db =>
-  Cmds.wrapResPromise(() =>
+  Cmds.fromPromise(() =>
     Js.Promise.all3((
       db |> IDBPromise.getKey(thisPeerKey),
       db |> IDBPromise.getKey(peersGroupsKey),
@@ -126,7 +126,7 @@ let saveDbStateIfChanged = (dbState: DbState.t, lastAllData, db) => {
 
   let writeCmd =
     if (writeNeeded) {
-      Cmds.wrapResPromise(
+      Cmds.fromPromise(
         () =>
           Js.Promise.all([|
             writeRequestToPromise(writeRequests.thisPeer, setThisPeer, db),
