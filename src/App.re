@@ -77,6 +77,24 @@ let make = _children => {
         <div className=Styles.inlineChildren>
           <PeerStatusIndicatorDemo />
         </div>
+        {renderComponentTitle("Selectable Row")}
+        <div> <SelectableRow selected=true onChange={(_e, b) => ()} /> </div>
+        {renderComponentTitle("List")}
+        <div>
+          <MUI.List>
+            <MUI.ListItem button=true>
+              <PeerStatusIndicator
+                signalState=Online
+                inGroup=true
+                connectionState=Connected
+              />
+              <MUI.Checkbox />
+              <MUI.ListItemText primary={"Jan Hrdina" |> ReasonReact.string} />
+            </MUI.ListItem>
+          </MUI.List>
+        </div>
+        {renderComponentTitle("Members Count")}
+        <div> <MembersCount count=42 /> </div>
       </div>
     </MUI.ThemeProvider>,
 };
