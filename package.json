@@ -7,7 +7,8 @@
     "clean": "bsb -clean-world",
     "test": "echo \"Error: no test specified\" && exit 1",
     "webpack": "webpack -w",
-    "webpack:production": "NODE_ENV=production webpack",
+    "webpack:production": "NODE_ENV=production webpack --display-modules",
+    "size-test": "NODE_ENV=production webpack --display-modules && brotli -kf build/Index.js && ( ls -l build/Index.js.br | cut -d\" \" -f5 )",
     "server": "webpack-dev-server"
   },
   "keywords": [
