@@ -8,8 +8,16 @@ type peerState =
   | Online
   | OnlineNoDoc;
 
+type highlight =
+  | NoHighlight
+  | ThisPeer
+  | SignalServer;
+
 module Styles = {
   open Css;
+
+  let crossColor = "#e53935";
+  let onlineColor = "#8bc34a";
 
   let spin =
     keyframes([
@@ -29,22 +37,43 @@ module Styles = {
 
 let component = ReasonReact.statelessComponent("GlobalIcon");
 
-let make = (~signalState: signalState, ~peerState: peerState, _children) => {
+let make =
+    (
+      ~signalState: signalState,
+      ~peerState: peerState,
+      ~highlight=NoHighlight,
+      ~className="",
+      _children,
+    ) => {
   ...component,
   render: _self =>
     <MaterialUi.Tooltip title={"Default"->ReasonReact.string}>
-      <MaterialUi.SvgIcon>
+      <MaterialUi.SvgIcon className>
         <path
           d="M11.2 10l-.113.015-.26.047.355 1.97.205-.038.58-.038.561.027.301.05.328-1.97-.352-.058-.115-.015-.688-.034h-.115l-.688.048m3.19 2.57l.266.147.459.324.43.387.143.16 1.5-1.33-.187-.213-.082-.08-.508-.455-.088-.07-.555-.393-.096-.061-.312-.172-.965 1.75m-6.15-1.53l-.093.06-.55.4-.087.073-.502.463-.078.082-.125.144 1.52 1.3.082-.094.414-.385.473-.346.332-.189-.99-1.74-.391.223"
         />
-        <circle id="thisPeerOnline" cx="6" cy="17" r="3" />
+        <circle
+          fill={highlight == ThisPeer ? Styles.onlineColor : ""}
+          id="thisPeerOnline"
+          cx="6"
+          cy="17"
+          r="3"
+        />
         {switch (signalState) {
          | Offline =>
            <path
+             fill={highlight == SignalServer ? Styles.crossColor : ""}
              id="signalOffline"
              d="M10.2 2.82L8.79 4.23 10.56 6 8.79 7.77l1.41 1.41 1.77-1.77 1.77 1.77 1.41-1.41L13.38 6l1.77-1.77-1.41-1.41-1.77 1.77-1.77-1.77"
            />
-         | Online => <circle id="signalOnline" cx="12" cy="6" r="3" />
+         | Online =>
+           <circle
+             id="signalOnline"
+             fill={highlight == SignalServer ? Styles.onlineColor : ""}
+             cx="12"
+             cy="6"
+             r="3"
+           />
          }}
         {switch (peerState) {
          | Offline =>

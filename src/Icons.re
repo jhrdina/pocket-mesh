@@ -48,8 +48,32 @@ module BuildIcon = (Base: IconRef) => {
     );
 };
 
+module Add =
+  BuildIcon({
+    [@bs.module "@material-ui/icons/Add"]
+    external reactClass: ReasonReact.reactClass = "default";
+  });
+
+module ArrowBack =
+  BuildIcon({
+    [@bs.module "@material-ui/icons/ArrowBack"]
+    external reactClass: ReasonReact.reactClass = "default";
+  });
+
+module MoreVert =
+  BuildIcon({
+    [@bs.module "@material-ui/icons/MoreVert"]
+    external reactClass: ReasonReact.reactClass = "default";
+  });
+
 module Person =
   BuildIcon({
     [@bs.module "@material-ui/icons/Person"]
+    external reactClass: ReasonReact.reactClass = "default";
+  });
+
+module PersonAdd =
+  BuildIcon({
+    [@bs.module "@material-ui/icons/PersonAdd"]
     external reactClass: ReasonReact.reactClass = "default";
   });

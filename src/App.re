@@ -1,4 +1,3 @@
-/* This is the basic component. */
 let component = ReasonReact.statelessComponent("App");
 
 module MUI = MaterialUi;
@@ -95,6 +94,10 @@ let make = _children => {
         </div>
         {renderComponentTitle("Members Count")}
         <div> <MembersCount count=42 /> </div>
+        {renderComponentTitle("Main Screen")}
+        <div> <MainScreen activeTab=Groups /> </div>
+        <div> <MainScreen activeTab=Peers /> </div>
+        <div> <MainScreen activeTab=General /> </div>
       </div>
     </MUI.ThemeProvider>,
 };
