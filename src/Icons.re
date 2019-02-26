@@ -60,6 +60,12 @@ module ArrowBack =
     external reactClass: ReasonReact.reactClass = "default";
   });
 
+module Delete =
+  BuildIcon({
+    [@bs.module "@material-ui/icons/Delete"]
+    external reactClass: ReasonReact.reactClass = "default";
+  });
+
 module MoreVert =
   BuildIcon({
     [@bs.module "@material-ui/icons/MoreVert"]

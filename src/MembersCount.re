@@ -17,7 +17,11 @@ let muiOverrides: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
           (),
         ),
     },
-    {name: "value", styles: ReactDOMRe.Style.make(~fontWeight="bold", ())},
+    {
+      name: "value",
+      styles:
+        ReactDOMRe.Style.make(~fontWeight="bold", ~lineHeight="16px", ()),
+    },
   ];
 
 module Styles = {
@@ -39,7 +43,9 @@ let make = (~count, _children) => {
         <div className=classes##wrapper>
           <Icons.Person classes=[Root(classes##icon)] />
           <MaterialUi.Typography
-            variant=`Caption classes=[Root(classes##value)]>
+            color=`TextSecondary
+            variant=`Caption
+            classes=[Root(classes##value)]>
             {count |> string_of_int |> ReasonReact.string}
           </MaterialUi.Typography>
         </div>

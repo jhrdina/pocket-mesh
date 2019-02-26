@@ -28,6 +28,7 @@ let make = _children => {
       theme={MaterialUi_Theme.create(
         MUI.ThemeOptions.(
           make(
+            ~typography=Typography.make(~useNextVariants=true, ()),
             ~palette=
               PaletteOptions.make(
                 ~primary=
@@ -98,6 +99,10 @@ let make = _children => {
         <div> <MainScreen activeTab=Groups /> </div>
         <div> <MainScreen activeTab=Peers /> </div>
         <div> <MainScreen activeTab=General /> </div>
+        {renderComponentTitle("Group Screen")}
+        <div> <GroupScreen /> </div>
+        {renderComponentTitle("Peer in Group Screen")}
+        <div> <PeerInGroupScreen className=Styles.framed /> </div>
       </div>
     </MUI.ThemeProvider>,
 };
