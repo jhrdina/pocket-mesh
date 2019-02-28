@@ -1,9 +1,17 @@
-let component = ReasonReact.statelessComponent("MainScreen");
-
 type tab =
   | Groups
   | Peers
   | General;
+
+type state = {
+  activeTab: tab,
+  generalTab: GeneralTab.state,
+};
+
+exception InternalError;
+
+type MainScreenAction.t +=
+  | ChangedActiveTab(tab);
 
 let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
   _theme => [
@@ -44,9 +52,35 @@ let tabToInt =
   | Peers => 1
   | General => 2;
 
-let make = (~activeTab, _children) => {
+let intToTab =
+  fun
+  | 0 => Groups
+  | 1 => Peers
+  | 2 => General
+  | _ => raise(InternalError);
+
+let component = ReasonReact.reducerComponent("MainScreen");
+
+let make = (~initialActiveTab=Groups, _children) => {
   ...component,
-  render: _self =>
+  initialState: () => {
+    activeTab: initialActiveTab,
+    generalTab: GeneralTab.initialState(),
+  },
+
+  reducer: (action, state) => {
+    let state =
+      switch (action) {
+      | ChangedActiveTab(tab) => {...state, activeTab: tab}
+      | _ => state
+      };
+
+    ReasonReact.Update({
+      ...state,
+      generalTab: GeneralTab.reducer(action, state.generalTab),
+    });
+  },
+  render: self =>
     MaterialUi.(
       <WithStyles
         classesWithTheme=muiStyles
@@ -67,19 +101,27 @@ let make = (~activeTab, _children) => {
                   </IconButton>
                 </div>
               </Toolbar>
-              <Tabs value={activeTab |> tabToInt}>
+              <Tabs
+                value={self.state.activeTab |> tabToInt}
+                onChange={(_, tabInt) =>
+                  self.send(ChangedActiveTab(tabInt |> intToTab))
+                }>
                 <Tab label={"Groups" |> ReasonReact.string} />
                 <Tab label={"Friends" |> ReasonReact.string} />
                 <Tab label={"General" |> ReasonReact.string} />
               </Tabs>
             </AppBar>
-            {switch (activeTab) {
+            {switch (self.state.activeTab) {
              | Groups => GroupsListTab.render()
              | Peers => PeersListTab.render()
-             | General => GeneralTab.render()
+             | General =>
+               GeneralTab.render(
+                 ~send=self.send,
+                 ~state=self.state.generalTab,
+               )
              }}
             {let renderer =
-               switch (activeTab) {
+               switch (self.state.activeTab) {
                | Groups => GroupsListTab.renderFab
                | Peers => PeersListTab.renderFab
                | General => GeneralTab.renderFab

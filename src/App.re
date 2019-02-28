@@ -96,9 +96,9 @@ let make = _children => {
         {renderComponentTitle("Members Count")}
         <div> <MembersCount count=42 /> </div>
         {renderComponentTitle("Main Screen")}
-        <div> <MainScreen activeTab=Groups /> </div>
-        <div> <MainScreen activeTab=Peers /> </div>
-        <div> <MainScreen activeTab=General /> </div>
+        <div> <MainScreen initialActiveTab=Groups /> </div>
+        <div> <MainScreen initialActiveTab=Peers /> </div>
+        <div> <MainScreen initialActiveTab=General /> </div>
         {renderComponentTitle("Group Screen")}
         <div> <GroupScreen /> </div>
         {renderComponentTitle("Peer in Group Screen")}

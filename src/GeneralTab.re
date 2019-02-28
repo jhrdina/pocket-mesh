@@ -1,5 +1,10 @@
-let iconSize = "34px";
+type state = {signalServerDialogOpen: bool};
 
+type MainScreenAction.t +=
+  | ClosedSignalServerSettingsDialog(SignalServerSettingsDialog.closeResult)
+  | ClickedOpenSignalServerSettings;
+
+let iconSize = "34px";
 let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
   _theme => [
     {
@@ -12,7 +17,21 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
     },
   ];
 
-let render = () => {
+let initialState = () => {signalServerDialogOpen: false};
+
+let reducer = (action, state) =>
+  switch (action) {
+  | ClosedSignalServerSettingsDialog(Cancel) => {
+      signalServerDialogOpen: false,
+    }
+  | ClosedSignalServerSettingsDialog(Ok(settings)) =>
+    // TODO: Handle settings changes
+    {signalServerDialogOpen: false}
+  | ClickedOpenSignalServerSettings => {signalServerDialogOpen: true}
+  | _ => state
+  };
+
+let render = (~state, ~send) => {
   let signalServerUrl = "wss://signal.example.com";
   let signalState: GlobalIcon.signalState = Offline;
   let peerState: GlobalIcon.peerState = Online;
@@ -44,7 +63,8 @@ let render = () => {
               secondary={thisPeerIdStr |> ReasonReact.string}
             />
           </ListItem>
-          <ListItem button=true>
+          <ListItem
+            button=true onClick={_ => send(ClickedOpenSignalServerSettings)}>
             <ListItemIcon className=classes##listItemIcon>
               <GlobalIcon
                 className=classes##icon
@@ -58,6 +78,13 @@ let render = () => {
               secondary={signalStateStr |> ReasonReact.string}
             />
           </ListItem>
+          <SignalServerSettingsDialog
+            settings={url: signalServerUrl}
+            open_={state.signalServerDialogOpen}
+            onClose={closeResult =>
+              send(ClosedSignalServerSettingsDialog(closeResult))
+            }
+          />
         </List>
       }
     />
