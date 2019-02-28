@@ -38,6 +38,8 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
           ~borderRadius="4px",
           ~padding="0 8px",
           ~backgroundColor=MaterialUi.Colors.Grey.c50,
+          ~fontWeight="500",
+          ~fontSize="1.125rem",
           (),
         ),
     },
@@ -143,7 +145,7 @@ let make = _children => {
                   placeholder="Group name"
                   className=classes##titleInput
                 />
-                <div className=classes##toolbarRightBlock>
+                <div>
                   <IconButton color=`Inherit> <Icons.Delete /> </IconButton>
                   <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
                 </div>
