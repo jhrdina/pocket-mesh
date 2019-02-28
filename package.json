@@ -20,6 +20,7 @@
     "@jsiebern/bs-material-ui": "^1.0.0",
     "@material-ui/core": "^3.9.2",
     "@material-ui/icons": "^3.0.2",
+    "@material-ui/styles": "^3.0.0-alpha.10",
     "bs-css": "^8.0.1",
     "react": "^16.2.0",
     "react-dom": "^16.2.0",
