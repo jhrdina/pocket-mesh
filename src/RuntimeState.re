@@ -30,7 +30,7 @@ type t = {
   signalChannel: SignalChannel.t,
   signalChannelAuth: SignalChannelAuth.t,
   peersConnections: PeersConnections.t,
-  // peersGroupsSynchronizer,
+  peersGroupsSynchronizer: PeersGroupsSynchronizer.t,
   peersKeysFetcherAndSender: PeersKeysFetcherAndSender.t,
   peersStatuses: PeersStatuses.t,
   // signalVerifierAndSigner,
@@ -54,19 +54,25 @@ let init = (~dbState: DbState.t, ~signalChannel, ~initConfig) => {
       ~peersStatuses,
       ~peersGroups=dbState.peersGroups,
     );
+
+  let (peersGroupsSynchronizer, peersGroupsSynchronizerCmd) =
+    PeersGroupsSynchronizer.init(
+      ~peersGroups=dbState.peersGroups,
+      ~peersConnections,
+    );
   (
     {
       initConfig,
       signalChannel,
       signalChannelAuth: SignalChannelAuth.init(),
       peersConnections,
-      // peersGroupsSynchronizer,
+      peersGroupsSynchronizer,
       peersKeysFetcherAndSender,
       peersStatuses,
       // signalVerifierAndSigner,
       thisPeerKeyExporter,
     },
-    peersKeysFetcherAndSenderCmd,
+    Cmd.batch([peersKeysFetcherAndSenderCmd, peersGroupsSynchronizerCmd]),
   );
 };
 
@@ -120,6 +126,14 @@ let update = (dbState: DbState.t, msg, model) => {
       model.peersConnections,
     );
 
+  let (peersGroupsSynchronizer, peersGroupsSynchronizerCmd) =
+    PeersGroupsSynchronizer.update(
+      ~peersGroups=dbState.peersGroups,
+      ~peersConnections,
+      msg,
+      model.peersGroupsSynchronizer,
+    );
+
   // let (offerChangesDebouncer, offerChangesDebouncerCmd) =
   //   switch (msg) {
   //   | OfferChangesDebouncerMsg(msg) =>
@@ -137,7 +151,7 @@ let update = (dbState: DbState.t, msg, model) => {
       signalChannel,
       signalChannelAuth,
       peersConnections,
-      // peersGroupsSynchronizer,
+      peersGroupsSynchronizer,
       peersKeysFetcherAndSender,
       peersStatuses,
       // signalVerifierAndSigner,
@@ -150,6 +164,7 @@ let update = (dbState: DbState.t, msg, model) => {
       peersStatusesCmd,
       // debugCmd,
       // offerChangesDebouncerCmd,
+      peersGroupsSynchronizerCmd,
       peersConnectionsCmd,
       thisPeerKeyExporterCmd,
       peersKeysFetcherAndSenderCmd,

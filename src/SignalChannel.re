@@ -30,10 +30,8 @@ let gotMessage = msg => GotMessage(msg);
 let webSocketsMsg = msg => WebSocketsMsg(msg);
 
 /* INIT, UPDATE */
-let init = url => {
-  Js.log("reseting");
+let init = url =>
   {url, connectionState: Connecting};
-};
 
 let update = (model, msg) => {
   switch (msg, model.connectionState) {
@@ -70,10 +68,11 @@ let update = (model, msg) => {
   };
 };
 
-let subscriptions = model =>
+let subscriptions = model => {
   WebSocketsSub.sub(
     "SignalChannel/connection/" ++ model.url,
     model.url,
     Retry.getTimeoutMs,
     webSocketsMsg,
   );
+};

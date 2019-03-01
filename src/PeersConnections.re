@@ -20,8 +20,13 @@ type connectionState =
 type t = PeerId.Map.t(connectionState);
 
 type Msgs.t +=
+  // Inputs
+  | Send(PeerId.t, RtcSub.payload)
+  // Internal
   | RtcMsg(PeerId.t, option(RtcSub.msg))
-  | WaitingTimeoutExpired(PeerId.t);
+  | WaitingTimeoutExpired(PeerId.t)
+  // Outputs
+  | GotData(PeerId.t, RtcSub.payload);
 
 let rtcMsg = (peerId, msg) => RtcMsg(peerId, msg);
 let waitingTimeoutExpired = peerId => WaitingTimeoutExpired(peerId);
@@ -40,6 +45,27 @@ let foldActiveConnections = (f, acc, t) =>
   );
 
 let getPeerConnectionState = (peerId, t) => PeerId.Map.findOpt(peerId, t);
+
+let diffGotConnected = diffRes =>
+  switch (diffRes) {
+  | PeerId.Map.Right(Connected(_))
+  | Unequal(
+      CreatingSdpOffer(_) | WaitingForAcceptor(_) | CreatingSdpAnswer(_) |
+      WaitingForInitiator(_),
+      Connected(_),
+    ) =>
+    true
+  | Left(_)
+  | Right(_)
+  | Unequal(Connected(_, _, _), _)
+  | Unequal(
+      CreatingSdpOffer(_) | WaitingForAcceptor(_) | CreatingSdpAnswer(_) |
+      WaitingForInitiator(_),
+      CreatingSdpOffer(_) | WaitingForAcceptor(_, _) | CreatingSdpAnswer(_) |
+      WaitingForInitiator(_, _),
+    ) =>
+    false
+  };
 
 // HELPERS
 
@@ -171,17 +197,21 @@ let handleRtcSubMsg =
       Cmd.none,
     )
 
-  | (Some(Signal(_, Offer, _)), Some(_) | None)
-  | (Some(Signal(_, Answer, _)), Some(_) | None)
-  | (Some(GotData(ArrayBuffer(_))), _)
-  | (
-      Some(Connected(_)),
-      None |
-      Some(CreatingSdpOffer(_) | CreatingSdpAnswer(_) | Connected(_, _, _)),
-    ) => (
-      model,
-      Cmd.none,
-    )
+  | (Some(GotData(data)), _) =>
+    /* DEBUG */
+    /* TODO: Remove me */
+    let logCmd =
+      switch (data) {
+      | String(strData) =>
+        Cmds.log(
+          "[PeersConnections] Got data from "
+          ++ (peerId |> PeerId.toString)
+          ++ ": "
+          ++ strData,
+        )
+      | ArrayBuffer(_) => Cmd.none
+      };
+    (model, Cmd.batch([logCmd, Cmd.msg(GotData(peerId, data))]));
 
   | (Some(Error(str)), _) => (
       model,
@@ -190,13 +220,15 @@ let handleRtcSubMsg =
       ),
     )
 
-  /* DEBUG */
-  /* TODO: Remove me */
-  | (Some(GotData(String(data))), _) => (
+  | (Some(Signal(_, Offer, _)), Some(_) | None)
+  | (Some(Signal(_, Answer, _)), Some(_) | None)
+  | (
+      Some(Connected(_)),
+      None |
+      Some(CreatingSdpOffer(_) | CreatingSdpAnswer(_) | Connected(_, _, _)),
+    ) => (
       model,
-      Cmds.log(
-        "Store: Got data from " ++ (peerId |> PeerId.toString) ++ ": " ++ data,
-      ),
+      Cmd.none,
     )
   };
 };
@@ -233,6 +265,20 @@ let update =
         )
       | Some(_)
       | None => (model, Cmd.none)
+      }
+
+    | Send(peerId, data) =>
+      switch (model |> PeerId.Map.findOpt(peerId)) {
+      | Some(Connected(rtcConn, _role, _a)) => (
+          model,
+          RtcSub.sendCmd(rtcConn, data),
+        )
+      | _ => (
+          model,
+          Cmds.log(
+            "[PeersConnections] Trying to send data to peer that is not connected.",
+          ),
+        )
       }
 
     | _ => (model, Cmd.none)

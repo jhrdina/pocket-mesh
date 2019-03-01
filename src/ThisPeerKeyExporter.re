@@ -41,7 +41,8 @@ let update = (~thisPeer, msg, model) => {
     | (CompletedExport(Ok(keyStr)), ExportingIdentity(oldThisPeer)) => (
         ExportedIdentity(oldThisPeer, keyStr),
         // DEBUG
-        Cmds.log("My JWK: " ++ keyStr),
+        // Cmds.log("My JWK: " ++ keyStr),
+        Cmd.none
       )
     /* TODO: Handle error */
     | _ => (model, Cmds.none)

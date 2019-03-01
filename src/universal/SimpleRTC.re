@@ -31,7 +31,8 @@ type t = {
 
 type options = {role};
 
-let logDebug = s => Js.log2("[SimpleRTC]", s);
+// let logDebug = s => Js.log2("[SimpleRTC]", s);
+let logDebug = s => ();
 
 let promiseFailed = (name, _) =>
   Js_promise.resolve @@ logDebug(name ++ " FAILED");

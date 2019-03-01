@@ -18,7 +18,7 @@ let init = (initConfig: RuntimeState.InitConfig.t) => {
 };
 
 let update = (model, msg) => {
-  Js.log(msg);
+  // Js.log(msg);
   switch (msg, model) {
   | (
       Db.InitializationComplete(dbState),
@@ -70,12 +70,14 @@ let makeGlobal = (name, value) => makeGlobal(Webapi.Dom.window, name, value);
 
 let subscriptions = model => {
   makeGlobal("model", model);
-  switch (model) {
+  let newSub = switch (model) {
   | WaitingForDbAndIdentity(_, _, signalChannel) =>
-    SignalChannel.subscriptions(signalChannel)
+    Sub.batch([SignalChannel.subscriptions(signalChannel)])
   | HasIdentity(_db, _dbState, runtimeState) =>
     RuntimeState.subscriptions(runtimeState)
   };
+
+  newSub;
 };
 
 let create = () => {

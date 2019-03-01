@@ -17,6 +17,8 @@ type msg =
 
 type role = SimpleRTC.role;
 
+type payload = SimpleRTCChunker.payload;
+
 let sdpTypeSentByRole =
   fun
   | SimpleRTC.Initiator => Offer

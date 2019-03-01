@@ -21,11 +21,11 @@ module Impl: {
 
 include Impl;
 module Map = {
-  include Diff.Map.Make(Impl);
+  include OcamlDiff.Map.Make(Impl);
   let findOpt = (key, t) =>
     switch (find(key, t)) {
     | v => Some(v)
     | exception Not_found => None
     };
 };
-module Set = Diff.Set.Make(Impl);
+module Set = OcamlDiff.Set.Make(Impl);

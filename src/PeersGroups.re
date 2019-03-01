@@ -22,6 +22,8 @@ type Msgs.t +=
   | AddGroup(PeerGroup.Id.t, string, (PeerGroup.AM.t => PeerGroup.AM.t))
   | UpdateGroupAlias(PeerGroup.Id.t, string)
   | UpdateGroupContent(PeerGroup.Id.t, PeerGroup.AM.t)
+  | ApplyContentChanges(PeerGroup.Id.t, PeerGroup.AM.ChangeSet.t)
+  | ApplyMembersChanges(PeerGroup.Id.t, PeerGroup.AM.ChangeSet.t)
   | RemoveGroup(PeerGroup.Id.t)
   /* Peers in groups */
   | AddPeerToGroup(PeerId.t, PeerGroup.Id.t, PeerGroup.groupPermissions)
@@ -30,9 +32,7 @@ type Msgs.t +=
       PeerGroup.Id.t,
       PeerGroup.groupPermissions,
     )
-  | RemovePeerFromGroup(PeerId.t, PeerGroup.Id.t)
-  /* OUT */
-  | PeersGroupsChanged(PeerGroup.Id.Set.t);
+  | RemovePeerFromGroup(PeerId.t, PeerGroup.Id.t);
 
 let addGroupMsg = (groupId, alias, init) => AddGroup(groupId, alias, init);
 let updateGroupAliasMsg = (groupId, alias) =>
@@ -51,8 +51,8 @@ let removePeerFromGroupMsg = (peerId, groupId) =>
 
 let empty = PeerGroup.Id.Map.empty;
 
-let addPeerGroup = (peerGroup: PeerGroup.t, t) =>
-  PeerGroup.Id.Map.add(peerGroup.id, peerGroup, t);
+let addPeerGroup = (peerGroup: PeerGroup.t) =>
+  PeerGroup.Id.Map.add(peerGroup.id, peerGroup);
 
 let updateGroup = (id, updateFn: PeerGroup.t => PeerGroup.t, t) =>
   switch (t |> PeerGroup.Id.Map.find(id)) {
@@ -65,11 +65,8 @@ let removeGroup = PeerGroup.Id.Map.remove;
 let fold = (f, acc, t) =>
   PeerGroup.Id.Map.fold((_id, group, acc) => f(acc, group), t, acc);
 
-let addPeerToGroupWithPerms = (peerId, groupId, perms, t) =>
-  t
-  |> updateGroup(groupId, group =>
-       group |> PeerGroup.addPeer({id: peerId, permissions: perms})
-     );
+let addPeerToGroupWithPerms = (peerId, groupId, perms) =>
+  updateGroup(groupId, PeerGroup.addPeer({id: peerId, permissions: perms}));
 
 let addPeerToGroup = (peerId, groupId, t) =>
   addPeerToGroupWithPerms(peerId, groupId, ReadContentAndMembers, t);
@@ -102,18 +99,6 @@ let findOpt = (groupId, t) =>
   | group => Some(group)
   | exception Not_found => None
   };
-
-let getGroupsStatusesForPeer = (peerId, peersGroups) =>
-  fold(
-    (groupStatuses, group) =>
-      switch (P2PMsg.getGroupStatusForPeer(peerId, group)) {
-      | Some(groupStatus) =>
-        groupStatuses |> PeerGroup.Id.Map.add(group.id, groupStatus)
-      | None => groupStatuses
-      },
-    PeerGroup.Id.Map.empty,
-    peersGroups |> getGroupsForPeer(peerId),
-  );
 
 /* SERIALIZATION */
 
@@ -188,23 +173,25 @@ let update = (~thisPeer: ThisPeer.t, msg, model) =>
       )
     }
 
-  | UpdateGroupAlias(id, alias) =>
-    switch (model |> findOpt(id)) {
-    | Some(peersGroup) => (
-        model |> addPeerGroup({...peersGroup, alias}),
-        Cmd.none,
-      )
-    | None => (model, Cmds.none)
-    }
+  | UpdateGroupAlias(id, alias) => (
+      model |> updateGroup(id, g => {...g, alias}),
+      Cmd.none,
+    )
 
-  | UpdateGroupContent(id, content) =>
-    switch (model |> findOpt(id)) {
-    | Some(peersGroup) => (
-        model |> addPeerGroup({...peersGroup, content}),
-        Cmds.none,
-      )
-    | None => (model, Cmds.none)
-    }
+  | UpdateGroupContent(id, content) => (
+      model |> updateGroup(id, g => {...g, content}),
+      Cmds.none,
+    )
+
+  | ApplyContentChanges(id, changes) => (
+      model |> updateGroup(id, PeerGroup.applyContentChanges(changes)),
+      Cmd.none,
+    )
+
+  | ApplyMembersChanges(id, changes) => (
+      model |> updateGroup(id, PeerGroup.applyMembersChanges(changes)),
+      Cmd.none,
+    )
 
   | RemoveGroup(id) => (model |> removeGroup(id), Cmd.none)
   | AddPeerToGroup(peerId, groupId, perms) =>

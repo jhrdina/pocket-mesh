@@ -27,8 +27,8 @@ module Id = {
   };
 
   include Impl;
-  module Map = Map.Make(Impl);
-  module Set = Set.Make(Impl);
+  module Map = OcamlDiff.Map.Make(Impl);
+  module Set = OcamlDiff.Set.Make(Impl);
 };
 
 /* TYPES */
@@ -134,6 +134,16 @@ let removePeer = (peerId, t: t) => {
          AM.Json.(root |> Map.remove(peerId |> PeerId.toString))
        );
   {...t, peers: newPeers};
+};
+
+let applyContentChanges = (changes, t) => {
+  ...t,
+  content: t.content |> AM.applyChanges(changes),
+};
+
+let applyMembersChanges = (changes, t) => {
+  ...t,
+  peers: t.peers |> AM.applyChanges(changes),
 };
 
 /* QUERIES */
