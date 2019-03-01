@@ -1,6 +1,5 @@
 {
   "name": "pocketmesh-peer",
-  "version": "0.1.0",
   "sources": [
     { "dir": "example" },
     {
