@@ -1,5 +1,5 @@
 {
-  "name": "pocketmesh-peer",
+  "name": "pocket-mesh-peer",
   "sources": [
     { "dir": "example" },
     {

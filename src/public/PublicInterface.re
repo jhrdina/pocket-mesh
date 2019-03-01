@@ -107,18 +107,18 @@ module State = {
 
 module Msg = {
   type t = Msgs.t;
-  let addPeer = PocketmeshPeer.Peers.addPeer;
-  let updatePeer = PocketmeshPeer.Peers.updateAlias;
-  let removePeer = PocketmeshPeer.Peers.removePeer;
-  let updateSignalServerUrl = PocketmeshPeer.SignalChannel.updateUrl;
+  let addPeer = PocketMeshPeer.Peers.addPeer;
+  let updatePeer = PocketMeshPeer.Peers.updateAlias;
+  let removePeer = PocketMeshPeer.Peers.removePeer;
+  let updateSignalServerUrl = PocketMeshPeer.SignalChannel.updateUrl;
 
-  let removePeerFromGroup = PocketmeshPeer.PeersGroups.removePeerFromGroupMsg;
-  let updatePeerPermissions = PocketmeshPeer.PeersGroups.updatePeerPermissionsMsg;
-  let addPeerToGroup = PocketmeshPeer.PeersGroups.addPeerToGroupMsg;
-  let removeGroup = PocketmeshPeer.PeersGroups.removeGroupMsg;
-  let updateGroupContent = PocketmeshPeer.PeersGroups.updateGroupContentMsg;
-  let updateGroupAlias = PocketmeshPeer.PeersGroups.updateGroupAliasMsg;
-  let addGroup = PocketmeshPeer.PeersGroups.addGroupMsg;
+  let removePeerFromGroup = PocketMeshPeer.PeersGroups.removePeerFromGroupMsg;
+  let updatePeerPermissions = PocketMeshPeer.PeersGroups.updatePeerPermissionsMsg;
+  let addPeerToGroup = PocketMeshPeer.PeersGroups.addPeerToGroupMsg;
+  let removeGroup = PocketMeshPeer.PeersGroups.removeGroupMsg;
+  let updateGroupContent = PocketMeshPeer.PeersGroups.updateGroupContentMsg;
+  let updateGroupAlias = PocketMeshPeer.PeersGroups.updateGroupAliasMsg;
+  let addGroup = PocketMeshPeer.PeersGroups.addGroupMsg;
   // let removeThisPeerAndAllData
 };
 
