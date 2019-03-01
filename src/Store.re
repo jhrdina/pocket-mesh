@@ -64,18 +64,20 @@ let update = (model, msg) => {
   };
 };
 
-[@bs.set_index]
-external makeGlobal: (Webapi.Dom.Window.t, string, 'a) => unit = "";
-let makeGlobal = (name, value) => makeGlobal(Webapi.Dom.window, name, value);
+type window;
+[@bs.val] external window: window = "";
+[@bs.set_index] external makeGlobal: (window, string, 'a) => unit = "";
+let makeGlobal = (name, value) => makeGlobal(window, name, value);
 
 let subscriptions = model => {
   makeGlobal("model", model);
-  let newSub = switch (model) {
-  | WaitingForDbAndIdentity(_, _, signalChannel) =>
-    Sub.batch([SignalChannel.subscriptions(signalChannel)])
-  | HasIdentity(_db, _dbState, runtimeState) =>
-    RuntimeState.subscriptions(runtimeState)
-  };
+  let newSub =
+    switch (model) {
+    | WaitingForDbAndIdentity(_, _, signalChannel) =>
+      Sub.batch([SignalChannel.subscriptions(signalChannel)])
+    | HasIdentity(_db, _dbState, runtimeState) =>
+      RuntimeState.subscriptions(runtimeState)
+    };
 
   newSub;
 };
