@@ -107,6 +107,8 @@ let make = _children => {
         <div> <PeerSearchScreen className=Styles.framed /> </div>
         {renderComponentTitle("Peer Screen")}
         <div> <PeerScreen /> </div>
+        {renderComponentTitle("This Peer Screen")}
+        <div> <ThisPeerScreen /> </div>
       </div>
     </MUI.ThemeProvider>,
 };

@@ -38,25 +38,6 @@ let useStyles =
           ),
       },
       {
-        name: "sectionTitle",
-        styles:
-          ReactDOMRe.Style.make(
-            ~padding="16px 16px 0 16px",
-            ~color=
-              MaterialUi.Theme.(
-                theme
-                |> Theme.paletteGet
-                |> Palette.textGet
-                |> TypeText.secondaryGet
-              ),
-            (),
-          ),
-      },
-      {
-        name: "sectionValue",
-        styles: ReactDOMRe.Style.make(~padding="11px 16px", ()),
-      },
-      {
         name: "peerIdField",
         styles:
           ReactDOMRe.Style.make(
@@ -108,15 +89,9 @@ let make = _children => {
                 </div>
               </Toolbar>
             </AppBar>
-            <Typography variant=`Subtitle2 className=classes##sectionTitle>
-              {"Status" |> ReasonReact.string}
-            </Typography>
-            <Typography variant=`Body1 className=classes##sectionValue>
-              {"Online" |> ReasonReact.string}
-            </Typography>
-            <Typography variant=`Subtitle2 className=classes##sectionTitle>
-              {"P2P connection" |> ReasonReact.string}
-            </Typography>
+            <SectionTitle text="Status" />
+            <SectionValue text="Online" />
+            <SectionTitle text="P2P connection" />
             <ListItem>
               <ListItemText
                 primary={"Not established" |> ReasonReact.string}
@@ -126,9 +101,7 @@ let make = _children => {
                 }
               />
             </ListItem>
-            <Typography variant=`Subtitle2 className=classes##sectionTitle>
-              {"Peer ID" |> ReasonReact.string}
-            </Typography>
+            <SectionTitle text="Peer ID" />
             <TextField
               className=classes##peerIdField
               inputProps={

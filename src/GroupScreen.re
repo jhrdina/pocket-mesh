@@ -3,8 +3,6 @@ type state = {v: int};
 type action =
   | Inc;
 
-let idBoxBorder = "1px dashed #ccc";
-
 let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
   theme => [
     {
@@ -42,42 +40,6 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
           ~fontSize="1.125rem",
           (),
         ),
-    },
-    {
-      name: "idBox",
-      styles:
-        ReactDOMRe.Style.make(
-          ~margin="0 16px",
-          ~display="flex",
-          ~border=idBoxBorder,
-          ~borderRadius="4px",
-          (),
-        ),
-    },
-    {
-      name: "idBoxId",
-      styles:
-        ReactDOMRe.Style.make(
-          ~flex="1",
-          ~fontSize="14px",
-          ~fontFamily="monospace",
-          ~color=
-            MaterialUi.Theme.(
-              theme
-              |> Theme.paletteGet
-              |> Palette.textGet
-              |> TypeText.secondaryGet
-            ),
-          ~padding="8px",
-          ~borderRight=idBoxBorder,
-          ~wordBreak="break-all",
-          ~lineHeight="20px",
-          (),
-        ),
-    },
-    {
-      name: "idBoxCopyBtn",
-      styles: ReactDOMRe.Style.make(~borderRadius="0 4px 4px 0", ()),
     },
     {
       name: "permissionsText",
@@ -154,14 +116,7 @@ let make = _children => {
             <ListSubheader component={`String("div")}>
               {"Group ID" |> ReasonReact.string}
             </ListSubheader>
-            <div className=classes##idBox>
-              <div className=classes##idBoxId>
-                {"YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg==" |> ReasonReact.string}
-              </div>
-              <Button className=classes##idBoxCopyBtn>
-                {"Copy" |> ReasonReact.string}
-              </Button>
-            </div>
+            <IdBox id="YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg==" />
             <List
               subheader={
                 <ListSubheader component={`String("div")}>
