@@ -1,5 +1,5 @@
 {
-  "name": "peer-material-ui",
+  "name": "pocket-mesh-peer-material-ui",
   "version": "0.1.0",
   "scripts": {
     "build": "bsb -make-world",
