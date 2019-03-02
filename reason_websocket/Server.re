@@ -29,7 +29,7 @@ module Connection = (Config: Config) => {
 
 module Server = (Config: Config) => {
   module WSock = Websocket.IO((Connection(Config)));
-  let handleWebsocket = (~onMessage, path, headers, socket) => {
+  let handleWebsocket = (~onMessage, _path, headers, socket) => {
     let key =
       Http.StringMap.find("Sec-WebSocket-Key", headers) |> String.trim;
     let response = Websocket.make_handshake_response(key);

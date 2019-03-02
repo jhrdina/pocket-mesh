@@ -51,15 +51,15 @@ module Rng = {
         ~default={
           Random.self_init();
           Random.get_state();
-        }
+        },
       );
     size => {
       let b = Bytes.create(size);
       for (i in 0 to size - 1) {
-        Bytes.set(b, i, Char.chr(Random.State.bits(state) land 255))
+        Bytes.set(b, i, Char.chr(Random.State.bits(state) land 255));
       };
-      Bytes.to_string(b)
-    }
+      Bytes.to_string(b);
+    };
   };
 };
 
@@ -87,9 +87,6 @@ module Frame = {
       | Nonctrl(i) => "nonctrl " ++ string_of_int(i);
 
     let pp = (ppf, t) => Format.fprintf(ppf, "%s", to_string(t));
-
-    let min = 0;
-    let max = 15;
 
     let of_enum =
       fun
@@ -132,7 +129,7 @@ module Frame = {
       opcode,
       extension,
       final,
-      content
+      content,
     );
 
   let show = t => Format.asprintf("%a", pp, t);
@@ -155,11 +152,6 @@ module Frame = {
     EndianBytes.set_int16(content, 0, code);
     of_bytes(~opcode=Opcode.Close, content);
   };
-
-  let of_subbytes = (~opcode=?, ~extension=?, ~final=?, content, pos, len) => {
-    let content = Bytes.(sub(content, pos, len) |> unsafe_to_string);
-    create(~opcode?, ~extension?, ~final?, ~content, ());
-  };
 };
 
 let xor = (mask, msg) =>
@@ -168,9 +160,7 @@ let xor = (mask, msg) =>
     Bytes.set(
       msg,
       i,
-      Char.(
-        code(mask.[i mod 4]) lxor code(Bytes.get(msg, i)) |> chr
-      )
+      Char.(code(mask.[i mod 4]) lxor code(Bytes.get(msg, i)) |> chr),
     );
   };
 
@@ -201,13 +191,16 @@ exception Protocol_error(string);
 
 let make_handshake_response = key => {
   let accept = key ++ websocket_uuid |> b64_encoded_sha1sum;
-  let resHeaders = [
-    ("Upgrade", "websocket"),
-    ("Connection", "Upgrade"),
-    ("Sec-WebSocket-Accept", accept)
-  ] |> List.map(((a, b)) => a ++ ": " ++ b) |> String.concat("\r\n");
+  let resHeaders =
+    [
+      ("Upgrade", "websocket"),
+      ("Connection", "Upgrade"),
+      ("Sec-WebSocket-Accept", accept),
+    ]
+    |> List.map(((a, b)) => a ++ ": " ++ b)
+    |> String.concat("\r\n");
   let top = "HTTP/1.1 101 Switching Protocols\r\n";
-  top ++ resHeaders ++ "\r\n\r\n"
+  top ++ resHeaders ++ "\r\n\r\n";
 };
 
 module IO = (IO: IO.IO) => {
@@ -218,7 +211,6 @@ module IO = (IO: IO.IO) => {
     | Server;
 
   let is_client = mode => mode != Server;
-  let is_server = mode => mode == Server;
 
   let rec read_exactly = (ic, remaining, buf) =>
     read(ic, remaining)
@@ -254,8 +246,7 @@ module IO = (IO: IO.IO) => {
         switch (s) {
         | None => return(None)
         | Some(s) =>
-          return @@
-          Some(Int64.to_int @@ EndianBytes.get_int64(s, 0))
+          return @@ Some(Int64.to_int @@ EndianBytes.get_int64(s, 0))
         }
     );
 
@@ -346,7 +337,7 @@ module IO = (IO: IO.IO) => {
             payload_len =>
               if (payload_len == (-1)) {
                 raise(
-                  Protocol_error("payload len = " ++ string_of_int(length))
+                  Protocol_error("payload len = " ++ string_of_int(length)),
                 );
               } else if (extension != 0) {
                 close_with_code(mode, buf, oc, 1002)
@@ -392,7 +383,7 @@ module IO = (IO: IO.IO) => {
                                 ~opcode,
                                 ~extension,
                                 ~final,
-                                payload
+                                payload,
                               );
                             return(frame);
                           }

@@ -43,21 +43,6 @@ let unsafe_get_int8 s off =
 let unsafe_set_int8 s off v =
   unsafe_set_char s off (Char.unsafe_chr v)
 
-let set_int16 s off v =
-    if not Sys.big_endian
-    then (set_16 s off (swap16 v))
-    else set_16 s off v
-
-let get_uint16 s off =
-    if not Sys.big_endian
-    then swap16 (get_16 s off)
-    else get_16 s off
-
-  let get_int64 s off =
-    if not Sys.big_endian
-    then swap64 (get_64 s off)
-    else get_64 s off
-
 
       let get_uint16 s off =
     if not Sys.big_endian
