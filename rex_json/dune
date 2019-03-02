@@ -1,0 +1,3 @@
+(library
+ (name rex_json)
+ (libraries ))

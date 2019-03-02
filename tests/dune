@@ -1,0 +1,8 @@
+(executable
+ (name test)
+ (libraries internal))
+
+(alias
+ (name runtest)
+ (deps test.exe)
+ (action (run ${<})))

@@ -1,6 +1,0 @@
-(jbuild_version 1)
-
-(executable
- ((name SignalServer)
-  (public_name signal-server)
-  (libraries (reason_websocket rex_json lwt websocket-lwt))))

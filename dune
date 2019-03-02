@@ -1,0 +1,8 @@
+;;(toplevel
+;; (data_only_dirs node_modules))
+;;(rule
+;;  (dirs :standard \ node_modules))
+
+(env
+  (dev
+    (flags (:standard -warn-error -A))))

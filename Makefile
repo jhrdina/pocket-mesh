@@ -1,11 +1,11 @@
 build:
-	jbuilder build
+	dune build
 
 run: build
 	./_build/install/default/bin/signal-server
 
 test:
-	jbuilder runtest
+	dune runtest
 
 # some boilerplate to publish a new version to GitHub
 release:
