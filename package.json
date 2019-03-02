@@ -22,6 +22,7 @@
     "@material-ui/icons": "^3.0.2",
     "@material-ui/styles": "^3.0.0-alpha.10",
     "bs-css": "^8.0.1",
+    "pocket-mesh-peer": "file:../pocket-mesh-peer-0.1.1.tgz",
     "react": "^16.2.0",
     "react-dom": "^16.2.0",
     "reason-react": ">=0.4.0"
