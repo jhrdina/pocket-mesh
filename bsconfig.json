@@ -1,0 +1,30 @@
+{
+  "name": "pocket-mesh-peer",
+  "sources": [
+    { "dir": "example" },
+    {
+      "dir": "src",
+      "subdirs": true,
+      "public": ["PocketMeshPeer"]
+    }
+  ],
+  "package-specs": {
+    "module": "es6",
+    "in-source": true
+  },
+  "suffix": ".bs.js",
+  "bs-dependencies": [
+    "ocaml-diff",
+    "bs-webapi",
+    "bs-webapi-extra",
+    "bs-black-tea",
+    "bs-automerge",
+    "rex-json",
+    "wonka"
+  ],
+  "warnings": {
+    "error": "+101"
+  },
+  "namespace": false,
+  "refmt": 3
+}
