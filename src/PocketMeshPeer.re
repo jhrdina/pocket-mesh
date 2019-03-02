@@ -7,6 +7,23 @@ let defaultSignalServerUrl = RuntimeState.defaultSignalServerUrl;
 module Crdt = PeerGroup.AM;
 module InitConfig = RuntimeState.InitConfig;
 
+module Msg = {
+  type t = Msgs.t;
+  let addPeer = Peers.addPeer;
+  let updatePeer = Peers.updateAlias;
+  let removePeer = Peers.removePeer;
+  let updateSignalServerUrl = SignalChannel.updateUrl;
+
+  let removePeerFromGroup = PeersGroups.removePeerFromGroupMsg;
+  let updatePeerPermissions = PeersGroups.updatePeerPermissionsMsg;
+  let addPeerToGroup = PeersGroups.addPeerToGroupMsg;
+  let removeGroup = PeersGroups.removeGroupMsg;
+  let updateGroupContent = PeersGroups.updateGroupContentMsg;
+  let updateGroupAlias = PeersGroups.updateGroupAliasMsg;
+  let addGroup = PeersGroups.addGroupMsg;
+  // let removeThisPeerAndAllData
+};
+
 module Peer = {
   module Id = PeerId;
 
@@ -103,23 +120,6 @@ module State = {
       WaitingForDbAndIdentity(signalChannel)
     | HasIdentity(_, dbState, runtimeState) =>
       HasIdentity(dbState, runtimeState);
-};
-
-module Msg = {
-  type t = Msgs.t;
-  let addPeer = PocketMeshPeer.Peers.addPeer;
-  let updatePeer = PocketMeshPeer.Peers.updateAlias;
-  let removePeer = PocketMeshPeer.Peers.removePeer;
-  let updateSignalServerUrl = PocketMeshPeer.SignalChannel.updateUrl;
-
-  let removePeerFromGroup = PocketMeshPeer.PeersGroups.removePeerFromGroupMsg;
-  let updatePeerPermissions = PocketMeshPeer.PeersGroups.updatePeerPermissionsMsg;
-  let addPeerToGroup = PocketMeshPeer.PeersGroups.addPeerToGroupMsg;
-  let removeGroup = PocketMeshPeer.PeersGroups.removeGroupMsg;
-  let updateGroupContent = PocketMeshPeer.PeersGroups.updateGroupContentMsg;
-  let updateGroupAlias = PocketMeshPeer.PeersGroups.updateGroupAliasMsg;
-  let addGroup = PocketMeshPeer.PeersGroups.addGroupMsg;
-  // let removeThisPeerAndAllData
 };
 
 let init = Store.init;

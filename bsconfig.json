@@ -4,7 +4,8 @@
     { "dir": "example" },
     {
       "dir": "src",
-      "subdirs": true
+      "subdirs": true,
+      "public": ["PocketMeshPeer"]
     }
   ],
   "package-specs": {
@@ -24,6 +25,6 @@
   "warnings": {
     "error": "+101"
   },
-  "namespace": true,
+  "namespace": false,
   "refmt": 3
 }

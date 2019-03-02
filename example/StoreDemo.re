@@ -1,6 +1,6 @@
 open BlackTea;
 open Json.Infix;
-module PM = PublicInterface;
+module PM = PocketMeshPeer;
 
 /* Store.create() |> ignore; */
 
