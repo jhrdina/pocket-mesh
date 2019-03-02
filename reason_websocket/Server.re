@@ -19,7 +19,7 @@ module Connection = (Config: Config) => {
       switch (Config.read(sock, size)) {
       | None => ""
       | Some(s) => s
-      }
+      },
     );
   let write = (sock, text, fin) => {
     Config.write(sock, text);
@@ -30,14 +30,17 @@ module Connection = (Config: Config) => {
 module Server = (Config: Config) => {
   module WSock = Websocket.IO((Connection(Config)));
   let handleWebsocket = (~onMessage, path, headers, socket) => {
-    let key = Http.StringMap.find("Sec-WebSocket-Key", headers) |> String.trim;
+    let key =
+      Http.StringMap.find("Sec-WebSocket-Key", headers) |> String.trim;
     let response = Websocket.make_handshake_response(key);
     Config.write(socket, response);
-
 
     let loop = ref(true);
     let buffer = Buffer.create(1024);
     while (loop^) {
+      /* TODO: Catch End_of_file or any other exception here and you can handle disconnecting.
+          As default exceptions are not catched and therefore simply kill the thread with current connection.
+         */
       WSock.make_read_frame(~mode=WSock.Server, socket, socket, (), frame =>
         onMessage(
           frame.Websocket.Frame.content,
@@ -46,15 +49,13 @@ module Server = (Config: Config) => {
             WSock.write_frame_to_buf(
               ~mode=WSock.Server,
               buffer,
-              Websocket.Frame.create(~content=response, ())
+              Websocket.Frame.create(~content=response, ()),
             );
             Config.write(socket, Buffer.contents(buffer));
-          }
+          },
         )
       );
     };
-
-
   };
   let handleConnection = (~onMessage, ~httpFallback, socket) => {
     let loop = ref(true);
@@ -66,7 +67,7 @@ module Server = (Config: Config) => {
         let shouldUpgrade =
           Http.StringMap.exists(
             (k, v) => k == "Upgrade" && String.trim(v) == "websocket",
-            headers
+            headers,
           );
         if (shouldUpgrade) {
           handleWebsocket(~onMessage, path, headers, socket);
@@ -112,6 +113,8 @@ let run = (~port, ~onMessage, ~httpFallback, ~config: (module Config)) => {
   while (true) {
     let (clientSocket, _clientAddr) = Unix.accept(listeningSocket);
     let sock = Config.acceptSocket(clientSocket);
-    ignore(Thread.create(S.handleConnection(~onMessage, ~httpFallback), sock));
+    ignore(
+      Thread.create(S.handleConnection(~onMessage, ~httpFallback), sock),
+    );
   };
 };
