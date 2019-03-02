@@ -1,0 +1,3 @@
+(library
+ (name reason_websocket)
+ (libraries re threads str))
