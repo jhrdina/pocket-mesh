@@ -38,7 +38,7 @@
     "bs-black-tea": "^0.1.0",
     "bs-webapi": "^0.12.2",
     "bs-webapi-extra": "file:../bs-webapi-extra-0.1.0.tgz",
-    "ocaml-diff": "^0.1.0",
+    "ocaml-diff": "^0.1.2",
     "rex-json": "^1.4.0",
     "wonka": "^2.0.0"
   }

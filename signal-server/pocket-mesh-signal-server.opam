@@ -17,6 +17,7 @@ build: [
 depends: [
   "jbuilder" {build}
   "reason"  {>= "3.2.0"}
+  "ocaml-diff" {>= "0.1.2"}
   "re"
   "websocket-lwt"
 ]

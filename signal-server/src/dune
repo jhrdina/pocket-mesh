@@ -1,4 +1,4 @@
 (executable
  (name SignalServer)
  (public_name signal-server)
- (libraries reason_websocket rex_json lwt websocket-lwt))
+ (libraries reason_websocket rex_json lwt websocket-lwt ocaml-diff))

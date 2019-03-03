@@ -1,1 +1,0 @@
-../../../../bs-base/ocaml-diff/src/OcamlDiff.re
