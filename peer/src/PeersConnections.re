@@ -10,25 +10,25 @@ type connectionState =
   /* failedAttempts */
   | CreatingSdpOffer(int)
   /* rtcConn, failedAttempts */
-  | WaitingForAcceptor(RtcSub.conn, int)
+  | WaitingForAcceptor(RTCSub.conn, int)
   /* sdp */
   | CreatingSdpAnswer(string)
-  | WaitingForInitiator(string, RtcSub.conn)
+  | WaitingForInitiator(string, RTCSub.conn)
   /* RTC conn, inGroup, signal online */
-  | Connected(RtcSub.conn, RtcSub.role, int);
+  | Connected(RTCSub.conn, RTCSub.role, int);
 
 type t = PeerId.Map.t(connectionState);
 
 type Msgs.t +=
   // Inputs
-  | Send(PeerId.t, RtcSub.payload)
+  | Send(PeerId.t, RTCSub.payload)
   // Internal
-  | RtcMsg(PeerId.t, option(RtcSub.msg))
+  | RTCMsg(PeerId.t, option(RTCSub.msg))
   | WaitingTimeoutExpired(PeerId.t)
   // Outputs
-  | GotData(PeerId.t, RtcSub.payload);
+  | GotData(PeerId.t, RTCSub.payload);
 
-let rtcMsg = (peerId, msg) => RtcMsg(peerId, msg);
+let rtcMsg = (peerId, msg) => RTCMsg(peerId, msg);
 let waitingTimeoutExpired = peerId => WaitingTimeoutExpired(peerId);
 
 // QUERIES
@@ -132,7 +132,7 @@ let handleReceivedSignalMessage =
   switch (msg, model |> PeerId.Map.findOpt(src)) {
   | (Answer(sdp), Some(WaitingForAcceptor(rtcConn, a))) => (
       model,
-      RtcSub.signalCmd(rtcConn, sdp),
+      RTCSub.signalCmd(rtcConn, sdp),
     )
   | (Offer(sdp), None) => (
       model |> updatePeerState(src, CreatingSdpAnswer(sdp)),
@@ -157,8 +157,8 @@ let handleReceivedSignalMessage =
   };
 };
 
-let handleRtcSubMsg =
-    (~thisPeer: ThisPeer.t, ~peerId, msg: option(RtcSub.msg), model) => {
+let handleRTCSubMsg =
+    (~thisPeer: ThisPeer.t, ~peerId, msg: option(RTCSub.msg), model) => {
   switch (msg, model |> PeerId.Map.findOpt(peerId)) {
   | (Some(Signal(rtcConn, Offer, sdp)), Some(CreatingSdpOffer(a))) => (
       model |> updatePeerState(peerId, WaitingForAcceptor(rtcConn, a)),
@@ -250,8 +250,8 @@ let update =
         when tg == thisPeer.id =>
       handleReceivedSignalMessage(~thisPeer, ~src, ~msg=p2pSignalMsg, model)
 
-    | RtcMsg(peerId, rtcMsg) =>
-      handleRtcSubMsg(~thisPeer, ~peerId, rtcMsg, model)
+    | RTCMsg(peerId, rtcMsg) =>
+      handleRTCSubMsg(~thisPeer, ~peerId, rtcMsg, model)
 
     | WaitingTimeoutExpired(peerId) =>
       switch (model |> PeerId.Map.findOpt(peerId)) {
@@ -271,7 +271,7 @@ let update =
       switch (model |> PeerId.Map.findOpt(peerId)) {
       | Some(Connected(rtcConn, _role, _a)) => (
           model,
-          RtcSub.sendCmd(rtcConn, data),
+          RTCSub.sendCmd(rtcConn, data),
         )
       | _ => (
           model,
@@ -288,7 +288,7 @@ let update =
   (model, cmd);
 };
 
-let waitingTimeoutSub = (peerId, myRole: RtcSub.role) => {
+let waitingTimeoutSub = (peerId, myRole: RTCSub.role) => {
   let str =
     switch (myRole) {
     | Initiator => "waitForAccept"
@@ -302,7 +302,7 @@ let waitingTimeoutSub = (peerId, myRole: RtcSub.role) => {
 };
 
 let rtcSub = attempt =>
-  RtcSub.sub("PeersConnections/" ++ string_of_int(attempt));
+  RTCSub.sub("PeersConnections/" ++ string_of_int(attempt));
 
 let subscriptions = model =>
   PeerId.Map.fold(
