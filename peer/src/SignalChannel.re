@@ -1,5 +1,5 @@
 open BlackTea;
-open Rex_json.Json.Infix;
+open Json.Infix;
 
 /**
   Signalling channel connection state representation, its changes and related
@@ -30,8 +30,7 @@ let gotMessage = msg => GotMessage(msg);
 let webSocketsMsg = msg => WebSocketsMsg(msg);
 
 /* INIT, UPDATE */
-let init = url =>
-  {url, connectionState: Connecting};
+let init = url => {url, connectionState: Connecting};
 
 let update = (model, msg) => {
   switch (msg, model.connectionState) {

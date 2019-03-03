@@ -1,5 +1,5 @@
 open BlackTea;
-open Rex_json.Json.Infix;
+open Json.Infix;
 
 // !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 // WARNING: We presume that only thisPeer can be the target in incomming msgs

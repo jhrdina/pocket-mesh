@@ -1,4 +1,3 @@
-open Rex_json;
 open Json.Infix;
 
 /* P2P messages chunking and reassambling */

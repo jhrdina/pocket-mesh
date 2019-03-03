@@ -1,5 +1,5 @@
 open BlackTea;
-open Rex_json.Json.Infix;
+open Json.Infix;
 
 type Msgs.t +=
   /* Input */

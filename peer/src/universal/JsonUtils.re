@@ -1,4 +1,4 @@
-open Rex_json.Json;
+open Json;
 
 let parseOpt = str =>
   switch (str |> parse) {

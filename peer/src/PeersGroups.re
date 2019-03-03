@@ -1,4 +1,3 @@
-open Rex_json;
 open Json.Infix;
 open BlackTea;
 

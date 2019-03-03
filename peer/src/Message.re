@@ -1,5 +1,4 @@
-open Rex_json;
-open Rex_json.Json.Infix;
+open Json.Infix;
 
 /* CONSTANTS */
 

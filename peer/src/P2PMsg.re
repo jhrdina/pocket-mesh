@@ -171,7 +171,7 @@ let decodeGroupChanges = json =>
   );
 
 let encodePeerGroupIdMap = (itemEncoder, map) =>
-  Rex_json.Json.Object(
+  Json.Object(
     PeerGroup.Id.Map.fold(
       (groupId, value, acc) =>
         [(groupId |> PeerGroup.Id.toString, itemEncoder(value)), ...acc],
@@ -213,9 +213,7 @@ let encode = t => {
       )
     };
 
-  Rex_json.Json.(
-    Object([("type", String(typeStr)), ("payload", payload)])
-  );
+  Json.(Object([("type", String(typeStr)), ("payload", payload)]));
 };
 let decode = json =>
   Json.(
