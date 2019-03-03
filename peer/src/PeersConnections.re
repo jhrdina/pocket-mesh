@@ -92,34 +92,24 @@ let derive =
       model,
     ) => {
   let onlinePeers = peersStatuses |> PeersStatuses.getOnlinePeers;
-  let onlinePeersConnStates =
-    PeerId.Set.fold(
-      (peerId, connStates) =>
-        switch (
-          peersGroups |> PeersGroups.isPeerInAGroup(peerId),
-          model |> PeerId.Map.findOpt(peerId),
-        ) {
-        | (true, None) =>
-          connStates |> PeerId.Map.add(peerId, CreatingSdpOffer(0))
-        | (true | false, Some(state)) =>
-          connStates |> PeerId.Map.add(peerId, state)
-        | (false, None) => connStates
-        },
-      onlinePeers,
-      PeerId.Map.empty,
-    );
-  let offlineConnectedPeersConnStates =
-    model
-    |> PeerId.Map.filter((peerId, connState) =>
-         switch (connState, peers.byId |> PeerId.Map.mem(peerId)) {
-         | (Connected(_), true) => true
-         | _ => false
-         }
-       );
-  PeerId.Map.merge(
-    unionMergerRightWins,
-    onlinePeersConnStates,
-    offlineConnectedPeersConnStates,
+
+  PeerId.Map.fold(
+    (peerId, _peer, connStates) =>
+      switch (
+        onlinePeers |> PeerId.Set.mem(peerId),
+        peersGroups |> PeersGroups.isPeerInAGroup(peerId),
+        model |> PeerId.Map.findOpt(peerId),
+      ) {
+      | (true, true, None) =>
+        connStates |> PeerId.Map.add(peerId, CreatingSdpOffer(0))
+      | (true, true, Some(state))
+      | (false, true, Some(Connected(_) as state)) =>
+        connStates |> PeerId.Map.add(peerId, state)
+      | (true | false, false, _)
+      | (false, true, _) => connStates
+      },
+    peers.byId,
+    PeerId.Map.empty,
   );
 };
 
