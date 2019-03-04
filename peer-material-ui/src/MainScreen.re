@@ -13,43 +13,44 @@ exception InternalError;
 type MainScreenAction.t +=
   | ChangedActiveTab(tab);
 
-let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
-  _theme => [
-    {
-      name: "wrapper",
-      styles: ReactDOMRe.Style.make(~position="relative", ()),
-    },
-    {
-      name: "toolbarLeftBtn",
-      styles:
-        ReactDOMRe.Style.make(~marginLeft="-18px", ~marginRight="10px", ()),
-    },
-    {name: "toolbarTitle", styles: ReactDOMRe.Style.make(~flexGrow="1", ())},
-    {
-      name: "toolbarRightBlock",
-      styles:
-        ReactDOMRe.Style.make(~marginLeft="10px", ~marginRight="-18px", ()),
-    },
-    {
-      name: "tabsIndicator",
-      styles:
-        ReactDOMRe.Style.make(~backgroundColor="white", ~height="3px", ()),
-    },
-    {
-      name: "fab",
-      styles:
-        ReactDOMRe.Style.make(
-          ~position="absolute",
-          ~bottom="16px",
-          ~right="16px",
-          (),
-        ),
-    },
-  ];
-
-module Styles = {
-  open Css;
-};
+let useStyles =
+  MuiStylesHooks.makeWithTheme(_theme =>
+    [
+      {
+        name: "wrapper",
+        styles: ReactDOMRe.Style.make(~position="relative", ()),
+      },
+      {
+        name: "toolbarLeftBtn",
+        styles:
+          ReactDOMRe.Style.make(~marginLeft="-18px", ~marginRight="10px", ()),
+      },
+      {
+        name: "toolbarTitle",
+        styles: ReactDOMRe.Style.make(~flexGrow="1", ()),
+      },
+      {
+        name: "toolbarRightBlock",
+        styles:
+          ReactDOMRe.Style.make(~marginLeft="10px", ~marginRight="-18px", ()),
+      },
+      {
+        name: "tabsIndicator",
+        styles:
+          ReactDOMRe.Style.make(~backgroundColor="white", ~height="3px", ()),
+      },
+      {
+        name: "fab",
+        styles:
+          ReactDOMRe.Style.make(
+            ~position="absolute",
+            ~bottom="16px",
+            ~right="16px",
+            (),
+          ),
+      },
+    ]
+  );
 
 let tabToInt =
   fun
@@ -87,8 +88,8 @@ let make = (~initialActiveTab=Groups, _children) => {
   },
   render: self =>
     MaterialUi.(
-      <WithStyles
-        classesWithTheme=muiStyles
+      <UseHook
+        hook=useStyles
         render={classes =>
           <div className=classes##wrapper>
             <AppBar position=`Static>
