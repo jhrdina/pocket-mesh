@@ -31,6 +31,11 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
         ReactDOMRe.Style.make(~marginLeft="10px", ~marginRight="-18px", ()),
     },
     {
+      name: "tabsIndicator",
+      styles:
+        ReactDOMRe.Style.make(~backgroundColor="white", ~height="3px", ()),
+    },
+    {
       name: "fab",
       styles:
         ReactDOMRe.Style.make(
@@ -102,6 +107,7 @@ let make = (~initialActiveTab=Groups, _children) => {
                 </div>
               </Toolbar>
               <Tabs
+                classes=[Indicator(classes##tabsIndicator)]
                 value={self.state.activeTab |> tabToInt}
                 onChange={(_, tabInt) =>
                   self.send(ChangedActiveTab(tabInt |> intToTab))
