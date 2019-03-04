@@ -7,9 +7,8 @@
     "build": "bsb -make-world",
     "start": "bsb -make-world -w",
     "clean": "bsb -clean-world",
-    "pack": "webpack --config ./example/webpack.config.js",
-    "pack-start": "webpack -w --config ./example/webpack.config.js",
-    "pack:production": "NODE_ENV=production webpack --config ./example/webpack.config.js --display-modules",
+    "webpack": "webpack -w --config ./example/webpack.config.js",
+    "webpack:production": "NODE_ENV=production webpack --config ./example/webpack.config.js --display-modules",
     "prepare": "npm link bs-platform"
   },
   "repository": {
