@@ -28,7 +28,12 @@ let update = (model, msg) => {
     let (p2p, cmd) = PM.update(model.p2p, p2pMsg);
     ({...model, p2p}, cmd |> Cmd.map(p2PMsg));
   | P2PGuiMsg(p2pMsg) =>
-    let (p2pGui, cmd) = PMGui.PeerScreens.update(p2pMsg, model.p2pGui);
+    let (p2pGui, cmd) =
+      PMGui.PeerScreens.update(
+        ~core=model.p2p |> PM.State.classify,
+        p2pMsg,
+        model.p2pGui,
+      );
     ({...model, p2pGui}, cmd |> Cmd.map(p2PGuiMsg));
   };
 };

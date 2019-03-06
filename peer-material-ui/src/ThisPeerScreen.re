@@ -65,7 +65,7 @@ let useStyles =
     ]
   );
 
-let make = _children => {
+let make = (~thisPeer, ~pushMsg, _children) => {
   ...component,
   render: _self =>
     MaterialUi.(
@@ -75,7 +75,11 @@ let make = _children => {
           <div className=classes##root>
             <AppBar position=`Static className={classes##appBar}>
               <Toolbar variant=`Dense className=classes##toolbar>
-                <IconButton color=`Inherit> <Icons.ArrowBack /> </IconButton>
+                <IconButton
+                  color=`Inherit
+                  onClick={_ => pushMsg(Route.ChangeRoute(Main(General)))}>
+                  <Icons.ArrowBack />
+                </IconButton>
                 <Typography
                   variant=`H6 color=`Inherit className={classes##toolbarTitle}>
                   {"This peer" |> ReasonReact.string}
@@ -85,7 +89,7 @@ let make = _children => {
             <SectionTitle text="This peer's ID" />
             <IdBox
               className=classes##idBox
-              id="YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg=="
+              id=PocketMeshPeer.(thisPeer |> ThisPeer.id |> Peer.Id.toString)
             />
             /*<SectionTitle text="Export" />
               <Button

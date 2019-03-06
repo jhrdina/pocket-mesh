@@ -1,5 +1,10 @@
+type mainTab =
+  | Groups
+  | Peers
+  | General;
+
 type t =
-  | Main
+  | Main(mainTab)
   | Group
   | PeerInGroup
   | Peer

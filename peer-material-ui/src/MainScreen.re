@@ -1,33 +1,20 @@
 open BlackTea;
 
-type tab =
-  | Groups
-  | Peers
-  | General;
-
 type model = {
-  activeTab: tab,
+  // activeTab: Route.mainTab,
   generalTab: GeneralTab.model,
 };
 
 exception InternalError;
 
-type Msg.t +=
-  | ChangedActiveTab(tab);
+// type Msg.t +=
+//   | ChangedActiveTab(Route.mainTab);
 
 // UPDATE
 
-let init = initialActiveTab => (
-  {activeTab: initialActiveTab, generalTab: GeneralTab.init()},
-  Cmd.none,
-);
+let init = () => ({generalTab: GeneralTab.init()}, Cmd.none);
 
 let update = (msg, model) => {
-  let model =
-    switch (msg) {
-    | ChangedActiveTab(tab) => {...model, activeTab: tab}
-    | _ => model
-    };
   (
     {...model, generalTab: GeneralTab.update(msg, model.generalTab)},
     Cmd.none,
@@ -75,13 +62,13 @@ let useStyles =
     ]
   );
 
-let tabToInt =
+let tabToInt: Route.mainTab => int =
   fun
   | Groups => 0
   | Peers => 1
   | General => 2;
 
-let intToTab =
+let intToTab: int => Route.mainTab =
   fun
   | 0 => Groups
   | 1 => Peers
@@ -90,7 +77,7 @@ let intToTab =
 
 let component = ReasonReact.statelessComponent("MainScreen");
 
-let make = (~core, ~model, ~pushMsg, _children) => {
+let make = (~activeTab, ~core, ~model, ~pushMsg, _children) => {
   ...component,
   render: _self =>
     MaterialUi.(
@@ -118,23 +105,23 @@ let make = (~core, ~model, ~pushMsg, _children) => {
               </Toolbar>
               <Tabs
                 classes=[Indicator(classes##tabsIndicator)]
-                value={model.activeTab |> tabToInt}
+                value={activeTab |> tabToInt}
                 onChange={(_, tabInt) =>
-                  pushMsg(ChangedActiveTab(tabInt |> intToTab))
+                  pushMsg(Route.ChangeRoute(Main(tabInt |> intToTab)))
                 }>
                 <Tab label={"Groups" |> ReasonReact.string} />
                 <Tab label={"Friends" |> ReasonReact.string} />
                 <Tab label={"General" |> ReasonReact.string} />
               </Tabs>
             </AppBar>
-            {switch (model.activeTab) {
+            {switch (activeTab) {
              | Groups => GroupsListTab.render()
              | Peers => PeersListTab.render()
              | General =>
                GeneralTab.render(~model=model.generalTab, ~core, ~pushMsg)
              }}
             {let renderer =
-               switch (model.activeTab) {
+               switch (activeTab) {
                | Groups => GroupsListTab.renderFab
                | Peers => PeersListTab.renderFab
                | General => GeneralTab.renderFab

@@ -4,7 +4,7 @@ open BlackTea;
 
 [@bs.deriving accessors]
 type screen =
-  | Main(MainScreen.model)
+  | Main(Route.mainTab, MainScreen.model)
   | Group
   | PeerInGroup
   | Peer
@@ -20,9 +20,9 @@ let updateWith = (toModel, (subModel, subCmd)) => (
   subCmd,
 );
 
-let changeRouteTo = (route: Route.t) => {
+let routeToNewScreenState = (route: Route.t) => {
   switch (route) {
-  | Main => MainScreen.init(Groups) |> updateWith(main)
+  | Main(tab) => MainScreen.init() |> updateWith(model => Main(tab, model))
   | Group => (Group, Cmd.none)
   | PeerInGroup => (PeerInGroup, Cmd.none)
   | Peer => (Peer, Cmd.none)
@@ -34,23 +34,47 @@ let changeRouteTo = (route: Route.t) => {
 // UPDATE
 
 let init = () => {
-  let (main, cmd) = MainScreen.init(Groups);
-  (Main(main), cmd);
+  let (main, cmd) = MainScreen.init();
+  (Main(Groups, main), cmd);
 };
 
-let update = (msg, model) => {
-  switch (msg) {
-  | Route.ChangeRoute(route) => changeRouteTo(route)
-  | msg =>
+let handleRedirects =
+    (
+      ~core: PocketMeshPeer.State.taggedT,
+      (suggestedScreenState, suggestedScreenCmd),
+    ) =>
+  switch (suggestedScreenState) {
+  | ThisPeer =>
+    switch (core) {
+    | HasIdentity(_) => (suggestedScreenState, suggestedScreenCmd)
+    | WaitingForDbAndIdentity(_) =>
+      MainScreen.init() |> updateWith(model => Main(General, model))
+    }
+  | _ => (suggestedScreenState, suggestedScreenCmd)
+  };
+
+let update = (~core, msg, model) => {
+  let suggestedScreen =
+    switch (msg) {
+    | Route.ChangeRoute(route) => routeToNewScreenState(route)
+    | _ => (model, Cmd.none)
+    };
+
+  let (model, cmd) = handleRedirects(~core, suggestedScreen);
+
+  // Handle submodel updates
+  let (model, subCmd) =
     switch (model) {
-    | Main(m) => MainScreen.update(msg, m) |> updateWith(main)
+    | Main(tab, m) =>
+      MainScreen.update(msg, m) |> updateWith(m => Main(tab, m))
     | Group
     | PeerInGroup
     | Peer
     | PeerSearch
     | ThisPeer => (model, Cmd.none)
-    }
-  };
+    };
+
+  (model, Cmd.batch([cmd, subCmd]));
 };
 
 // VIEW
@@ -78,12 +102,21 @@ let make = (~core, ~className="", ~model, ~pushMsg, _children) => {
             <div
               className={[Styles.wrapper, className] |> String.concat(" ")}>
               {switch (model) {
-               | Main(m) => <MainScreen core model=m pushMsg />
+               | Main(tab, m) =>
+                 <MainScreen activeTab=tab core model=m pushMsg />
                | Group => <GroupScreen />
                | PeerInGroup => <PeerInGroupScreen />
                | Peer => <PeerScreen />
                | PeerSearch => <PeerSearchScreen />
-               | ThisPeer => <ThisPeerScreen />
+               | ThisPeer =>
+                 switch (core) {
+                 | HasIdentity(dbState, _) =>
+                   <ThisPeerScreen
+                     thisPeer={dbState |> PocketMeshPeer.DbState.thisPeer}
+                     pushMsg
+                   />
+                 | WaitingForDbAndIdentity(_) => "Bug." |> ReasonReact.string
+                 }
                }}
             </div>
           }
