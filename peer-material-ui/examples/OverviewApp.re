@@ -2,6 +2,9 @@ let component = ReasonReact.statelessComponent("App");
 
 module MUI = MaterialUi;
 
+// Dummy pushMsg
+let pushMsg = _ => ();
+
 module Styles = {
   open Css;
   let framed = style([border(`px(1), `solid, `hex("ccc"))]);
@@ -24,35 +27,7 @@ let renderComponentTitle = title =>
 let make = _children => {
   ...component,
   render: _self =>
-    <MUI.ThemeProvider
-      theme={MaterialUi_Theme.create(
-        MUI.ThemeOptions.(
-          make(
-            ~typography=Typography.make(~useNextVariants=true, ()),
-            ~palette=
-              PaletteOptions.make(
-                ~primary=
-                  Primary.make(
-                    ~main="#616161",
-                    ~light="#8e8e8e",
-                    ~dark="#373737",
-                    ~contrastText="#ffffff",
-                    (),
-                  ),
-                ~secondary=
-                  Secondary.make(
-                    ~main="#7bb241",
-                    ~light="#ade470",
-                    ~dark="#4a820c",
-                    ~contrastText="#ffffff",
-                    (),
-                  ),
-                (),
-              ),
-            (),
-          )
-        ),
-      )}>
+    <ThemeProvider>
       <div>
         <MUI.Typography
           component={`String("h1")} variant=`H3 gutterBottom=true>
@@ -61,16 +36,16 @@ let make = _children => {
         {renderComponentTitle("Global Icon")}
         <div>
           <MUI.IconButton>
-            <GlobalIcon signalState=Online peerState=Online />
+            <GlobalIcon signalState=Connected peerState=Online />
           </MUI.IconButton>
           <MUI.IconButton>
-            <GlobalIcon signalState=Offline peerState=Offline />
+            <GlobalIcon signalState=Connecting peerState=Offline />
           </MUI.IconButton>
           <MUI.IconButton>
-            <GlobalIcon signalState=Online peerState=Loading />
+            <GlobalIcon signalState=Connected peerState=Loading />
           </MUI.IconButton>
           <MUI.IconButton>
-            <GlobalIcon signalState=Online peerState=OnlineNoDoc />
+            <GlobalIcon signalState=Connected peerState=OnlineNoDoc />
           </MUI.IconButton>
         </div>
         {renderComponentTitle("PeerStatusIndicator")}
@@ -96,9 +71,15 @@ let make = _children => {
         {renderComponentTitle("Members Count")}
         <div> <MembersCount count=42 /> </div>
         {renderComponentTitle("Main Screen")}
-        <div> <MainScreen initialActiveTab=Groups /> </div>
-        <div> <MainScreen initialActiveTab=Peers /> </div>
-        <div> <MainScreen initialActiveTab=General /> </div>
+        <div
+          // <MainScreen model={MainScreen.init(Groups) |> fst} pushMsg />
+        />
+        <div
+          // <MainScreen model={MainScreen.init(Peers) |> fst} pushMsg />
+        />
+        <div
+          // <MainScreen model={MainScreen.init(General) |> fst} pushMsg />
+        />
         {renderComponentTitle("Group Screen")}
         <div> <GroupScreen /> </div>
         {renderComponentTitle("Peer in Group Screen")}
@@ -110,5 +91,7 @@ let make = _children => {
         {renderComponentTitle("This Peer Screen")}
         <div> <ThisPeerScreen /> </div>
       </div>
-    </MUI.ThemeProvider>,
+    </ThemeProvider>,
 };
+
+ReactDOMRe.renderToElementWithId(ReasonReact.element(make([||])), "app");

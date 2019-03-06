@@ -1,6 +1,8 @@
-type state = {signalServerDialogOpen: bool};
+module PM = PocketMeshPeer;
 
-type MainScreenAction.t +=
+type model = {signalServerDialogOpen: bool};
+
+type Msg.t +=
   | ClosedSignalServerSettingsDialog(SignalServerSettingsDialog.closeResult)
   | ClickedOpenSignalServerSettings;
 
@@ -17,10 +19,10 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
     },
   ];
 
-let initialState = () => {signalServerDialogOpen: false};
+let init = () => {signalServerDialogOpen: false};
 
-let reducer = (action, state) =>
-  switch (action) {
+let update = (msg, model) =>
+  switch (msg) {
   | ClosedSignalServerSettingsDialog(Cancel) => {
       signalServerDialogOpen: false,
     }
@@ -28,32 +30,45 @@ let reducer = (action, state) =>
     // TODO: Handle settings changes
     {signalServerDialogOpen: false}
   | ClickedOpenSignalServerSettings => {signalServerDialogOpen: true}
-  | _ => state
+  | _ => model
   };
 
-let render = (~state, ~send) => {
-  let signalServerUrl = "wss://signal.example.com";
-  let signalState: GlobalIcon.signalState = Offline;
+let render = (~core: PM.State.taggedT, ~model, ~pushMsg) => {
+  let signalChannel =
+    switch (core) {
+    | WaitingForDbAndIdentity(signalChannel) => signalChannel
+    | HasIdentity(_dbState, runtimeState) =>
+      runtimeState |> PM.RuntimeState.signalChannel
+    };
+  let signalServerUrl = signalChannel |> PM.SignalChannel.url;
+  let signalServerConnState =
+    signalChannel |> PM.SignalChannel.connectionState;
   let peerState: GlobalIcon.peerState = Online;
 
   let signalStateStr =
-    switch (signalState) {
-    | Offline => "Trying to connect to " ++ signalServerUrl ++ "..."
-    | Online => "Connected to " ++ signalServerUrl
+    switch (signalServerConnState) {
+    | Connecting => "Trying to connect to " ++ signalServerUrl ++ "..."
+    | Connected => "Connected to " ++ signalServerUrl
     };
 
-  let thisPeerIdStr = "YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg==";
+  let thisPeerIdStr =
+    switch (core) {
+    | WaitingForDbAndIdentity(_) => "New identity is being generated..."
+    | HasIdentity(dbState, _) =>
+      dbState |> PM.DbState.thisPeer |> PM.ThisPeer.id |> PM.Peer.Id.toString
+    };
 
   MaterialUi.(
     <MaterialUi.WithStyles
       classesWithTheme=muiStyles
       render={classes =>
         <List>
-          <ListItem button=true>
+          <ListItem
+            button=true onClick={_ => pushMsg(Route.ChangeRoute(ThisPeer))}>
             <ListItemIcon className=classes##listItemIcon>
               <GlobalIcon
                 className=classes##icon
-                signalState
+                signalState=signalServerConnState
                 peerState
                 highlight=ThisPeer
               />
@@ -64,11 +79,12 @@ let render = (~state, ~send) => {
             />
           </ListItem>
           <ListItem
-            button=true onClick={_ => send(ClickedOpenSignalServerSettings)}>
+            button=true
+            onClick={_ => pushMsg(ClickedOpenSignalServerSettings)}>
             <ListItemIcon className=classes##listItemIcon>
               <GlobalIcon
                 className=classes##icon
-                signalState
+                signalState=signalServerConnState
                 peerState
                 highlight=SignalServer
               />
@@ -80,9 +96,9 @@ let render = (~state, ~send) => {
           </ListItem>
           <SignalServerSettingsDialog
             settings={url: signalServerUrl}
-            open_={state.signalServerDialogOpen}
+            open_={model.signalServerDialogOpen}
             onClose={closeResult =>
-              send(ClosedSignalServerSettingsDialog(closeResult))
+              pushMsg(ClosedSignalServerSettingsDialog(closeResult))
             }
           />
         </List>

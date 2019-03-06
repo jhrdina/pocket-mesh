@@ -7,10 +7,16 @@
   "reason": {
     "react-jsx": 2
   },
-  "sources": {
-    "dir": "src",
-    "subdirs": true
-  },
+  "sources": [
+    {
+      "dir": "src",
+      "subdirs": true
+    },
+    {
+      "dir": "examples",
+      "type": "dev"
+    }
+  ],
   "package-specs": [
     {
       "module": "es6",
@@ -20,6 +26,7 @@
   "suffix": ".bs.js",
   "namespace": true,
   "bs-dependencies": [
+    "bs-black-tea",
     "reason-react",
     "@jsiebern/bs-material-ui",
     "bs-css",

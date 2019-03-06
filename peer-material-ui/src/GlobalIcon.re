@@ -1,7 +1,3 @@
-type signalState =
-  | Offline
-  | Online;
-
 type peerState =
   | Offline
   | Loading
@@ -39,7 +35,7 @@ let component = ReasonReact.statelessComponent("GlobalIcon");
 
 let make =
     (
-      ~signalState: signalState,
+      ~signalState: PocketMeshPeer.SignalChannel.connectionState,
       ~peerState: peerState,
       ~highlight=NoHighlight,
       ~className="",
@@ -60,13 +56,13 @@ let make =
           r="3"
         />
         {switch (signalState) {
-         | Offline =>
+         | Connecting =>
            <path
              fill={highlight == SignalServer ? Styles.crossColor : ""}
              id="signalOffline"
              d="M10.2 2.82L8.79 4.23 10.56 6 8.79 7.77l1.41 1.41 1.77-1.77 1.77 1.77 1.41-1.41L13.38 6l1.77-1.77-1.41-1.41-1.77 1.77-1.77-1.77"
            />
-         | Online =>
+         | Connected =>
            <circle
              id="signalOnline"
              fill={highlight == SignalServer ? Styles.onlineColor : ""}

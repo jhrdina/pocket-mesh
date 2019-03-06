@@ -1,17 +1,40 @@
+open BlackTea;
+
 type tab =
   | Groups
   | Peers
   | General;
 
-type state = {
+type model = {
   activeTab: tab,
-  generalTab: GeneralTab.state,
+  generalTab: GeneralTab.model,
 };
 
 exception InternalError;
 
-type MainScreenAction.t +=
+type Msg.t +=
   | ChangedActiveTab(tab);
+
+// UPDATE
+
+let init = initialActiveTab => (
+  {activeTab: initialActiveTab, generalTab: GeneralTab.init()},
+  Cmd.none,
+);
+
+let update = (msg, model) => {
+  let model =
+    switch (msg) {
+    | ChangedActiveTab(tab) => {...model, activeTab: tab}
+    | _ => model
+    };
+  (
+    {...model, generalTab: GeneralTab.update(msg, model.generalTab)},
+    Cmd.none,
+  );
+};
+
+// VIEW
 
 let useStyles =
   MuiStylesHooks.makeWithTheme(_theme =>
@@ -65,28 +88,11 @@ let intToTab =
   | 2 => General
   | _ => raise(InternalError);
 
-let component = ReasonReact.reducerComponent("MainScreen");
+let component = ReasonReact.statelessComponent("MainScreen");
 
-let make = (~initialActiveTab=Groups, _children) => {
+let make = (~core, ~model, ~pushMsg, _children) => {
   ...component,
-  initialState: () => {
-    activeTab: initialActiveTab,
-    generalTab: GeneralTab.initialState(),
-  },
-
-  reducer: (action, state) => {
-    let state =
-      switch (action) {
-      | ChangedActiveTab(tab) => {...state, activeTab: tab}
-      | _ => state
-      };
-
-    ReasonReact.Update({
-      ...state,
-      generalTab: GeneralTab.reducer(action, state.generalTab),
-    });
-  },
-  render: self =>
+  render: _self =>
     MaterialUi.(
       <UseHook
         hook=useStyles
@@ -94,7 +100,10 @@ let make = (~initialActiveTab=Groups, _children) => {
           <div className=classes##wrapper>
             <AppBar position=`Static>
               <Toolbar variant=`Dense>
-                <IconButton color=`Inherit className={classes##toolbarLeftBtn}>
+                <IconButton
+                  color=`Inherit
+                  className={classes##toolbarLeftBtn}
+                  onClick={_ => pushMsg(Msg.ClickedGoBackToApp)}>
                   <Icons.ArrowBack />
                 </IconButton>
                 <Typography
@@ -109,26 +118,23 @@ let make = (~initialActiveTab=Groups, _children) => {
               </Toolbar>
               <Tabs
                 classes=[Indicator(classes##tabsIndicator)]
-                value={self.state.activeTab |> tabToInt}
+                value={model.activeTab |> tabToInt}
                 onChange={(_, tabInt) =>
-                  self.send(ChangedActiveTab(tabInt |> intToTab))
+                  pushMsg(ChangedActiveTab(tabInt |> intToTab))
                 }>
                 <Tab label={"Groups" |> ReasonReact.string} />
                 <Tab label={"Friends" |> ReasonReact.string} />
                 <Tab label={"General" |> ReasonReact.string} />
               </Tabs>
             </AppBar>
-            {switch (self.state.activeTab) {
+            {switch (model.activeTab) {
              | Groups => GroupsListTab.render()
              | Peers => PeersListTab.render()
              | General =>
-               GeneralTab.render(
-                 ~send=self.send,
-                 ~state=self.state.generalTab,
-               )
+               GeneralTab.render(~model=model.generalTab, ~core, ~pushMsg)
              }}
             {let renderer =
-               switch (self.state.activeTab) {
+               switch (model.activeTab) {
                | Groups => GroupsListTab.renderFab
                | Peers => PeersListTab.renderFab
                | General => GeneralTab.renderFab
