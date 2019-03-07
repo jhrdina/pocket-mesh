@@ -116,7 +116,7 @@ let make = (~activeTab, ~core, ~model, ~pushMsg, _children) => {
             </AppBar>
             {switch (activeTab) {
              | Groups => GroupsListTab.render()
-             | Peers => PeersListTab.render()
+             | Peers => PeersListTab.render(~core, ~pushMsg)
              | General =>
                GeneralTab.render(~model=model.generalTab, ~core, ~pushMsg)
              }}

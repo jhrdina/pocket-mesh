@@ -7,7 +7,7 @@ type screen =
   | Main(Route.mainTab, MainScreen.model)
   | Group
   | PeerInGroup
-  | Peer
+  | Peer(PocketMeshPeer.Peer.Id.t)
   | PeerSearch
   | ThisPeer;
 
@@ -25,7 +25,7 @@ let routeToNewScreenState = (route: Route.t) => {
   | Main(tab) => MainScreen.init() |> updateWith(model => Main(tab, model))
   | Group => (Group, Cmd.none)
   | PeerInGroup => (PeerInGroup, Cmd.none)
-  | Peer => (Peer, Cmd.none)
+  | Peer(peerId) => (Peer(peerId), Cmd.none)
   | PeerSearch => (PeerSearch, Cmd.none)
   | ThisPeer => (ThisPeer, Cmd.none)
   };
@@ -69,7 +69,7 @@ let update = (~core, msg, model) => {
       MainScreen.update(msg, m) |> updateWith(m => Main(tab, m))
     | Group
     | PeerInGroup
-    | Peer
+    | Peer(_)
     | PeerSearch
     | ThisPeer => (model, Cmd.none)
     };
@@ -106,7 +106,7 @@ let make = (~core, ~className="", ~model, ~pushMsg, _children) => {
                  <MainScreen activeTab=tab core model=m pushMsg />
                | Group => <GroupScreen />
                | PeerInGroup => <PeerInGroupScreen />
-               | Peer => <PeerScreen />
+               | Peer(peerId) => <PeerScreen peerId />
                | PeerSearch => <PeerSearchScreen />
                | ThisPeer =>
                  switch (core) {

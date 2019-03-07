@@ -69,11 +69,9 @@ let useStyles =
     ]
   );
 
-let make = _children => {
+let make = (~peerId, _children) => {
   ...component,
   render: _self => {
-    let peerId =
-      PocketMeshPeer.Peer.Id.ofString("YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg==");
     MaterialUi.(
       <UseHook
         hook=useStyles
@@ -111,14 +109,7 @@ let make = _children => {
                   "root": classes##peerIdFieldInput,
                 },
               }
-              value={
-                      `String(
-                        peerId->Belt.Option.mapWithDefault(
-                          "",
-                          PocketMeshPeer.Peer.Id.toString,
-                        ),
-                      )
-                    }
+              value={`String(peerId |> PocketMeshPeer.Peer.Id.toString)}
               variant=`Outlined
               multiline=true
               fullWidth=true

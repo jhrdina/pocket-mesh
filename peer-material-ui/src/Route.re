@@ -7,7 +7,7 @@ type t =
   | Main(mainTab)
   | Group
   | PeerInGroup
-  | Peer
+  | Peer(PocketMeshPeer.Peer.Id.t)
   | PeerSearch
   | ThisPeer;
 

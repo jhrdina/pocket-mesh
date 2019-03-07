@@ -37,10 +37,6 @@ let useStyles =
           ReactDOMRe.Style.make(~paddingLeft="0", ~paddingRight="0", ()),
       },
       {name: "titleInput", styles: ReactDOMRe.Style.make(~flex="1", ())},
-      {
-        name: "noRecordsMessage",
-        styles: ReactDOMRe.Style.make(~textAlign="center", ()),
-      },
     ]
   );
 
@@ -110,10 +106,7 @@ let make = (~className="", _children) => {
             </AppBar>
             <List>
               {if (isEmpty) {
-                 <Typography
-                   variant=`Body2 className=classes##noRecordsMessage>
-                   {"No matching peers found." |> ReasonReact.string}
-                 </Typography>;
+                 <LonelyMessage text="No matching peers found." />;
                } else {
                  <PeerRow
                    signalState=Online

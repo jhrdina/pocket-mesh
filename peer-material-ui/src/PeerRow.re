@@ -22,14 +22,22 @@ module Styles = {
   open Css;
 };
 
-let make = (~signalState, ~inGroup, ~connectionState, ~alias, _children) => {
+let make =
+    (
+      ~signalState,
+      ~inGroup,
+      ~connectionState,
+      ~alias,
+      ~onClick=_ => (),
+      _children,
+    ) => {
   ...component,
   render: _self =>
     MaterialUi.(
       <WithStyles
         classesWithTheme=muiStyles
         render={classes =>
-          <ListItem button=true>
+          <ListItem onClick button=true>
             <PeerStatusIndicator
               signalState
               inGroup
