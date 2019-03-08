@@ -1,3 +1,6 @@
+type Msg.t +=
+  | ClickedAddPeer;
+
 let elementArrayWithDefaultMsg = (text, arr) =>
   arr |> Array.length > 0 ? arr |> ReasonReact.array : <LonelyMessage text />;
 
@@ -49,7 +52,7 @@ let render = (~core: PocketMeshPeer.State.taggedT, ~pushMsg) => {
                   let peerRowEl =
                     <PeerRow
                       onClick={_ =>
-                        pushMsg(Route.ChangeRoute(Peer(peerId)))
+                        pushMsg(Route.ChangeRoute(Peer(Some(peerId))))
                       }
                       alias={peer |> Peer.alias}
                       connectionState
@@ -67,5 +70,12 @@ let render = (~core: PocketMeshPeer.State.taggedT, ~pushMsg) => {
   );
 };
 
-let renderFab = (~className) =>
-  MaterialUi.(<Fab color=`Secondary className> <Icons.PersonAdd /> </Fab>);
+let renderFab = (~className, ~pushMsg) =>
+  MaterialUi.(
+    <Fab
+      color=`Secondary
+      className
+      onClick={_ => pushMsg(Route.ChangeRoute(Peer(None)))}>
+      <Icons.PersonAdd />
+    </Fab>
+  );

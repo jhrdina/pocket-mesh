@@ -70,57 +70,63 @@ let useStyles =
   );
 
 let make = (~peerId, _children) => {
-  ...component,
-  render: _self => {
-    MaterialUi.(
-      <UseHook
-        hook=useStyles
-        render={classes =>
-          <div className=classes##root>
-            <AppBar position=`Static className={classes##appBar}>
-              <Toolbar variant=`Dense className=classes##toolbar>
-                <IconButton color=`Inherit> <Icons.ArrowBack /> </IconButton>
-                <InputBase
-                  placeholder="Peer alias"
-                  className=classes##titleInput
-                />
-                <div>
-                  <IconButton color=`Inherit> <Icons.Delete /> </IconButton>
-                </div>
-              </Toolbar>
-            </AppBar>
-            <SectionTitle text="Status" />
-            <SectionValue text="Online" />
-            <SectionTitle text="P2P connection" />
-            <ListItem>
-              <ListItemText
-                primary={"Not established" |> ReasonReact.string}
-                secondary={
-                  "Connection is not needed because peer is not added in any group."
-                  |> ReasonReact.string
-                }
-              />
-            </ListItem>
-            <SectionTitle text="Peer ID" />
-            <TextField
-              className=classes##peerIdField
-              inputProps={
-                "classes": {
-                  "root": classes##peerIdFieldInput,
-                },
-              }
-              value={`String(peerId |> PocketMeshPeer.Peer.Id.toString)}
-              variant=`Outlined
-              multiline=true
-              fullWidth=true
-              placeholder="Insert peer's ID here..."
-            />
-            <div className=classes##copyButtonBox>
-              <Button> {"Copy to clipboard" |> ReasonReact.string} </Button>
-            </div>
-          </div>
-        }
-      />
+  let peerIdStr =
+    Belt.Option.(
+      peerId->map(PocketMeshPeer.Peer.Id.toString)->getWithDefault("")
     );
-  },
+  {
+    ...component,
+    render: _self => {
+      MaterialUi.(
+        <UseHook
+          hook=useStyles
+          render={classes =>
+            <div className=classes##root>
+              <AppBar position=`Static className={classes##appBar}>
+                <Toolbar variant=`Dense className=classes##toolbar>
+                  <IconButton color=`Inherit> <Icons.ArrowBack /> </IconButton>
+                  <InputBase
+                    placeholder="Peer alias"
+                    className=classes##titleInput
+                  />
+                  <div>
+                    <IconButton color=`Inherit> <Icons.Delete /> </IconButton>
+                  </div>
+                </Toolbar>
+              </AppBar>
+              <SectionTitle text="Status" />
+              <SectionValue text="Online" />
+              <SectionTitle text="P2P connection" />
+              <ListItem>
+                <ListItemText
+                  primary={"Not established" |> ReasonReact.string}
+                  secondary={
+                    "Connection is not needed because peer is not added in any group."
+                    |> ReasonReact.string
+                  }
+                />
+              </ListItem>
+              <SectionTitle text="Peer ID" />
+              <TextField
+                className=classes##peerIdField
+                inputProps={
+                  "classes": {
+                    "root": classes##peerIdFieldInput,
+                  },
+                }
+                value={`String(peerIdStr)}
+                variant=`Outlined
+                multiline=true
+                fullWidth=true
+                placeholder="Insert peer's ID here..."
+              />
+              <div className=classes##copyButtonBox>
+                <Button> {"Copy to clipboard" |> ReasonReact.string} </Button>
+              </div>
+            </div>
+          }
+        />
+      );
+    },
+  };
 };

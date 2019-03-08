@@ -7,11 +7,15 @@ type screen =
   | Main(Route.mainTab, MainScreen.model)
   | Group
   | PeerInGroup
-  | Peer(PocketMeshPeer.Peer.Id.t)
+  | Peer(option(PocketMeshPeer.Peer.Id.t))
   | PeerSearch
-  | ThisPeer;
+  | ThisPeer
+  | Loading;
 
-type model = screen;
+type model = {
+  reqRoute: Route.t,
+  screen,
+};
 
 // HELPERS
 
@@ -31,50 +35,46 @@ let routeToNewScreenState = (route: Route.t) => {
   };
 };
 
+let updateScreen =
+    (~core: PocketMeshPeer.State.taggedT, ~reqRoute: Route.t, msg, screen) => {
+  switch (core) {
+  | WaitingForDbAndIdentity(_) => (Loading, Cmd.none)
+  | HasIdentity(dbState, runtimeState) =>
+    switch (screen, reqRoute) {
+    | (Main(_currentTab, model), Main(reqTab)) =>
+      // Already on wanted screen
+      MainScreen.update(msg, model)
+      |> updateWith(model => Main(reqTab, model))
+    | (_, Main(reqTab)) =>
+      // Transitioning from different screen
+      MainScreen.init() |> updateWith(model => Main(reqTab, model))
+    | (_, Group) => (Group, Cmd.none)
+    | (_, PeerInGroup) => (PeerInGroup, Cmd.none)
+    | (_, Peer(peerId)) => (Peer(peerId), Cmd.none)
+    | (_, PeerSearch) => (PeerSearch, Cmd.none)
+    | (_, ThisPeer) => (ThisPeer, Cmd.none)
+    }
+  };
+};
+
 // UPDATE
 
 let init = () => {
   let (main, cmd) = MainScreen.init();
-  (Main(Groups, main), cmd);
+  ({reqRoute: Main(Groups), screen: Main(Groups, main)}, cmd);
 };
 
-let handleRedirects =
-    (
-      ~core: PocketMeshPeer.State.taggedT,
-      (suggestedScreenState, suggestedScreenCmd),
-    ) =>
-  switch (suggestedScreenState) {
-  | ThisPeer =>
-    switch (core) {
-    | HasIdentity(_) => (suggestedScreenState, suggestedScreenCmd)
-    | WaitingForDbAndIdentity(_) =>
-      MainScreen.init() |> updateWith(model => Main(General, model))
-    }
-  | _ => (suggestedScreenState, suggestedScreenCmd)
-  };
-
 let update = (~core, msg, model) => {
-  let suggestedScreen =
+  let reqRoute =
     switch (msg) {
-    | Route.ChangeRoute(route) => routeToNewScreenState(route)
-    | _ => (model, Cmd.none)
+    | Route.ChangeRoute(route) => route
+    | _ => model.reqRoute
     };
 
-  let (model, cmd) = handleRedirects(~core, suggestedScreen);
+  let (screen, screenCmd) =
+    updateScreen(~core, ~reqRoute, msg, model.screen);
 
-  // Handle submodel updates
-  let (model, subCmd) =
-    switch (model) {
-    | Main(tab, m) =>
-      MainScreen.update(msg, m) |> updateWith(m => Main(tab, m))
-    | Group
-    | PeerInGroup
-    | Peer(_)
-    | PeerSearch
-    | ThisPeer => (model, Cmd.none)
-    };
-
-  (model, Cmd.batch([cmd, subCmd]));
+  ({reqRoute, screen}, screenCmd);
 };
 
 // VIEW
@@ -101,7 +101,7 @@ let make = (~core, ~className="", ~model, ~pushMsg, _children) => {
           render={classes =>
             <div
               className={[Styles.wrapper, className] |> String.concat(" ")}>
-              {switch (model) {
+              {switch (model.screen) {
                | Main(tab, m) =>
                  <MainScreen activeTab=tab core model=m pushMsg />
                | Group => <GroupScreen />
@@ -117,6 +117,7 @@ let make = (~core, ~className="", ~model, ~pushMsg, _children) => {
                    />
                  | WaitingForDbAndIdentity(_) => "Bug." |> ReasonReact.string
                  }
+               | Loading => <div> {"Loading..." |> ReasonReact.string} </div>
                }}
             </div>
           }

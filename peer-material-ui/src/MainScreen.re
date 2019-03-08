@@ -122,8 +122,8 @@ let make = (~activeTab, ~core, ~model, ~pushMsg, _children) => {
              }}
             {let renderer =
                switch (activeTab) {
-               | Groups => GroupsListTab.renderFab
-               | Peers => PeersListTab.renderFab
+               | Groups => GroupsListTab.renderFab(~pushMsg)
+               | Peers => PeersListTab.renderFab(~pushMsg)
                | General => GeneralTab.renderFab
                }
              renderer(~className=classes##fab)}

@@ -18,5 +18,12 @@ let render = () =>
     </List>
   );
 
-let renderFab = (~className) =>
-  MaterialUi.(<Fab color=`Secondary className> <Icons.Add /> </Fab>);
+let renderFab = (~className, ~pushMsg) =>
+  MaterialUi.(
+    <Fab
+      color=`Secondary
+      className
+      onClick={_ => pushMsg(Route.ChangeRoute(Group))}>
+      <Icons.Add />
+    </Fab>
+  );
