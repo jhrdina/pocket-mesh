@@ -72,19 +72,17 @@ module App = {
   let make = (~model, ~pushMsg, _children) => {
     ...component,
     render: _self =>
-      MaterialUi.(
-        <UseHook
-          hook=useStyles
-          render={classes =>
-            <PeerScreens
-              core={model.p2p |> PM.State.classify}
-              className=classes##root
-              model={model.p2pGui}
-              pushMsg={msg => msg |> p2PGuiMsg |> pushMsg}
-            />
-          }
-        />
-      ),
+      <UseHook
+        hook=useStyles
+        render={classes =>
+          <PeerScreens
+            core={model.p2p |> PM.State.classify}
+            className=classes##root
+            model={model.p2pGui}
+            pushMsg={msg => msg |> p2PGuiMsg |> pushMsg}
+          />
+        }
+      />,
   };
 };
 

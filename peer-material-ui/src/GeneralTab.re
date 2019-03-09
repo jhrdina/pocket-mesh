@@ -7,8 +7,8 @@ type Msg.t +=
   | ClickedOpenSignalServerSettings;
 
 let iconSize = "34px";
-let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
-  _theme => [
+let useStyles =
+  MuiStylesHooks.make([
     {
       name: "icon",
       styles: ReactDOMRe.Style.make(~width=iconSize, ~height=iconSize, ()),
@@ -17,7 +17,7 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
       name: "listItemIcon",
       styles: ReactDOMRe.Style.make(~marginRight="0", ()),
     },
-  ];
+  ]);
 
 let init = () => {signalServerDialogOpen: false};
 
@@ -59,8 +59,8 @@ let render = (~core: PM.State.taggedT, ~model, ~pushMsg) => {
     };
 
   MaterialUi.(
-    <MaterialUi.WithStyles
-      classesWithTheme=muiStyles
+    <UseHook
+      hook=useStyles
       render={classes =>
         <List>
           <ListItem

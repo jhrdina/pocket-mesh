@@ -45,133 +45,139 @@ type arrowDirection =
 
 let signalLineColor = MaterialUi.Colors.Grey.c400;
 
-let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
-  theme => [
-    {
-      name: "wrapper",
-      styles: ReactDOMRe.Style.make(~position="relative", ()),
-    },
-    {
-      name: "appBar",
-      styles:
-        ReactDOMRe.Style.make(
-          ~backgroundColor="#ffffff",
-          ~boxShadow="none",
-          ~color=
-            MaterialUi.Theme.(
-              theme
-              |> Theme.paletteGet
-              |> Palette.textGet
-              |> TypeText.secondaryGet
-            ),
-          ~borderBottom="1px dashed #cccccc",
-          (),
-        ),
-    },
-    {
-      name: "toolbar",
-      styles: ReactDOMRe.Style.make(~paddingLeft="0", ~paddingRight="0", ()),
-    },
-    {name: "toolbarTitleBox", styles: ReactDOMRe.Style.make(~flex="1", ())},
-    {
-      name: "toolbarPeerAlias",
-      styles:
-        ReactDOMRe.Style.make(~lineHeight="1", ~fontSize="1.125rem", ()),
-    },
-    {
-      name: "toolbarSubtitle",
-      styles:
-        ReactDOMRe.Style.make(
-          ~lineHeight="1.4",
-          ~color=
-            MaterialUi.Theme.(
-              theme
-              |> Theme.paletteGet
-              |> Palette.textGet
-              |> TypeText.secondaryGet
-            ),
-          (),
-        ),
-    },
-    {
-      name: "removeBtn",
-      styles: ReactDOMRe.Style.make(~color=MaterialUi.Colors.Red.c500, ()),
-    },
-    {
-      name: "diaHorizLinesPair",
-      styles:
-        ReactDOMRe.Style.make(
-          ~margin="0 8px",
-          ~padding="4px 0",
-          ~borderTop="4px solid " ++ signalLineColor,
-          ~borderBottom="4px solid " ++ signalLineColor,
-          ~position="relative",
-          (),
-        ),
-    },
-    {
-      name: "diaChannelLabel",
-      styles: ReactDOMRe.Style.make(~textAlign="center", ()),
-    },
-    {
-      name: "diaArrow",
-      styles:
-        ReactDOMRe.Style.make(
-          ~position="absolute",
-          ~transform="translate(-50%,-50%)",
-          ~color=signalLineColor,
-          (),
-        ),
-    },
-    {
-      name: "diaArrowTopLeft",
-      styles: ReactDOMRe.Style.make(~top="-2px", ~left="24px", ()),
-    },
-    {
-      name: "diaArrowTopRight",
-      styles: ReactDOMRe.Style.make(~top="-2px", ~right="2px", ()),
-    },
-    {
-      name: "diaSideLine",
-      styles:
-        ReactDOMRe.Style.make(
-          ~top="0",
-          ~width="4px",
-          ~bottom="0",
-          ~backgroundColor=MaterialUi.Colors.Grey.c300,
-          ~position="absolute",
-          (),
-        ),
-    },
-    {
-      name: "diaArrowBottomLeft",
-      styles:
-        ReactDOMRe.Style.make(
-          ~bottom="-34px",
-          ~left="24px",
-          ~backgroundColor="rgba(255,255,255,0.7)",
-          ~borderRadius="50%",
-          ~minWidth="10px",
-          ~padding="4px",
-          ~color=
-            MaterialUi.Theme.(
-              theme
-              |> Theme.paletteGet
-              |> Palette.textGet
-              |> TypeText.secondaryGet
-            ),
-          (),
-        ),
-    },
-    {
-      name: "diaArrowBottomRight",
-      styles: ReactDOMRe.Style.make(~bottom="-26px", ~right="2px", ()),
-    },
-    {
-      name: "diaNotLastChannel",
-      styles: ReactDOMRe.Style.make(~marginBottom="52px", ()),
-    },
-  ];
+let useStyles =
+  MuiStylesHooks.makeWithTheme(theme =>
+    [
+      {
+        name: "wrapper",
+        styles: ReactDOMRe.Style.make(~position="relative", ()),
+      },
+      {
+        name: "appBar",
+        styles:
+          ReactDOMRe.Style.make(
+            ~backgroundColor="#ffffff",
+            ~boxShadow="none",
+            ~color=
+              MaterialUi.Theme.(
+                theme
+                |> Theme.paletteGet
+                |> Palette.textGet
+                |> TypeText.secondaryGet
+              ),
+            ~borderBottom="1px dashed #cccccc",
+            (),
+          ),
+      },
+      {
+        name: "toolbar",
+        styles:
+          ReactDOMRe.Style.make(~paddingLeft="0", ~paddingRight="0", ()),
+      },
+      {
+        name: "toolbarTitleBox",
+        styles: ReactDOMRe.Style.make(~flex="1", ()),
+      },
+      {
+        name: "toolbarPeerAlias",
+        styles:
+          ReactDOMRe.Style.make(~lineHeight="1", ~fontSize="1.125rem", ()),
+      },
+      {
+        name: "toolbarSubtitle",
+        styles:
+          ReactDOMRe.Style.make(
+            ~lineHeight="1.4",
+            ~color=
+              MaterialUi.Theme.(
+                theme
+                |> Theme.paletteGet
+                |> Palette.textGet
+                |> TypeText.secondaryGet
+              ),
+            (),
+          ),
+      },
+      {
+        name: "removeBtn",
+        styles: ReactDOMRe.Style.make(~color=MaterialUi.Colors.Red.c500, ()),
+      },
+      {
+        name: "diaHorizLinesPair",
+        styles:
+          ReactDOMRe.Style.make(
+            ~margin="0 8px",
+            ~padding="4px 0",
+            ~borderTop="4px solid " ++ signalLineColor,
+            ~borderBottom="4px solid " ++ signalLineColor,
+            ~position="relative",
+            (),
+          ),
+      },
+      {
+        name: "diaChannelLabel",
+        styles: ReactDOMRe.Style.make(~textAlign="center", ()),
+      },
+      {
+        name: "diaArrow",
+        styles:
+          ReactDOMRe.Style.make(
+            ~position="absolute",
+            ~transform="translate(-50%,-50%)",
+            ~color=signalLineColor,
+            (),
+          ),
+      },
+      {
+        name: "diaArrowTopLeft",
+        styles: ReactDOMRe.Style.make(~top="-2px", ~left="24px", ()),
+      },
+      {
+        name: "diaArrowTopRight",
+        styles: ReactDOMRe.Style.make(~top="-2px", ~right="2px", ()),
+      },
+      {
+        name: "diaSideLine",
+        styles:
+          ReactDOMRe.Style.make(
+            ~top="0",
+            ~width="4px",
+            ~bottom="0",
+            ~backgroundColor=MaterialUi.Colors.Grey.c300,
+            ~position="absolute",
+            (),
+          ),
+      },
+      {
+        name: "diaArrowBottomLeft",
+        styles:
+          ReactDOMRe.Style.make(
+            ~bottom="-34px",
+            ~left="24px",
+            ~backgroundColor="rgba(255,255,255,0.7)",
+            ~borderRadius="50%",
+            ~minWidth="10px",
+            ~padding="4px",
+            ~color=
+              MaterialUi.Theme.(
+                theme
+                |> Theme.paletteGet
+                |> Palette.textGet
+                |> TypeText.secondaryGet
+              ),
+            (),
+          ),
+      },
+      {
+        name: "diaArrowBottomRight",
+        styles: ReactDOMRe.Style.make(~bottom="-26px", ~right="2px", ()),
+      },
+      {
+        name: "diaNotLastChannel",
+        styles: ReactDOMRe.Style.make(~marginBottom="52px", ()),
+      },
+    ]
+  );
 
 let renderArrowState = (~className="", ~available, ~direction, ()) => {
   switch (available, direction) {
@@ -235,8 +241,8 @@ let make = (~className="", _children) => {
     let peerAlias = "John Brown";
     let groupAlias = "XY";
     MaterialUi.(
-      <WithStyles
-        classesWithTheme=muiStyles
+      <UseHook
+        hook=useStyles
         render={classes =>
           <div
             className={[classes##wrapper, className] |> String.concat(" ")}>

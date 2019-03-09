@@ -1,7 +1,7 @@
 let component = ReasonReact.statelessComponent("PeerRow");
 
-let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
-  _theme => [
+let useStyles =
+  MuiStylesHooks.make([
     {
       name: "checkbox",
       styles:
@@ -16,11 +16,7 @@ let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
       name: "statusIndicator",
       styles: ReactDOMRe.Style.make(~marginLeft="-16px", ()),
     },
-  ];
-
-module Styles = {
-  open Css;
-};
+  ]);
 
 let make =
     (
@@ -34,8 +30,8 @@ let make =
   ...component,
   render: _self =>
     MaterialUi.(
-      <WithStyles
-        classesWithTheme=muiStyles
+      <UseHook
+        hook=useStyles
         render={classes =>
           <ListItem onClick button=true>
             <PeerStatusIndicator

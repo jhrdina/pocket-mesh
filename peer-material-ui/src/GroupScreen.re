@@ -3,79 +3,82 @@ type state = {v: int};
 type action =
   | Inc;
 
-let muiStyles: MaterialUi.Theme.t => list(MaterialUi.WithStyles.style) =
-  theme => [
-    {
-      name: "wrapper",
-      styles: ReactDOMRe.Style.make(~position="relative", ()),
-    },
-    {
-      name: "appBar",
-      styles:
-        ReactDOMRe.Style.make(
-          ~backgroundColor=MaterialUi.Colors.Grey.c200,
-          ~color=
-            MaterialUi.Theme.(
-              theme
-              |> Theme.paletteGet
-              |> Palette.textGet
-              |> TypeText.secondaryGet
-            ),
-          (),
-        ),
-    },
-    {
-      name: "toolbar",
-      styles: ReactDOMRe.Style.make(~paddingLeft="0", ~paddingRight="0", ()),
-    },
-    {
-      name: "titleInput",
-      styles:
-        ReactDOMRe.Style.make(
-          ~flex="1",
-          ~borderRadius="4px",
-          ~padding="0 8px",
-          ~backgroundColor=MaterialUi.Colors.Grey.c50,
-          ~fontWeight="500",
-          ~fontSize="1.125rem",
-          (),
-        ),
-    },
-    {
-      name: "permissionsText",
-      styles:
-        ReactDOMRe.Style.make(
-          ~color=
-            MaterialUi.Theme.(
-              theme
-              |> Theme.paletteGet
-              |> Palette.textGet
-              |> TypeText.secondaryGet
-            ),
-          ~fontSize="16px",
-          (),
-        ),
-    },
-    {
-      name: "secondaryAction",
-      styles: ReactDOMRe.Style.make(~right="16px", ()),
-    },
-    {
-      name: "noRecordsMessage",
-      styles: ReactDOMRe.Style.make(~textAlign="center", ()),
-    },
-    {
-      name: "fab",
-      styles:
-        ReactDOMRe.Style.make(
-          ~position="absolute",
-          ~right="16px",
-          ~bottom="16px",
-          ~zIndex="50",
-          (),
-        ),
-    },
-  ];
+let useStyles =
+  MuiStylesHooks.makeWithTheme(theme =>
+    [
+      {
+        name: "wrapper",
+        styles: ReactDOMRe.Style.make(~position="relative", ()),
+      },
+      {
+        name: "appBar",
+        styles:
+          ReactDOMRe.Style.make(
+            ~backgroundColor=MaterialUi.Colors.Grey.c200,
+            ~color=
+              MaterialUi.Theme.(
+                theme
+                |> Theme.paletteGet
+                |> Palette.textGet
+                |> TypeText.secondaryGet
+              ),
+            (),
+          ),
+      },
+      {
+        name: "toolbar",
+        styles:
+          ReactDOMRe.Style.make(~paddingLeft="0", ~paddingRight="0", ()),
+      },
+      {
+        name: "titleInput",
+        styles:
+          ReactDOMRe.Style.make(
+            ~flex="1",
+            ~borderRadius="4px",
+            ~padding="0 8px",
+            ~backgroundColor=MaterialUi.Colors.Grey.c50,
+            ~fontWeight="500",
+            ~fontSize="1.125rem",
+            (),
+          ),
+      },
+      {
+        name: "permissionsText",
+        styles:
+          ReactDOMRe.Style.make(
+            ~color=
+              MaterialUi.Theme.(
+                theme
+                |> Theme.paletteGet
+                |> Palette.textGet
+                |> TypeText.secondaryGet
+              ),
+            ~fontSize="16px",
+            (),
+          ),
+      },
+      {
+        name: "secondaryAction",
+        styles: ReactDOMRe.Style.make(~right="16px", ()),
+      },
+      {
+        name: "noRecordsMessage",
+        styles: ReactDOMRe.Style.make(~textAlign="center", ()),
+      },
+      {
+        name: "fab",
+        styles:
+          ReactDOMRe.Style.make(
+            ~position="absolute",
+            ~right="16px",
+            ~bottom="16px",
+            ~zIndex="50",
+            (),
+          ),
+      },
+    ]
+  );
 
 let component = ReasonReact.reducerComponent("GroupScreen");
 
@@ -94,8 +97,8 @@ let make = _children => {
   render: _self => {
     let isEmpty = true;
     MaterialUi.(
-      <WithStyles
-        classesWithTheme=muiStyles
+      <UseHook
+        hook=useStyles
         render={classes =>
           <div className=classes##wrapper>
             <AppBar position=`Static className={classes##appBar}>
