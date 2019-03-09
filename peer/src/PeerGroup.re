@@ -17,8 +17,10 @@ module Id = {
     type t = string;
     let compare = compare;
     let toString = t => t;
-    /* TODO: Make sure it is not empty */
-    let ofString = str => Some(str);
+    let ofString = str => {
+      let trimmed = str |> String.trim;
+      trimmed != "" ? Some(trimmed) : None;
+    };
     let ofStringExn = str =>
       switch (ofString(str)) {
       | Some(t) => t

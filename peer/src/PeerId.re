@@ -9,8 +9,10 @@ module Impl: {
   type t = string;
   exception InvalidPeerIdString;
   let compare = compare;
-  /* TODO: Only non-empty strings */
-  let ofString = str => Some(str);
+  let ofString = str => {
+    let trimmed = str |> String.trim;
+    trimmed != "" ? Some(trimmed) : None;
+  };
   let ofStringExn = str =>
     switch (ofString(str)) {
     | Some(peerId) => peerId
