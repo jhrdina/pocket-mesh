@@ -7,7 +7,7 @@ type screen =
   | Main(Route.mainTab, MainScreen.model)
   | Group
   | PeerInGroup
-  | Peer(option(PocketMeshPeer.Peer.Id.t))
+  | Peer(PocketMeshPeer.Peer.Id.t, PeerScreen.model)
   | PeerSearch
   | ThisPeer
   | Loading;
@@ -24,17 +24,6 @@ let updateWith = (toModel, (subModel, subCmd)) => (
   subCmd,
 );
 
-let routeToNewScreenState = (route: Route.t) => {
-  switch (route) {
-  | Main(tab) => MainScreen.init() |> updateWith(model => Main(tab, model))
-  | Group => (Group, Cmd.none)
-  | PeerInGroup => (PeerInGroup, Cmd.none)
-  | Peer(peerId) => (Peer(peerId), Cmd.none)
-  | PeerSearch => (PeerSearch, Cmd.none)
-  | ThisPeer => (ThisPeer, Cmd.none)
-  };
-};
-
 let updateScreen =
     (~core: PocketMeshPeer.State.taggedT, ~reqRoute: Route.t, msg, screen) => {
   switch (core) {
@@ -50,7 +39,10 @@ let updateScreen =
       MainScreen.init() |> updateWith(model => Main(reqTab, model))
     | (_, Group) => (Group, Cmd.none)
     | (_, PeerInGroup) => (PeerInGroup, Cmd.none)
-    | (_, Peer(peerId)) => (Peer(peerId), Cmd.none)
+    | (Peer(_peerId, m), Peer(peerId)) =>
+      PeerScreen.update(~peerId, msg, m) |> updateWith(m => Peer(peerId, m))
+    | (_, Peer(peerId)) =>
+      PeerScreen.init(~dbState, peerId) |> updateWith(m => Peer(peerId, m))
     | (_, PeerSearch) => (PeerSearch, Cmd.none)
     | (_, ThisPeer) => (ThisPeer, Cmd.none)
     }
@@ -89,9 +81,18 @@ let useStyles =
     [{name: "root", styles: ReactDOMRe.Style.make()}]
   );
 
+let renderLoading = () => <div> {"Loading..." |> ReasonReact.string} </div>;
+
 let component = ReasonReact.statelessComponent("PeerScreens");
 
-let make = (~core, ~className="", ~model, ~pushMsg, _children) => {
+let make =
+    (
+      ~core: PocketMeshPeer.State.taggedT,
+      ~className="",
+      ~model,
+      ~pushMsg,
+      _children,
+    ) => {
   ...component,
   render: _self =>
     <ThemeProvider>
@@ -101,23 +102,30 @@ let make = (~core, ~className="", ~model, ~pushMsg, _children) => {
           render={classes =>
             <div
               className={[Styles.wrapper, className] |> String.concat(" ")}>
-              {switch (model.screen) {
-               | Main(tab, m) =>
-                 <MainScreen activeTab=tab core model=m pushMsg />
-               | Group => <GroupScreen />
-               | PeerInGroup => <PeerInGroupScreen />
-               | Peer(peerId) => <PeerScreen peerId />
-               | PeerSearch => <PeerSearchScreen />
-               | ThisPeer =>
-                 switch (core) {
-                 | HasIdentity(dbState, _) =>
+              {switch (core) {
+               | HasIdentity(dbState, runtimeState) =>
+                 switch (model.screen) {
+                 | Main(tab, m) =>
+                   <MainScreen
+                     activeTab=tab
+                     dbState
+                     runtimeState
+                     model=m
+                     pushMsg
+                   />
+                 | Group => <GroupScreen />
+                 | PeerInGroup => <PeerInGroupScreen />
+                 | Peer(peerId, m) =>
+                   <PeerScreen peerId dbState runtimeState model=m pushMsg />
+                 | PeerSearch => <PeerSearchScreen />
+                 | ThisPeer =>
                    <ThisPeerScreen
                      thisPeer={dbState |> PocketMeshPeer.DbState.thisPeer}
                      pushMsg
                    />
-                 | WaitingForDbAndIdentity(_) => "Bug." |> ReasonReact.string
+                 | Loading => renderLoading()
                  }
-               | Loading => <div> {"Loading..." |> ReasonReact.string} </div>
+               | WaitingForDbAndIdentity(_) => renderLoading()
                }}
             </div>
           }

@@ -1,4 +1,5 @@
 type t = ..;
 
 type t +=
-  | ClickedGoBackToApp;
+  | ClickedGoBackToApp
+  | ReqP2PMsg(PM.Msg.t);

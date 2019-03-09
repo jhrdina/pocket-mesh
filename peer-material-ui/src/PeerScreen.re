@@ -1,3 +1,47 @@
+open BlackTea;
+open Infix;
+
+// TYPES
+
+type model = {alias: string};
+type Msg.t +=
+  | ChangedAlias(string)
+  | ClickedDelete;
+
+// UPDATE
+
+let init = (~dbState, peerId) => (
+  {
+    alias:
+      dbState
+      |> PM.DbState.peers
+      |> PM.Peers.findOpt(peerId)
+      |?>> PM.Peer.alias
+      |? "",
+  },
+  Cmd.none,
+);
+
+let update = (~peerId, msg, model: model) => {
+  switch (msg) {
+  | ChangedAlias(alias) => ({...model, alias}, Cmd.none)
+  | ClickedDelete => (
+      model,
+      Cmd.batch([
+        Cmd.msg(Route.ChangeRoute(Main(Peers))),
+        Cmd.msg(Msg.ReqP2PMsg(PM.Msg.removePeer(peerId))),
+      ]),
+    )
+  | _ => (model, Cmd.none)
+  };
+};
+
+let subscriptions = model => {
+  Sub.none;
+};
+
+// VIEW
+
 let component = ReasonReact.statelessComponent("PeerScreen");
 
 let useStyles =
@@ -38,42 +82,69 @@ let useStyles =
           ),
       },
       {
-        name: "peerIdField",
-        styles:
-          ReactDOMRe.Style.make(
-            ~margin="11px 16px",
-            ~width="calc(100% - 32px)",
-            (),
-          ),
-      },
-      {
-        name: "peerIdFieldInput",
-        styles:
-          ReactDOMRe.Style.make(
-            ~fontSize="14px",
-            ~fontFamily="monospace",
-            ~wordBreak="break-all",
-            ~lineHeight="20px",
-            (),
-          ),
-      },
-      {
-        name: "copyButtonBox",
-        styles:
-          ReactDOMRe.Style.make(
-            ~margin="-7px 16px 11px 16px",
-            ~textAlign="right",
-            (),
-          ),
+        name: "peerIdBox",
+        styles: ReactDOMRe.Style.make(~margin="11px 16px", ()),
       },
     ]
   );
 
-let make = (~peerId, _children) => {
-  let peerIdStr =
-    Belt.Option.(
-      peerId->map(PocketMeshPeer.Peer.Id.toString)->getWithDefault("")
-    );
+let make =
+    (
+      ~peerId,
+      ~dbState,
+      ~runtimeState: PM.RuntimeState.t,
+      ~model,
+      ~pushMsg,
+      _children,
+    ) => {
+  let signalStateStr =
+    switch (
+      runtimeState
+      |> PM.RuntimeState.peersStatuses
+      |> PM.PeersStatuses.getPeerStatus(peerId)
+    ) {
+    | Online => "Online"
+    | Offline => "Offline"
+    };
+
+  let connState =
+    (
+      runtimeState
+      |> PM.RuntimeState.peersConnections
+      |> PM.PeersConnections.getPeerConnectionState(peerId)
+    )
+    ->Belt.Option.map(PM.PeersConnections.classifyConnectionState);
+
+  let connStateStr =
+    switch (connState) {
+    | None => "Not established"
+    | Some(InitiatingConnection)
+    | Some(AcceptingConnection) => "Connecting..."
+    | Some(Connected) => "Connected"
+    };
+
+  let connStateStrSecondary =
+    switch (connState) {
+    | None =>
+      if (!(
+            dbState
+            |> PM.DbState.groups
+            |> PM.PeersGroups.isPeerInAGroup(peerId)
+          )) {
+        "Connection is not needed because peer is not added in any group.";
+      } else if (runtimeState
+                 |> PM.RuntimeState.peersStatuses
+                 |> PM.PeersStatuses.getPeerStatus(peerId) == Offline) {
+        "Connection cannot be established because the peer is offline.";
+      } else {
+        "";
+      }
+
+    | Some(InitiatingConnection) => "Initiating connection to the peer..."
+    | Some(AcceptingConnection) => "Accepting connection request from the peer..."
+    | Some(Connected) => "Direct P2P connection is established."
+    };
+
   {
     ...component,
     render: _self => {
@@ -84,45 +155,38 @@ let make = (~peerId, _children) => {
             <div className=classes##root>
               <AppBar position=`Static className={classes##appBar}>
                 <Toolbar variant=`Dense className=classes##toolbar>
-                  <IconButton color=`Inherit> <Icons.ArrowBack /> </IconButton>
+                  <IconButton
+                    color=`Inherit
+                    onClick={_ => pushMsg(Route.ChangeRoute(Main(Peers)))}>
+                    <Icons.ArrowBack />
+                  </IconButton>
                   <InputBase
+                    autoFocus=true
                     placeholder="Peer alias"
                     className=classes##titleInput
                   />
                   <div>
-                    <IconButton color=`Inherit> <Icons.Delete /> </IconButton>
+                    <IconButton
+                      color=`Inherit onClick={_ => pushMsg(ClickedDelete)}>
+                      <Icons.Delete />
+                    </IconButton>
                   </div>
                 </Toolbar>
               </AppBar>
+              <SectionTitle text="Peer ID" />
+              <IdBox
+                className=classes##peerIdBox
+                id={peerId |> PM.Peer.Id.toString}
+              />
               <SectionTitle text="Status" />
-              <SectionValue text="Online" />
+              <SectionValue text=signalStateStr />
               <SectionTitle text="P2P connection" />
               <ListItem>
                 <ListItemText
-                  primary={"Not established" |> ReasonReact.string}
-                  secondary={
-                    "Connection is not needed because peer is not added in any group."
-                    |> ReasonReact.string
-                  }
+                  primary={connStateStr |> ReasonReact.string}
+                  secondary={connStateStrSecondary |> ReasonReact.string}
                 />
               </ListItem>
-              <SectionTitle text="Peer ID" />
-              <TextField
-                className=classes##peerIdField
-                inputProps={
-                  "classes": {
-                    "root": classes##peerIdFieldInput,
-                  },
-                }
-                value={`String(peerIdStr)}
-                variant=`Outlined
-                multiline=true
-                fullWidth=true
-                placeholder="Insert peer's ID here..."
-              />
-              <div className=classes##copyButtonBox>
-                <Button> {"Copy to clipboard" |> ReasonReact.string} </Button>
-              </div>
             </div>
           }
         />

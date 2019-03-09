@@ -108,7 +108,13 @@ let make = (~className="", _children) => {
               {if (isEmpty) {
                  <LonelyMessage text="No matching peers found." />;
                } else {
+                 let peerIdOfStringExn = str =>
+                   switch (PM.Peer.Id.ofString(str)) {
+                   | Some(peerId) => peerId
+                   | None => raise(Not_found)
+                   };
                  <PeerRow
+                   peerId={peerIdOfStringExn("asdf")}
                    signalState=Online
                    inGroup=true
                    connectionState=Connected

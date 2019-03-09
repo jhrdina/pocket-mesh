@@ -1,5 +1,3 @@
-module PM = PocketMeshPeer;
-
 type model = {signalServerDialogOpen: bool};
 
 type Msg.t +=
@@ -33,13 +31,8 @@ let update = (msg, model) =>
   | _ => model
   };
 
-let render = (~core: PM.State.taggedT, ~model, ~pushMsg) => {
-  let signalChannel =
-    switch (core) {
-    | WaitingForDbAndIdentity(signalChannel) => signalChannel
-    | HasIdentity(_dbState, runtimeState) =>
-      runtimeState |> PM.RuntimeState.signalChannel
-    };
+let render = (~dbState, ~runtimeState, ~model, ~pushMsg) => {
+  let signalChannel = runtimeState |> PM.RuntimeState.signalChannel;
   let signalServerUrl = signalChannel |> PM.SignalChannel.url;
   let signalServerConnState =
     signalChannel |> PM.SignalChannel.connectionState;
@@ -52,11 +45,7 @@ let render = (~core: PM.State.taggedT, ~model, ~pushMsg) => {
     };
 
   let thisPeerIdStr =
-    switch (core) {
-    | WaitingForDbAndIdentity(_) => "New identity is being generated..."
-    | HasIdentity(dbState, _) =>
-      dbState |> PM.DbState.thisPeer |> PM.ThisPeer.id |> PM.Peer.Id.toString
-    };
+    PM.(dbState |> DbState.thisPeer |> ThisPeer.id |> Peer.Id.toString);
 
   MaterialUi.(
     <UseHook

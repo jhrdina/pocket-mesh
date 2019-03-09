@@ -12,7 +12,7 @@ type t =
   // Only if has identity
   | PeerInGroup
   // Only if has identity
-  | Peer(option(PocketMeshPeer.Peer.Id.t))
+  | Peer(PocketMeshPeer.Peer.Id.t)
   // Only if
   | PeerSearch
   | ThisPeer;

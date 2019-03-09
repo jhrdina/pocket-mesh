@@ -3,6 +3,7 @@ open BlackTea;
 type model = {
   // activeTab: Route.mainTab,
   generalTab: GeneralTab.model,
+  peersListTab: PeersListTab.model,
 };
 
 exception InternalError;
@@ -12,12 +13,17 @@ exception InternalError;
 
 // UPDATE
 
-let init = () => ({generalTab: GeneralTab.init()}, Cmd.none);
+let init = () => (
+  {generalTab: GeneralTab.init(), peersListTab: PeersListTab.init()},
+  Cmd.none,
+);
 
 let update = (msg, model) => {
+  let (peersListTab, peersListTabCmd) =
+    PeersListTab.update(msg, model.peersListTab);
   (
-    {...model, generalTab: GeneralTab.update(msg, model.generalTab)},
-    Cmd.none,
+    {generalTab: GeneralTab.update(msg, model.generalTab), peersListTab},
+    peersListTabCmd,
   );
 };
 
@@ -77,7 +83,7 @@ let intToTab: int => Route.mainTab =
 
 let component = ReasonReact.statelessComponent("MainScreen");
 
-let make = (~activeTab, ~core, ~model, ~pushMsg, _children) => {
+let make = (~activeTab, ~dbState, ~runtimeState, ~model, ~pushMsg, _children) => {
   ...component,
   render: _self =>
     MaterialUi.(
@@ -116,9 +122,20 @@ let make = (~activeTab, ~core, ~model, ~pushMsg, _children) => {
             </AppBar>
             {switch (activeTab) {
              | Groups => GroupsListTab.render()
-             | Peers => PeersListTab.render(~core, ~pushMsg)
+             | Peers =>
+               PeersListTab.render(
+                 ~dbState,
+                 ~runtimeState,
+                 ~model=model.peersListTab,
+                 ~pushMsg,
+               )
              | General =>
-               GeneralTab.render(~model=model.generalTab, ~core, ~pushMsg)
+               GeneralTab.render(
+                 ~model=model.generalTab,
+                 ~dbState,
+                 ~runtimeState,
+                 ~pushMsg,
+               )
              }}
             {let renderer =
                switch (activeTab) {

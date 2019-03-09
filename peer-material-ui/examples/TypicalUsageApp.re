@@ -1,6 +1,5 @@
 open BlackTea;
 
-module PM = PocketMeshPeer;
 module PMGui = PocketMeshPeerMaterialUi;
 
 type model = {
@@ -27,14 +26,27 @@ let update = (model, msg) => {
   | P2PMsg(p2pMsg) =>
     let (p2p, cmd) = PM.update(model.p2p, p2pMsg);
     ({...model, p2p}, cmd |> Cmd.map(p2PMsg));
-  | P2PGuiMsg(p2pMsg) =>
-    let (p2pGui, cmd) =
+  | P2PGuiMsg(p2pGuiMsg) =>
+    let (p2pGui, p2pGuiCmd) =
       PMGui.PeerScreens.update(
         ~core=model.p2p |> PM.State.classify,
-        p2pMsg,
+        p2pGuiMsg,
         model.p2pGui,
       );
-    ({...model, p2pGui}, cmd |> Cmd.map(p2PGuiMsg));
+    // Handle cases when PMGui wants to send a msg to PM
+    let (p2p, p2pCmd) =
+      switch (p2pGuiMsg) {
+      | PMGui.Msg.ReqP2PMsg(p2pMsg) => PM.update(model.p2p, p2pMsg)
+      | _ => (model.p2p, Cmd.none)
+      };
+
+    (
+      {...model, p2p, p2pGui},
+      Cmd.batch([
+        p2pGuiCmd |> Cmd.map(p2PGuiMsg),
+        p2pCmd |> Cmd.map(p2PMsg),
+      ]),
+    );
   };
 };
 

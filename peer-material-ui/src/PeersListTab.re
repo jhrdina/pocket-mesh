@@ -1,16 +1,45 @@
+open BlackTea;
+
+// TYPES
+
+type model = {addPeerDialogOpen: bool};
 type Msg.t +=
-  | ClickedAddPeer;
+  | ClickedAddPeer
+  | ClosedAddPeerDialog(AddPeerDialog.closeResult);
+
+// UPDATE
+
+let init = () => {addPeerDialogOpen: false};
+
+let update = (msg, model) => {
+  switch (msg) {
+  | ClosedAddPeerDialog(Cancel) => ({addPeerDialogOpen: false}, Cmd.none)
+  | ClosedAddPeerDialog(Ok(peerId)) => (
+      {addPeerDialogOpen: false},
+      Cmd.batch([
+        Cmd.msg(Route.ChangeRoute(Peer(peerId))),
+        Cmd.msg(Msg.ReqP2PMsg(PM.Msg.addPeer(peerId, ""))),
+      ]),
+    )
+  | ClickedAddPeer => ({addPeerDialogOpen: true}, Cmd.none)
+  | _ => (model, Cmd.none)
+  };
+};
 
 let elementArrayWithDefaultMsg = (text, arr) =>
   arr |> Array.length > 0 ? arr |> ReasonReact.array : <LonelyMessage text />;
 
-let render = (~core: PocketMeshPeer.State.taggedT, ~pushMsg) => {
+let render =
+    (
+      ~dbState: PM.DbState.t,
+      ~runtimeState: PM.RuntimeState.t,
+      ~model,
+      ~pushMsg,
+    ) => {
   MaterialUi.(
-    <List>
-      {switch (core) {
-       | WaitingForDbAndIdentity(_) => <LonelyMessage text="Loading..." />
-       | HasIdentity(dbState, runtimeState) =>
-         PocketMeshPeer.(
+    <div>
+      <List>
+        {PM.(
            dbState
            |> DbState.peers
            |> Peers.fold(
@@ -51,9 +80,11 @@ let render = (~core: PocketMeshPeer.State.taggedT, ~pushMsg) => {
 
                   let peerRowEl =
                     <PeerRow
+                      key={peerId |> PM.Peer.Id.toString}
                       onClick={_ =>
-                        pushMsg(Route.ChangeRoute(Peer(Some(peerId))))
+                        pushMsg(Route.ChangeRoute(Peer(peerId)))
                       }
+                      peerId
                       alias={peer |> Peer.alias}
                       connectionState
                       signalState
@@ -64,18 +95,19 @@ let render = (~core: PocketMeshPeer.State.taggedT, ~pushMsg) => {
                 [||],
               )
            |> elementArrayWithDefaultMsg("No friends added.")
-         )
-       }}
-    </List>
+         )}
+      </List>
+      <AddPeerDialog
+        open_={model.addPeerDialogOpen}
+        onClose={res => pushMsg(ClosedAddPeerDialog(res))}
+      />
+    </div>
   );
 };
 
 let renderFab = (~className, ~pushMsg) =>
   MaterialUi.(
-    <Fab
-      color=`Secondary
-      className
-      onClick={_ => pushMsg(Route.ChangeRoute(Peer(None)))}>
+    <Fab color=`Secondary className onClick={_ => pushMsg(ClickedAddPeer)}>
       <Icons.PersonAdd />
     </Fab>
   );

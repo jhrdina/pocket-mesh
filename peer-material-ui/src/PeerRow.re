@@ -20,6 +20,7 @@ let useStyles =
 
 let make =
     (
+      ~peerId,
       ~signalState,
       ~inGroup,
       ~connectionState,
@@ -28,7 +29,8 @@ let make =
       _children,
     ) => {
   ...component,
-  render: _self =>
+  render: _self => {
+    let displayedName = alias != "" ? alias : peerId |> PM.Peer.Id.toString;
     MaterialUi.(
       <UseHook
         hook=useStyles
@@ -41,9 +43,10 @@ let make =
               className=classes##statusIndicator
             />
             // <Checkbox className=classes##checkbox />
-            <ListItemText primary={alias |> ReasonReact.string} />
+            <ListItemText primary={displayedName |> ReasonReact.string} />
           </ListItem>
         }
       />
-    ),
+    );
+  },
 };
