@@ -23,20 +23,29 @@ let update =
       ~peers: Peers.t,
       ~signalChannel: SignalChannel.t,
       ~thisPeer: ThisPeer.t,
+      ~thisPeerKeyExporter: ThisPeerKeyExporter.t,
       msg,
       model,
     ) => {
   let model = model |> applyMsg(msg);
-  switch (signalChannel.connectionState, model) {
-  | (Connected(_), WaitingForSignalChannel) => (
+  switch (
+    signalChannel.connectionState,
+    thisPeerKeyExporter |> ThisPeerKeyExporter.getKey,
+    model,
+  ) {
+  | (Connected(_), Some(thisPeerKeyStr), WaitingForSignalChannel) => (
       SigningIn,
       Cmd.msg(
         SignalVerifier.SignAndSendMsg(
-          PeerToServer(thisPeer.id, Login(peers |> Peers.getAllIds)),
+          PeerToServer(
+            thisPeer.id,
+            Login(thisPeerKeyStr, peers |> Peers.getAllIds),
+          ),
         ),
       ),
     )
-  | (Connecting, _) => (WaitingForSignalChannel, Cmd.none)
-  | (Connected(_), SigningIn | SignedIn) => (model, Cmd.none)
+  | (Connecting, _, _) => (WaitingForSignalChannel, Cmd.none)
+  | (Connected(_), None, WaitingForSignalChannel)
+  | (Connected(_), _, SigningIn | SignedIn) => (model, Cmd.none)
   };
 };

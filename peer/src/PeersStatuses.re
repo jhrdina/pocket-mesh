@@ -60,7 +60,7 @@ let update =
     (
       ~thisPeer: ThisPeer.t,
       ~peers,
-      ~signalChannel: SignalChannel.t,
+      ~signalChannelAuth: SignalChannelAuth.t,
       msg,
       model,
     ) => {
@@ -88,12 +88,13 @@ let update =
 
   let allPeersIds = peers |> Peers.getAllIds;
   let (model, derivedCmd) =
-    switch (signalChannel.connectionState) {
-    | Connecting => (
+    switch (signalChannelAuth) {
+    | WaitingForSignalChannel
+    | SigningIn => (
         {lastAllPeersIds: allPeersIds, onlinePeers: PeerId.Set.empty},
         Cmd.none,
       )
-    | Connected(_) when allPeersIds != model.lastAllPeersIds => (
+    | SignedIn when allPeersIds != model.lastAllPeersIds => (
         {
           onlinePeers:
             PeerId.Set.symmetric_diff(
@@ -116,7 +117,7 @@ let update =
           ),
         ),
       )
-    | Connected(_) => (model, Cmd.none)
+    | SignedIn => (model, Cmd.none)
     };
 
   (model, Cmd.batch([cmd, derivedCmd]));

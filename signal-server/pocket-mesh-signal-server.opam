@@ -16,9 +16,10 @@ build: [
 ]
 depends: [
   "jbuilder" {build}
-  "reason"  {>= "3.2.0"}
+  "nocrypto" {>= "0.5.4"}
   "ocaml-diff" {>= "0.1.2"}
   "re"
+  "reason"  {>= "3.2.0"}
   "websocket-lwt"
 ]
 available: [ ocaml-version >= "4.02" & ocaml-version < "4.07" ]

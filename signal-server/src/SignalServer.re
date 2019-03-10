@@ -1,12 +1,8 @@
 open Json.Infix;
-module WS: DreamWSType.T = DreamWSCohttp;
 
-type client = {
-  id: PeerId.t,
-  socket: WS.Socket.t,
-  isAuthenticated: bool,
-  protocolVersion: int,
-};
+/* MODULES */
+
+module WS: DreamWSType.T = DreamWSCohttp;
 
 module PeerWatching = {
   type t = {
@@ -19,6 +15,16 @@ module PeerWatching = {
 module PeerWatchingSet = Set.Make(PeerWatching);
 module PeerWatchings = IndexedCollection.Make(PeerWatching);
 module Peers = IndexedCollection.Make(PeerId);
+
+/* TYPES */
+
+type client = {
+  id: PeerId.t,
+  socket: WS.Socket.t,
+  isAuthenticated: bool,
+  protocolVersion: int,
+  key: SimpleCrypto.key,
+};
 
 type serverState = {
   peers: Peers.t(client),
@@ -38,7 +44,7 @@ type effect =
   | Emit(WS.Socket.t, Message.t)
   | Db(serverState);
 
-/* Watchings */
+/* WATCHINGS */
 
 let getWatchedByWatcher = (state, watcher) =>
   state.watchingsByWatcher |> PeerWatchings.Index.get(watcher);
@@ -67,6 +73,8 @@ let updateWatchings = (state, watcher, watchedPeers) => {
   addWatchings(state, watcher, watchedPeers);
 };
 
+let socketEqual = (a, b) => WS.Socket.compare(a, b) == 0;
+
 /* Connected peers */
 
 let addPeer = (s, client) => s.peers |> Peers.add(client);
@@ -74,6 +82,9 @@ let addPeer = (s, client) => s.peers |> Peers.add(client);
 let removePeer = (s, id) => s.peers |> Peers.remove(id);
 
 let findPeer = (s, id) => s.peers |> Peers.findOpt(id);
+
+let checkPeerSocket = (connectedSocket, client) =>
+  socketEqual(connectedSocket, client.socket) ? Some(client) : None;
 
 let findPeerBySocket = (s, socket) =>
   s.peersBySocket |> Peers.Index.get(socket) |> Peers.PrimarySet.choose_opt;
@@ -128,49 +139,84 @@ let init = () => {
   };
 };
 
+let verifyMessageSignature = (srcPublicKey, signature, msg) =>
+  Json.Object(Message.encodeSignedMsg(msg))
+  |> Json.stringify
+  |> SimpleCrypto.verify(srcPublicKey, signature);
+
+let verifyLoginMessage = (signature, src, srcKeyStr, watch) =>
+  srcKeyStr
+  |> SimpleCrypto.stringToJwk
+  |?> (
+    srcJwk => {
+      let srcMatchesKey =
+        SimpleCrypto.fingerprintForRSAJWK(srcJwk)
+        |> PeerId.ofString
+        |?>> (==)(src)
+        |? false;
+
+      let signatureOk =
+        srcJwk
+        |> SimpleCrypto.jwkToPublicKey
+        |?>> (
+          srcKey =>
+            verifyMessageSignature(
+              srcKey,
+              signature,
+              PeerToServer(src, Login(srcKeyStr, watch)),
+            )
+              ? Some(srcKey) : None
+        )
+        |? None;
+
+      srcMatchesKey ? signatureOk : None;
+    }
+  );
+
 let handleMessage = (srcSocket, message: Message.t, state) =>
   switch (message) {
-  | Signed(signature, PeerToServer(src, Login(watch))) =>
-    /* Existing peer */
-    switch (findPeer(state, src)) {
-    | Some(_) =>
-      /* There is already an existing connected peer with the same ID. */
-      /* ...Let's kick him out... */
-      /* TODO: Disconnect an existing connected peer */
-      ()
-    | None => ()
-    };
+  | Signed(signature, PeerToServer(src, Login(srcKeyStr, watch))) =>
+    switch (verifyLoginMessage(signature, src, srcKeyStr, watch)) {
+    | Some(srcKey) =>
+      /* Existing peer */
+      switch (findPeer(state, src)) {
+      | Some(_) =>
+        /* There is already an existing connected peer with the same ID. */
+        /* ...Let's kick him out... */
+        /* TODO: Disconnect an existing connected peer */
+        ()
+      | None => ()
+      };
 
-    /* TODO: Check signature */
-    addPeer(
-      state,
-      {
-        socket: srcSocket,
-        /* TODO: Check signature */
-        isAuthenticated: false,
-        /* TODO: Support multiple protocol versions */
-        protocolVersion: 1,
-        id: src,
-      },
-    );
+      addPeer(
+        state,
+        {
+          socket: srcSocket,
+          isAuthenticated: false,
+          /* TODO: Support multiple protocol versions */
+          protocolVersion: 1,
+          id: src,
+          key: srcKey,
+        },
+      );
 
-    /* Add my watches */
-    updateWatchings(state, src, watch);
-
-    /* Populate states of peers I'm interested in */
-    let onlinePeers = watch |> PeerId.Set.filter(memPeer(state));
-    /* Notify others that are interested in my arrival */
-    let notifications =
-      makeNotificationsForInterestedPeers(state, WentOnline(src));
-
-    [Emit(srcSocket, Unsigned(Ok(onlinePeers))), ...notifications];
-
-  | Signed(signature, PeerToServer(src, ChangeWatchedPeers(watch))) =>
-    /* TODO: Check signature */
-    switch (findPeer(state, src)) {
-    | Some(_) =>
+      /* Add my watches */
       updateWatchings(state, src, watch);
 
+      /* Populate states of peers I'm interested in */
+      let onlinePeers = watch |> PeerId.Set.filter(memPeer(state));
+      /* Notify others that are interested in my arrival */
+      let notifications =
+        makeNotificationsForInterestedPeers(state, WentOnline(src));
+
+      [Emit(srcSocket, Unsigned(Ok(onlinePeers))), ...notifications];
+    | None => []
+    }
+
+  | Signed(_signature, PeerToServer(src, ChangeWatchedPeers(watch))) =>
+    /* TODO: Check signature (optional precaution) */
+    switch (findPeer(state, src) |?> checkPeerSocket(srcSocket)) {
+    | Some(_) =>
       /* Populate states of peers I'm interested in */
       let onlinePeersIds = watch |> PeerId.Set.filter(memPeer(state));
       let peerChanges =
@@ -180,27 +226,36 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
           [],
         );
       [Emit(srcSocket, Unsigned(WatchedPeersChanged(peerChanges)))];
+
     | None => [Emit(srcSocket, Unsigned(Error(SourceNotOnline)))]
     }
 
-  | Signed(signature, PeerToServer(src, Logoff)) =>
-    /* TODO: Check signature */
-    removeAllWatchings(state, src);
-    removePeer(state, src);
+  | Signed(_signature, PeerToServer(src, Logoff)) =>
+    /* TODO: Check signature (optional precaution) */
+    switch (findPeer(state, src) |?> checkPeerSocket(srcSocket)) {
+    | Some(_) =>
+      removeAllWatchings(state, src);
+      removePeer(state, src);
+    | None => ()
+    };
     [];
 
   | Signed(
-      signature,
+      _signature,
       PeerToPeer(
         src,
         tg,
         KeyRequest(_) | KeyResponse(_) | Offer(_) | Answer(_),
       ),
     ) as msg =>
-    /* TODO: Check signature */
-    switch (findPeer(state, tg)) {
-    | Some(tgClient) => [Emit(tgClient.socket, msg)]
-    | None => [Emit(srcSocket, Unsigned(Error(TargetNotOnline)))]
+    /* TODO: Check signature (optional precaution) */
+    switch (findPeer(state, src) |?> checkPeerSocket(srcSocket)) {
+    | Some(_) =>
+      switch (findPeer(state, tg)) {
+      | Some(tgClient) => [Emit(tgClient.socket, msg)]
+      | None => [Emit(srcSocket, Unsigned(Error(TargetNotOnline)))]
+      }
+    | None => []
     }
 
   | Unsigned(Error(_) | Ok(_) | WatchedPeersChanged(_)) =>

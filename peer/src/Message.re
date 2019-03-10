@@ -59,7 +59,7 @@ type key = string;
    */
 
 type peerToServerMsg =
-  | Login(/* Watched peers */ PeerId.Set.t)
+  | Login(key, /* Watched peers */ PeerId.Set.t)
   | Logoff
   | ChangeWatchedPeers(/* Watched peers */ PeerId.Set.t);
 
@@ -120,8 +120,9 @@ let encodePeerToPeerMsg = msg =>
 
 let encodePeerToServerMsg = msg =>
   switch (msg) {
-  | Login(watch) => [
+  | Login(key, watch) => [
       "login" |> typeToJsonKeyVal,
+      ("key", Json.String(key)),
       (
         "watch",
         Array(
@@ -256,8 +257,11 @@ let decodePeerIdSet = json =>
   );
 
 let decodeLoginMsg = json =>
-  switch (json |> Json.get("watch") |?> decodePeerIdSet) {
-  | Some(watch) => Some(Login(watch))
+  switch (
+    json |> Json.get("key") |?> Json.string,
+    json |> Json.get("watch") |?> decodePeerIdSet,
+  ) {
+  | (Some(key), Some(watch)) => Some(Login(key, watch))
   | _ => None
   };
 

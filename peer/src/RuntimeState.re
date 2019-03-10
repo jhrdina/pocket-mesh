@@ -79,11 +79,18 @@ let init = (~dbState: DbState.t, ~signalChannel, ~initConfig) => {
 let update = (dbState: DbState.t, msg, model) => {
   let (signalChannel, signalChannelCmd) =
     SignalChannel.update(model.signalChannel, msg);
+  let (thisPeerKeyExporter, thisPeerKeyExporterCmd) =
+    ThisPeerKeyExporter.update(
+      ~thisPeer=dbState.thisPeer,
+      msg,
+      model.thisPeerKeyExporter,
+    );
   let (signalChannelAuth, signalChannelAuthCmd) =
     SignalChannelAuth.update(
       ~peers=dbState.peers,
       ~signalChannel,
       ~thisPeer=dbState.thisPeer,
+      ~thisPeerKeyExporter,
       msg,
       model.signalChannelAuth,
     );
@@ -97,15 +104,9 @@ let update = (dbState: DbState.t, msg, model) => {
     PeersStatuses.update(
       ~thisPeer=dbState.thisPeer,
       ~peers=dbState.peers,
-      ~signalChannel,
+      ~signalChannelAuth,
       msg,
       model.peersStatuses,
-    );
-  let (thisPeerKeyExporter, thisPeerKeyExporterCmd) =
-    ThisPeerKeyExporter.update(
-      ~thisPeer=dbState.thisPeer,
-      msg,
-      model.thisPeerKeyExporter,
     );
   let (peersKeysFetcherAndSender, peersKeysFetcherAndSenderCmd) =
     PeersKeysFetcherAndSender.update(
