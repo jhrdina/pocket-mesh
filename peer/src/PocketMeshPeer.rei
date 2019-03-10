@@ -86,6 +86,7 @@ module PeersGroup: {
   type t;
 
   let id: t => Id.t;
+  let alias: t => string;
   let content: t => Crdt.t;
   let findPeerInGroupOpt: (Peer.Id.t, t) => option(PeerInGroup.t);
   let foldPeersInGroup: (('acc, PeerInGroup.t) => 'acc, 'acc, t) => 'acc;

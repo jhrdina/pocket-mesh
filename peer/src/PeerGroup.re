@@ -151,6 +151,7 @@ let applyMembersChanges = (changes, t) => {
 /* QUERIES */
 
 let id = t => t.id;
+let alias = t => t.alias;
 let content = t => t.content;
 
 let containsPeer = (peerId, t) =>
