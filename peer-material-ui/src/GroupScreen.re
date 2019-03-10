@@ -1,7 +1,37 @@
-type state = {v: int};
+open BlackTea;
+open Infix;
 
-type action =
-  | Inc;
+// TYPES
+
+type model = {peerSearchDialogOpen: bool};
+type Msg.t +=
+  | ClickedAddPeer
+  | ClosedPeerSearchDialog(PeerSearchScreen.closeResult);
+
+// UPDATE
+
+let init = () => ({peerSearchDialogOpen: false}, Cmd.none);
+
+let update = (~groupId, msg, model) => {
+  switch (msg) {
+  | ClosedPeerSearchDialog(Cancel) => (
+      {peerSearchDialogOpen: false},
+      Cmd.none,
+    )
+  | ClosedPeerSearchDialog(Ok(peerId)) => (
+      {peerSearchDialogOpen: false},
+      Cmd.batch([
+        Cmd.msg(
+          Msg.ReqP2PMsg(
+            PM.Msg.addPeerToGroup(peerId, groupId, ReadContentAndMembers),
+          ),
+        ),
+      ]),
+    )
+  | ClickedAddPeer => ({peerSearchDialogOpen: true}, Cmd.none)
+  | _ => (model, Cmd.none)
+  };
+};
 
 let useStyles =
   MuiStylesHooks.makeWithTheme(theme =>
@@ -59,12 +89,12 @@ let useStyles =
           ),
       },
       {
-        name: "secondaryAction",
-        styles: ReactDOMRe.Style.make(~right="16px", ()),
+        name: "memberListItem",
+        styles: ReactDOMRe.Style.make(~paddingRight="76px", ()),
       },
       {
-        name: "noRecordsMessage",
-        styles: ReactDOMRe.Style.make(~textAlign="center", ()),
+        name: "secondaryAction",
+        styles: ReactDOMRe.Style.make(~right="16px", ()),
       },
       {
         name: "fab",
@@ -80,19 +110,10 @@ let useStyles =
     ]
   );
 
-let component = ReasonReact.reducerComponent("GroupScreen");
+let component = ReasonReact.statelessComponent("GroupScreen");
 
-let make = _children => {
+let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
   ...component,
-
-  initialState: () => {v: 0},
-
-  reducer: (action, s) =>
-    ReasonReact.Update(
-      switch (action) {
-      | Inc => {...s, v: s.v + 1}
-      },
-    ),
 
   render: _self => {
     let isEmpty = true;
@@ -103,7 +124,10 @@ let make = _children => {
           <div className=classes##wrapper>
             <AppBar position=`Static className={classes##appBar}>
               <Toolbar variant=`Dense className=classes##toolbar>
-                <IconButton color=`Inherit className={classes##toolbarLeftBtn}>
+                <IconButton
+                  color=`Inherit
+                  className={classes##toolbarLeftBtn}
+                  onClick={_ => pushMsg(Route.ChangeRoute(Main(Groups)))}>
                   <Icons.ArrowBack />
                 </IconButton>
                 <InputBase
@@ -116,43 +140,79 @@ let make = _children => {
                 </div>
               </Toolbar>
             </AppBar>
-            <ListSubheader component={`String("div")}>
-              {"Group ID" |> ReasonReact.string}
-            </ListSubheader>
-            <IdBox id="YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg==" />
-            <List
-              subheader={
-                <ListSubheader component={`String("div")}>
-                  {"Members" |> ReasonReact.string}
-                </ListSubheader>
-              }>
-              {if (isEmpty) {
-                 <Typography
-                   variant=`Body2 className=classes##noRecordsMessage>
-                   {"There are no peers added in this group."
-                    |> ReasonReact.string}
-                 </Typography>;
-               } else {
-                 <ListItem button=true>
-                   <ListItemText
-                     primary={"Jan Hrdina" |> ReasonReact.string}
-                     secondary={
-                       "YXNkZmZmc2Rmc2FzZGZzZGZzZnNkZnNkZg=="
-                       |> ReasonReact.string
-                     }
-                   />
-                   <ListItemSecondaryAction className=classes##secondaryAction>
-                     <Typography
-                       variant=`Button className=classes##permissionsText>
-                       {"R / RW" |> ReasonReact.string}
-                     </Typography>
-                   </ListItemSecondaryAction>
-                 </ListItem>;
-               }}
+            <SectionTitle text="Group ID" />
+            <IdBox id={groupId |> PM.PeersGroup.Id.toString} />
+            <SectionTitle text="Members" />
+            <List>
+              {PM.(
+                 dbState
+                 |> DbState.groups
+                 |> PeersGroups.findOpt(groupId)
+                 |?>> PeersGroup.foldPeersInGroup(
+                        (arr, peerInGroup) => {
+                          let peerId = peerInGroup |> PeerInGroup.id;
+                          let peerIdStr = peerId |> Peer.Id.toString;
+                          let displayedName =
+                            dbState
+                            |> DbState.peers
+                            |> Peers.findOpt(peerId)
+                            |?> (
+                              peer =>
+                                peer |> Peer.alias != "" ?
+                                  Some(peer |> Peer.alias) : None
+                            )
+                            |? peerIdStr;
+
+                          let permissionsText =
+                            switch (peerInGroup |> PeerInGroup.permissions) {
+                            | ReadContentAndMembers => "R / R"
+                            | WriteContent(ReadMembers) => "RW / R"
+                            | WriteContent(WriteMembers) => "RW / RW"
+                            };
+
+                          let listItem =
+                            <ListItem
+                              button=true
+                              key=peerIdStr
+                              classes=[
+                                SecondaryAction(classes##memberListItem),
+                              ]
+                              onClick={_ =>
+                                pushMsg(Route.ChangeRoute(PeerInGroup))
+                              }>
+                              <ListItemText
+                                primary={displayedName |> ReasonReact.string}
+                                secondary={peerIdStr |> ReasonReact.string}
+                              />
+                              <ListItemSecondaryAction
+                                className=classes##secondaryAction>
+                                <Typography
+                                  variant=`Button
+                                  className=classes##permissionsText>
+                                  {permissionsText |> ReasonReact.string}
+                                </Typography>
+                              </ListItemSecondaryAction>
+                            </ListItem>;
+                          Js.Array.concat(arr, [|listItem|]);
+                        },
+                        [||],
+                      )
+                 |? [||]
+               )
+               |> GuiUtils.elementArrayWithDefaultMsg(
+                    "There are no peers added in this group.",
+                  )}
             </List>
-            <Fab color=`Secondary className=classes##fab>
+            <Fab
+              color=`Secondary
+              className=classes##fab
+              onClick={_ => pushMsg(ClickedAddPeer)}>
               <Icons.PersonAdd />
             </Fab>
+            <PeerSearchScreen
+              open_={model.peerSearchDialogOpen}
+              onClose={res => pushMsg(ClosedPeerSearchDialog(res))}
+            />
           </div>
         }
       />

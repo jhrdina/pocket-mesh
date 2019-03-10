@@ -4,6 +4,7 @@ type model = {
   // activeTab: Route.mainTab,
   generalTab: GeneralTab.model,
   peersListTab: PeersListTab.model,
+  groupsListTab: GroupsListTab.model,
 };
 
 exception InternalError;
@@ -14,16 +15,26 @@ exception InternalError;
 // UPDATE
 
 let init = () => (
-  {generalTab: GeneralTab.init(), peersListTab: PeersListTab.init()},
+  {
+    generalTab: GeneralTab.init(),
+    peersListTab: PeersListTab.init(),
+    groupsListTab: GroupsListTab.init(),
+  },
   Cmd.none,
 );
 
 let update = (msg, model) => {
   let (peersListTab, peersListTabCmd) =
     PeersListTab.update(msg, model.peersListTab);
+  let (groupsListTab, groupsListTabCmd) =
+    GroupsListTab.update(msg, model.groupsListTab);
   (
-    {generalTab: GeneralTab.update(msg, model.generalTab), peersListTab},
-    peersListTabCmd,
+    {
+      generalTab: GeneralTab.update(msg, model.generalTab),
+      peersListTab,
+      groupsListTab,
+    },
+    Cmd.batch([peersListTabCmd, groupsListTabCmd]),
   );
 };
 
@@ -121,7 +132,13 @@ let make = (~activeTab, ~dbState, ~runtimeState, ~model, ~pushMsg, _children) =>
               </Tabs>
             </AppBar>
             {switch (activeTab) {
-             | Groups => GroupsListTab.render()
+             | Groups =>
+               GroupsListTab.render(
+                 ~dbState,
+                 ~runtimeState,
+                 ~model=model.groupsListTab,
+                 ~pushMsg,
+               )
              | Peers =>
                PeersListTab.render(
                  ~dbState,

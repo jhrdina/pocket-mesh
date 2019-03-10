@@ -26,9 +26,6 @@ let update = (msg, model) => {
   };
 };
 
-let elementArrayWithDefaultMsg = (text, arr) =>
-  arr |> Array.length > 0 ? arr |> ReasonReact.array : <LonelyMessage text />;
-
 let render =
     (
       ~dbState: PM.DbState.t,
@@ -94,7 +91,7 @@ let render =
                 },
                 [||],
               )
-           |> elementArrayWithDefaultMsg("No friends added.")
+           |> GuiUtils.elementArrayWithDefaultMsg("No friends added.")
          )}
       </List>
       <AddPeerDialog

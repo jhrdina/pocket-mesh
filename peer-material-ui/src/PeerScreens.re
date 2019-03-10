@@ -5,10 +5,9 @@ open BlackTea;
 [@bs.deriving accessors]
 type screen =
   | Main(Route.mainTab, MainScreen.model)
-  | Group
+  | Group(PM.PeersGroup.Id.t, GroupScreen.model)
   | PeerInGroup
   | Peer(PocketMeshPeer.Peer.Id.t, PeerScreen.model)
-  | PeerSearch
   | ThisPeer
   | Loading;
 
@@ -37,13 +36,16 @@ let updateScreen =
     | (_, Main(reqTab)) =>
       // Transitioning from different screen
       MainScreen.init() |> updateWith(model => Main(reqTab, model))
-    | (_, Group) => (Group, Cmd.none)
+    | (Group(_, model), Group(groupId)) =>
+      GroupScreen.update(~groupId, msg, model)
+      |> updateWith(m => Group(groupId, m))
+    | (_, Group(groupId)) =>
+      GroupScreen.init() |> updateWith(m => Group(groupId, m))
     | (_, PeerInGroup) => (PeerInGroup, Cmd.none)
     | (Peer(_peerId, m), Peer(peerId)) =>
       PeerScreen.update(~peerId, msg, m) |> updateWith(m => Peer(peerId, m))
     | (_, Peer(peerId)) =>
       PeerScreen.init(~dbState, peerId) |> updateWith(m => Peer(peerId, m))
-    | (_, PeerSearch) => (PeerSearch, Cmd.none)
     | (_, ThisPeer) => (ThisPeer, Cmd.none)
     }
   };
@@ -96,40 +98,37 @@ let make =
   ...component,
   render: _self =>
     <ThemeProvider>
-      MaterialUi.(
-        <UseHook
-          hook=useStyles
-          render={classes =>
-            <div
-              className={[Styles.wrapper, className] |> String.concat(" ")}>
-              {switch (core) {
-               | HasIdentity(dbState, runtimeState) =>
-                 switch (model.screen) {
-                 | Main(tab, m) =>
-                   <MainScreen
-                     activeTab=tab
-                     dbState
-                     runtimeState
-                     model=m
-                     pushMsg
-                   />
-                 | Group => <GroupScreen />
-                 | PeerInGroup => <PeerInGroupScreen />
-                 | Peer(peerId, m) =>
-                   <PeerScreen peerId dbState runtimeState model=m pushMsg />
-                 | PeerSearch => <PeerSearchScreen />
-                 | ThisPeer =>
-                   <ThisPeerScreen
-                     thisPeer={dbState |> PocketMeshPeer.DbState.thisPeer}
-                     pushMsg
-                   />
-                 | Loading => renderLoading()
-                 }
-               | WaitingForDbAndIdentity(_) => renderLoading()
-               }}
-            </div>
-          }
-        />
-      )
+      <UseHook
+        hook=useStyles
+        render={classes =>
+          <div className={[Styles.wrapper, className] |> String.concat(" ")}>
+            {switch (core) {
+             | HasIdentity(dbState, runtimeState) =>
+               switch (model.screen) {
+               | Main(tab, m) =>
+                 <MainScreen
+                   activeTab=tab
+                   dbState
+                   runtimeState
+                   model=m
+                   pushMsg
+                 />
+               | Group(groupId, m) =>
+                 <GroupScreen dbState groupId model=m pushMsg />
+               | PeerInGroup => <PeerInGroupScreen />
+               | Peer(peerId, m) =>
+                 <PeerScreen peerId dbState runtimeState model=m pushMsg />
+               | ThisPeer =>
+                 <ThisPeerScreen
+                   thisPeer={dbState |> PocketMeshPeer.DbState.thisPeer}
+                   pushMsg
+                 />
+               | Loading => renderLoading()
+               }
+             | WaitingForDbAndIdentity(_) => renderLoading()
+             }}
+          </div>
+        }
+      />
     </ThemeProvider>,
 };

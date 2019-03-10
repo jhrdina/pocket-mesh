@@ -81,11 +81,11 @@ let make = _children => {
           // <MainScreen model={MainScreen.init(General) |> fst} pushMsg />
         />
         {renderComponentTitle("Group Screen")}
-        <div> <GroupScreen /> </div>
+        // <div> <GroupScreen /> </div>
         {renderComponentTitle("Peer in Group Screen")}
         <div> <PeerInGroupScreen className=Styles.framed /> </div>
         {renderComponentTitle("Peer Search Screen")}
-        <div> <PeerSearchScreen className=Styles.framed /> </div>
+        // <div> <PeerSearchScreen className=Styles.framed /> </div>
         {renderComponentTitle("Peer Screen")}
         // <div> <PeerScreen /> </div>
         {renderComponentTitle("This Peer Screen")}

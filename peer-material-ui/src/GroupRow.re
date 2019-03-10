@@ -32,18 +32,15 @@ let useStyles =
     },
   ]);
 
-module Styles = {
-  open Css;
-};
-
-let make = (~alias, ~membersPreview, ~membersCount, _children) => {
+let make =
+    (~alias, ~membersPreview, ~membersCount, ~onClick=_ => (), _children) => {
   ...component,
   render: _self =>
     MaterialUi.(
       <UseHook
         hook=useStyles
         render={classes =>
-          <ListItem button=true>
+          <ListItem button=true onClick>
             // <Checkbox className=classes##checkbox />
 
               <ListItemText

@@ -35,7 +35,7 @@ let useStyles =
         name: "root",
         styles:
           ReactDOMRe.Style.make(
-            ~margin="0 16px",
+            ~margin="11px 16px",
             ~display="flex",
             ~border=idBoxBorder,
             ~borderRadius="4px",
