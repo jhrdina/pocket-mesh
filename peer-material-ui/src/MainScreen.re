@@ -39,7 +39,7 @@ let useStyles =
       {
         name: "toolbarLeftBtn",
         styles:
-          ReactDOMRe.Style.make(~marginLeft="-18px", ~marginRight="10px", ()),
+          ReactDOMRe.Style.make(~marginLeft="-16px", ~marginRight="10px", ()),
       },
       {
         name: "toolbarTitle",
@@ -48,7 +48,7 @@ let useStyles =
       {
         name: "toolbarRightBlock",
         styles:
-          ReactDOMRe.Style.make(~marginLeft="10px", ~marginRight="-18px", ()),
+          ReactDOMRe.Style.make(~marginLeft="10px", ~marginRight="-16px", ()),
       },
       {
         name: "tabsIndicator",
