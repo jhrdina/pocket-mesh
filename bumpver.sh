@@ -111,8 +111,9 @@ if [ $commit == true ]; then
 fi
 
 if [ $push == true ]; then
-  echo -e "Pushing...\n"
-
   cd "$dir"
+  echo -e "Pushing current branch..."
+  git push origin
+  echo -e "Pushing tags..."
   git push --tags origin
 fi
