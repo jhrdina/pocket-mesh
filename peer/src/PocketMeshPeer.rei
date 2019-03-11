@@ -24,8 +24,11 @@ module InitConfig: {
 module Peer: {
   module Id: {
     type t;
+    let compare: (t, t) => int;
+    let equal: (t, t) => bool;
     let toString: t => string;
     let ofString: string => option(t);
+    let ofStringExn: string => t;
   };
 
   type t;

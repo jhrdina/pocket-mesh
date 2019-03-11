@@ -63,14 +63,15 @@ let update = (~thisPeer: ThisPeer.t, ~peers: Peers.t, msg) =>
   | CompletedSignMessage(Error(_e)) => Cmds.log("Could not sign message")
 
   | SignalChannel.GotMessage(
-      Signed(signature, PeerToPeer(src, _tg, Offer(_) | Answer(_)) as msg),
-    ) =>
+      Signed(signature, PeerToPeer(src, tg, Offer(_) | Answer(_)) as msg),
+    )
+      when PeerId.equal(tg, thisPeer.id) =>
     // KeyRequest and KeyResponse are verified directly in PeersKeysFetcherAndSender
     peers
     |> Peers.findOpt(src)
     |?> (peer => peer.publicKey)
     |?>> (srcKey => verifyMessageSignatureCmd(srcKey, signature, msg))
-    // TODO: Messages shouldn't get lost during key exchange, should they?
+    // TODO: Write down rules of messages dropping (e.g. in the times when keys are not exchanged yet)
     |? Cmds.log("Received Offer or Answer, but I don't have a key yet.")
 
   | _ => Cmd.none
