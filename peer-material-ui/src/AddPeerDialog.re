@@ -50,7 +50,8 @@ let make = (~open_, ~onClose, _children) => {
       <UseHook
         hook=useStyles
         render={_classes =>
-          <Dialog open_ onClose={_ => handleClose(self, onClose, Cancel)}>
+          <Dialog
+            open_ onClose={(_, _) => handleClose(self, onClose, Cancel)}>
             <DialogTitle> {"Add peer" |> ReasonReact.string} </DialogTitle>
             <DialogContent>
               <TextField

@@ -78,7 +78,7 @@ let make = (~open_, ~onClose, ~className="", _children) => {
           <Dialog
             fullScreen=true
             open_
-            onClose={_ => onClose(Cancel)}
+            onClose={(_, _) => onClose(Cancel)}
             hideBackdrop=true>
             <div
               className={[classes##wrapper, className] |> String.concat(" ")}>

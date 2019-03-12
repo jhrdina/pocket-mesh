@@ -46,7 +46,7 @@ let make = (~settings: settings, ~open_, ~onClose, _children) => {
       <UseHook
         hook=useStyles
         render={_classes =>
-          <Dialog open_ onClose={_ => onClose(Cancel)}>
+          <Dialog open_ onClose={(_, _) => onClose(Cancel)}>
             <DialogTitle>
               {"Signal Server Settings" |> ReasonReact.string}
             </DialogTitle>
