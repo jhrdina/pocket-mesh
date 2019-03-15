@@ -116,6 +116,13 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
   ...component,
 
   render: _self => {
+    let groupAliasStr =
+      dbState
+      |> PM.DbState.groups
+      |> PM.PeersGroups.findOpt(groupId)
+      |?>> PM.PeersGroup.alias
+      |? "";
+
     let isEmpty = true;
     MaterialUi.(
       <UseHook
@@ -133,6 +140,17 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
                 <InputBase
                   placeholder="Group name"
                   className=classes##titleInput
+                  value={`String(groupAliasStr)}
+                  onChange={e =>
+                    pushMsg(
+                      Msg.ReqP2PMsg(
+                        PM.Msg.updateGroupAlias(
+                          groupId,
+                          e->ReactEvent.Form.target##value,
+                        ),
+                      ),
+                    )
+                  }
                 />
                 <div>
                   <IconButton color=`Inherit> <Icons.Delete /> </IconButton>
@@ -178,7 +196,9 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
                                 SecondaryAction(classes##memberListItem),
                               ]
                               onClick={_ =>
-                                pushMsg(Route.ChangeRoute(PeerInGroup))
+                                pushMsg(
+                                  Route.ChangeRoute(PeerInGroup(groupId)),
+                                )
                               }>
                               <ListItemText
                                 primary={displayedName |> ReasonReact.string}

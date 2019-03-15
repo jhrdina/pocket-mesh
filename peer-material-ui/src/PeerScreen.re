@@ -97,6 +97,13 @@ let make =
       ~pushMsg,
       _children,
     ) => {
+  let peerAliasStr =
+    dbState
+    |> PM.DbState.peers
+    |> PM.Peers.findOpt(peerId)
+    |?>> PM.Peer.alias
+    |? "";
+
   let signalStateStr =
     switch (
       runtimeState
@@ -164,6 +171,17 @@ let make =
                     autoFocus=true
                     placeholder="Peer alias"
                     className=classes##titleInput
+                    value={`String(peerAliasStr)}
+                    onChange={e =>
+                      pushMsg(
+                        Msg.ReqP2PMsg(
+                          PM.Msg.updatePeer(
+                            peerId,
+                            e->ReactEvent.Form.target##value,
+                          ),
+                        ),
+                      )
+                    }
                   />
                   <div>
                     <IconButton

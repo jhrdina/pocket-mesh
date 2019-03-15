@@ -83,7 +83,7 @@ let make = _children => {
         {renderComponentTitle("Group Screen")}
         // <div> <GroupScreen /> </div>
         {renderComponentTitle("Peer in Group Screen")}
-        <div> <PeerInGroupScreen className=Styles.framed /> </div>
+        // <div> <PeerInGroupScreen className=Styles.framed /> </div>
         {renderComponentTitle("Peer Search Screen")}
         // <div> <PeerSearchScreen className=Styles.framed /> </div>
         {renderComponentTitle("Peer Screen")}

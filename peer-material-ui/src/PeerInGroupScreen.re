@@ -235,7 +235,7 @@ let renderChannelDiagram =
   </div>;
 };
 
-let make = (~className="", _children) => {
+let make = (~groupId, ~pushMsg, ~className="", _children) => {
   ...component,
   render: _self => {
     let peerAlias = "John Brown";
@@ -248,7 +248,10 @@ let make = (~className="", _children) => {
             className={[classes##wrapper, className] |> String.concat(" ")}>
             <AppBar position=`Static className={classes##appBar}>
               <Toolbar variant=`Dense className=classes##toolbar>
-                <IconButton color=`Inherit className={classes##toolbarLeftBtn}>
+                <IconButton
+                  color=`Inherit
+                  className={classes##toolbarLeftBtn}
+                  onClick={_ => pushMsg(Route.ChangeRoute(Group(groupId)))}>
                   <Icons.ArrowBack />
                 </IconButton>
                 <div className={classes##toolbarTitleBox}>

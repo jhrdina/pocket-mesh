@@ -6,7 +6,7 @@ open BlackTea;
 type screen =
   | Main(Route.mainTab, MainScreen.model)
   | Group(PM.PeersGroup.Id.t, GroupScreen.model)
-  | PeerInGroup
+  | PeerInGroup(PM.PeersGroup.Id.t)
   | Peer(PocketMeshPeer.Peer.Id.t, PeerScreen.model)
   | ThisPeer
   | Loading;
@@ -41,7 +41,7 @@ let updateScreen =
       |> updateWith(m => Group(groupId, m))
     | (_, Group(groupId)) =>
       GroupScreen.init() |> updateWith(m => Group(groupId, m))
-    | (_, PeerInGroup) => (PeerInGroup, Cmd.none)
+    | (_, PeerInGroup(groupId)) => (PeerInGroup(groupId), Cmd.none)
     | (Peer(_peerId, m), Peer(peerId)) =>
       PeerScreen.update(~peerId, msg, m) |> updateWith(m => Peer(peerId, m))
     | (_, Peer(peerId)) =>
@@ -115,7 +115,7 @@ let make =
                  />
                | Group(groupId, m) =>
                  <GroupScreen dbState groupId model=m pushMsg />
-               | PeerInGroup => <PeerInGroupScreen />
+               | PeerInGroup(groupId) => <PeerInGroupScreen groupId pushMsg />
                | Peer(peerId, m) =>
                  <PeerScreen peerId dbState runtimeState model=m pushMsg />
                | ThisPeer =>
