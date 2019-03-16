@@ -6,6 +6,7 @@ Updates packages versions to VERSION and optionally installs the packages
 where:
     -h  Show this help text
     -i  Also install the packages
+    -t  Also update tree-burst demo project
     -c  Creates version bump commit in Git
     -p  Pushes tag and current branch to Git
     "
@@ -16,27 +17,36 @@ push=false
 version=""
 dir=`pwd`
 
+updateTreeBurst=false
+treeBurstPath="$dir/../tree-burst"
+
 # Parse args
 
-if [ "$1" == "-h" ]; then
-  echo "$usage"
-  exit
-fi
+OPTIND=1
 
-if [ "$1" == "-i" ]; then
-  install=true
-  shift
-fi
+while getopts "h?icpt" opt; do
+  case "$opt" in
+  h|\?)
+    echo "$usage"
+    exit
+    ;;
+  i)
+    install=true
+    ;;
+  c)
+    commit=true
+    ;;
+  p)
+    push=true
+    ;;
+  t)
+    updateTreeBurst=true
+    ;;
+  esac
+done
 
-if [ "$1" == "-c" ]; then
-  commit=true
-  shift
-fi
-
-if [ "$1" == "-p" ]; then
-  push=true
-  shift
-fi
+shift $((OPTIND-1))
+[ "${1:-}" = "--" ] && shift
 
 if [ "$1" != "" ]; then
   version=$1
@@ -69,6 +79,11 @@ replaceDepVersionInPackageJson pocket-mesh-peer "$version" ./peer-material-ui/pa
 replaceVersionInPackageJson "$version" ./signal-server/package.json
 replaceVersionInOpam "$version" ./signal-server/pocket-mesh-signal-server.opam
 
+if [ $updateTreeBurst = true ]; then
+  replaceDepVersionInPackageJson pocket-mesh-peer "$version" "$treeBurstPath/package.json"
+  replaceDepVersionInPackageJson pocket-mesh-peer-material-ui "$version" "$treeBurstPath/package.json"
+fi
+
 # ============================================
 # Install
 # ============================================
@@ -81,16 +96,24 @@ if [ $install == true ]; then
   }
 
   cd "$dir/peer"
+  npm i
   npack
 
   cd "$dir/peer-material-ui"
   npm i
+  npm i -f "../pocket-mesh-peer-$version.tgz"
+  npm run clean
   npm run build
   peerMaterialUiBuildRes=$?
   npack
 
   cd "$dir/signal-server"
   opam install .
+
+  if [ $updateTreeBurst = true ]; then
+    cd "$treeBurstPath"
+    npm i -f pocket-mesh-peer pocket-mesh-peer-material-ui
+  fi
 
   echo
 
