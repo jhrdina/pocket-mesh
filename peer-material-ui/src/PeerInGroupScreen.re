@@ -1,3 +1,5 @@
+open Infix;
+
 module RightArrow = {
   let component = ReasonReact.statelessComponent("RightArrow");
   let make = (~className="", _ch) => {
@@ -37,8 +39,6 @@ module Cross = {
   };
 };
 
-let component = ReasonReact.statelessComponent("PeerInGroupScreen");
-
 type arrowDirection =
   | Left
   | Right;
@@ -76,7 +76,7 @@ let useStyles =
       },
       {
         name: "toolbarTitleBox",
-        styles: ReactDOMRe.Style.make(~flex="1", ()),
+        styles: ReactDOMRe.Style.make(~flex="1", ~overflow="hidden", ()),
       },
       {
         name: "toolbarPeerAlias",
@@ -194,6 +194,7 @@ let renderChannelDiagram =
       ~peerAcceptState,
       ~peerSendState,
       ~thisPeerAcceptState,
+      ~onClick=() => (),
       ~classes,
       ~className="",
       (),
@@ -216,7 +217,8 @@ let renderChannelDiagram =
       variant=`Contained
       size=`Small
       color=`Default
-      className={classes##diaArrow ++ " " ++ classes##diaArrowBottomLeft}>
+      className={classes##diaArrow ++ " " ++ classes##diaArrowBottomLeft}
+      onClick={_ => onClick()}>
       {renderArrowState(
          ~available=Some(thisPeerAcceptState),
          ~direction=Left,
@@ -235,11 +237,38 @@ let renderChannelDiagram =
   </div>;
 };
 
-let make = (~groupId, ~pushMsg, ~className="", _children) => {
+let component = ReasonReact.statelessComponent("PeerInGroupScreen");
+
+let make =
+    (~dbState, ~groupId, ~peerInGroup, ~pushMsg, ~className="", _children) => {
   ...component,
   render: _self => {
-    let peerAlias = "John Brown";
-    let groupAlias = "XY";
+    let peerId = peerInGroup |> PM.PeerInGroup.id;
+    let permissions = peerInGroup |> PM.PeerInGroup.permissions;
+    let (acceptsContent, acceptsMembers) =
+      switch (permissions) {
+      | ReadContentAndMembers => (false, false)
+      | WriteContent(ReadMembers) => (true, false)
+      | WriteContent(WriteMembers) => (true, true)
+      };
+
+    let maybePeer = dbState |> PM.DbState.peers |> PM.Peers.findOpt(peerId);
+    let peerAlias =
+      maybePeer
+      |?>> GuiUtils.getPeerVisibleName
+      |? (peerId |> PM.Peer.Id.toString);
+
+    let peerAliasShort =
+      maybePeer
+      |?>> GuiUtils.getPeerVisibleName(~idMaxChars=6)
+      |? (peerId |> PM.Peer.Id.toString |> GuiUtils.truncate(6));
+
+    let groupAlias =
+      dbState
+      |> PM.DbState.groups
+      |> PM.PeersGroups.findOpt(groupId)
+      |?>> GuiUtils.getPeerGroupVisibleName
+      |? (groupId |> PM.PeersGroup.Id.toString);
     MaterialUi.(
       <UseHook
         hook=useStyles
@@ -256,19 +285,25 @@ let make = (~groupId, ~pushMsg, ~className="", _children) => {
                 </IconButton>
                 <div className={classes##toolbarTitleBox}>
                   <Typography
-                    variant=`H6 className={classes##toolbarPeerAlias}>
+                    noWrap=true
+                    variant=`H6
+                    className={classes##toolbarPeerAlias}>
                     {peerAlias |> ReasonReact.string}
                   </Typography>
                   <Typography
-                    variant=`Body2 className={classes##toolbarSubtitle}>
-                    {"in group " ++ groupAlias |> ReasonReact.string}
+                    noWrap=true
+                    variant=`Body2
+                    className={classes##toolbarSubtitle}>
+                    {"in group "
+                     ++ GuiUtils.quote(groupAlias)
+                     |> ReasonReact.string}
                   </Typography>
-                </div>
-                <div className=classes##toolbarRightBlock>
-                  <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
                 </div>
               </Toolbar>
             </AppBar>
+            // <div className=classes##toolbarRightBlock>
+            //   <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
+            // </div>
             <div
               style={ReactDOMRe.Style.make(~margin="12px 16px 0 16px", ())}>
               <div
@@ -283,8 +318,10 @@ let make = (~groupId, ~pushMsg, ~className="", _children) => {
                   {"This peer" |> ReasonReact.string}
                 </Typography>
                 <Typography
-                  variant=`Subtitle2 className={classes##toolbarSubtitle}>
-                  {peerAlias |> ReasonReact.string}
+                  variant=`Subtitle2
+                  className={classes##toolbarSubtitle}
+                  style={ReactDOMRe.Style.make(~textAlign="right", ())}>
+                  {peerAliasShort |> ReasonReact.string}
                 </Typography>
               </div>
               <div
@@ -306,22 +343,64 @@ let make = (~groupId, ~pushMsg, ~className="", _children) => {
                    ~label="Content",
                    ~peerAcceptState=Some(false),
                    ~peerSendState=Some(true),
-                   ~thisPeerAcceptState=true,
+                   ~thisPeerAcceptState=acceptsContent,
                    ~classes,
                    ~className=classes##diaNotLastChannel,
+                   ~onClick=
+                     () =>
+                       pushMsg(
+                         Msg.ReqP2PMsg(
+                           PM.Msg.updatePeerPermissions(
+                             peerId,
+                             groupId,
+                             switch (permissions) {
+                             | ReadContentAndMembers =>
+                               WriteContent(ReadMembers)
+                             | WriteContent(_) => ReadContentAndMembers
+                             },
+                           ),
+                         ),
+                       ),
                    (),
                  )}
                 {renderChannelDiagram(
                    ~label="Members list",
                    ~peerAcceptState=Some(false),
                    ~peerSendState=Some(true),
-                   ~thisPeerAcceptState=false,
+                   ~thisPeerAcceptState=acceptsMembers,
                    ~classes,
+                   ~onClick=
+                     () => {
+                       Js.log("clicked");
+                       pushMsg(
+                         Msg.ReqP2PMsg(
+                           PM.Msg.updatePeerPermissions(
+                             peerId,
+                             groupId,
+                             switch (permissions) {
+                             | ReadContentAndMembers
+                             | WriteContent(ReadMembers) =>
+                               WriteContent(WriteMembers)
+                             | WriteContent(WriteMembers) =>
+                               WriteContent(ReadMembers)
+                             },
+                           ),
+                         ),
+                       );
+                     },
                    (),
                  )}
               </div>
             </div>
-            <Button fullWidth=true className=classes##removeBtn>
+            <Button
+              fullWidth=true
+              className=classes##removeBtn
+              onClick={_ => {
+                pushMsg(
+                  Msg.ReqP2PMsg(PM.Msg.removePeerFromGroup(peerId, groupId)),
+                );
+                pushMsg(Route.ChangeRoute(Group(groupId)));
+              }}>
               {"Remove from group" |> ReasonReact.string}
             </Button>
           </div>

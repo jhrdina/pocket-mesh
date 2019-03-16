@@ -42,11 +42,6 @@ let render =
            |> PeersGroups.fold(
                 (arr, group) => {
                   let groupId = group |> PeersGroup.id;
-                  let groupIdStr = groupId |> PeersGroup.Id.toString;
-
-                  let displayedName =
-                    group |> PeersGroup.alias != "" ?
-                      group |> PeersGroup.alias : groupIdStr;
 
                   let (membersPreview, membersCount) =
                     group
@@ -61,16 +56,17 @@ let render =
                                |> Peers.findOpt(peerId)
                              ) {
                              | Some(peer) =>
-                               peer |> Peer.alias != "" ?
-                                 peer |> Peer.alias :
-                                 GuiUtils.truncate(peerIdStr, 6)
+                               GuiUtils.getPeerVisibleName(
+                                 ~idMaxChars=6,
+                                 peer,
+                               )
                              | None =>
                                Js.log(
                                  "Weird: member "
                                  ++ peerIdStr
                                  ++ " is missing in peers",
                                );
-                               GuiUtils.truncate(peerIdStr, 6);
+                               peerIdStr |> GuiUtils.truncate(6);
                              };
                            ([displayedName, ...members], count + 1);
                          },
@@ -79,8 +75,8 @@ let render =
 
                   let groupRowEl =
                     <GroupRow
-                      key=groupIdStr
-                      alias=displayedName
+                      key={groupId |> PeersGroup.Id.toString}
+                      alias={group |> GuiUtils.getPeerGroupVisibleName}
                       membersPreview
                       membersCount
                       onClick={_ =>

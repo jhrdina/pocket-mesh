@@ -114,12 +114,12 @@ let make = (~activeTab, ~dbState, ~runtimeState, ~model, ~pushMsg, _children) =>
                   variant=`H6 color=`Inherit className={classes##toolbarTitle}>
                   {"P2P" |> ReasonReact.string}
                 </Typography>
-                <div className=classes##toolbarRightBlock>
-                  <IconButton color=`Inherit className={classes##leftToolBtn}>
-                    <Icons.MoreVert />
-                  </IconButton>
-                </div>
               </Toolbar>
+              // <div className=classes##toolbarRightBlock>
+              //   <IconButton color=`Inherit className={classes##leftToolBtn}>
+              //     <Icons.MoreVert />
+              //   </IconButton>
+              // </div>
               <Tabs
                 classes=[Indicator(classes##tabsIndicator)]
                 value={activeTab |> tabToInt}

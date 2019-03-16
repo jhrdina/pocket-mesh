@@ -130,34 +130,42 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
         render={classes =>
           <div className=classes##wrapper>
             <AppBar position=`Static className={classes##appBar}>
-              <Toolbar variant=`Dense className=classes##toolbar>
-                <IconButton
-                  color=`Inherit
-                  className={classes##toolbarLeftBtn}
-                  onClick={_ => pushMsg(Route.ChangeRoute(Main(Groups)))}>
-                  <Icons.ArrowBack />
-                </IconButton>
-                <InputBase
-                  placeholder="Group name"
-                  className=classes##titleInput
-                  value={`String(groupAliasStr)}
-                  onChange={e =>
-                    pushMsg(
-                      Msg.ReqP2PMsg(
-                        PM.Msg.updateGroupAlias(
-                          groupId,
-                          e->ReactEvent.Form.target##value,
+
+                <Toolbar variant=`Dense className=classes##toolbar>
+                  <IconButton
+                    color=`Inherit
+                    className={classes##toolbarLeftBtn}
+                    onClick={_ => pushMsg(Route.ChangeRoute(Main(Groups)))}>
+                    <Icons.ArrowBack />
+                  </IconButton>
+                  <InputBase
+                    placeholder="Group name"
+                    className=classes##titleInput
+                    value={`String(groupAliasStr)}
+                    onChange={e =>
+                      pushMsg(
+                        Msg.ReqP2PMsg(
+                          PM.Msg.updateGroupAlias(
+                            groupId,
+                            e->ReactEvent.Form.target##value,
+                          ),
                         ),
-                      ),
-                    )
-                  }
-                />
-                <div>
-                  <IconButton color=`Inherit> <Icons.Delete /> </IconButton>
-                  <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
-                </div>
-              </Toolbar>
-            </AppBar>
+                      )
+                    }
+                  />
+                  <div>
+                    <IconButton
+                      color=`Inherit
+                      onClick={_ => {
+                        pushMsg(Msg.ReqP2PMsg(PM.Msg.removeGroup(groupId)));
+                        pushMsg(Route.ChangeRoute(Main(Groups)));
+                      }}>
+                      <Icons.Delete />
+                    </IconButton>
+                  </div>
+                </Toolbar>
+              </AppBar>
+              // <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
             <SectionTitle text="Group ID" />
             <IdBox id={groupId |> PM.PeersGroup.Id.toString} />
             <SectionTitle text="Members" />
@@ -197,12 +205,16 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
                               ]
                               onClick={_ =>
                                 pushMsg(
-                                  Route.ChangeRoute(PeerInGroup(groupId)),
+                                  Route.ChangeRoute(
+                                    PeerInGroup(peerId, groupId),
+                                  ),
                                 )
                               }>
                               <ListItemText
                                 primary={displayedName |> ReasonReact.string}
                                 secondary={peerIdStr |> ReasonReact.string}
+                                primaryTypographyProps={"noWrap": true}
+                                secondaryTypographyProps={"noWrap": true}
                               />
                               <ListItemSecondaryAction
                                 className=classes##secondaryAction>
@@ -230,6 +242,7 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
               <Icons.PersonAdd />
             </Fab>
             <PeerSearchScreen
+              dbState
               open_={model.peerSearchDialogOpen}
               onClose={res => pushMsg(ClosedPeerSearchDialog(res))}
             />

@@ -44,13 +44,39 @@ let useStyles =
     ]
   );
 
+let getMatchingPeers = (~peers, searchText) =>
+  if (searchText != "") {
+    let searchText = searchText |> Js.String.toLocaleLowerCase;
+    peers
+    |> PM.Peers.fold(
+         (arr, peer) =>
+           if (peer
+               |> PM.Peer.alias
+               |> Js.String.toLocaleLowerCase
+               |> Js.String.includes(searchText)
+               || peer
+               |> PM.Peer.id
+               |> PM.Peer.Id.toString
+               |> Js.String.toLocaleLowerCase
+               |> Js.String.includes(searchText)) {
+             arr |> Array.append([|peer|]);
+           } else {
+             arr;
+           },
+         [||],
+       );
+  } else {
+    peers
+    |> PM.Peers.fold((arr, peer) => arr |> Array.append([|peer|]), [||]);
+  };
+
 let setSearchTextFieldRef = (theRef, {ReasonReact.state}) => {
   state.searchTextFieldRef := Js.Nullable.toOption(theRef);
 };
 
 let component = ReasonReact.reducerComponent("PeerSearchScreen");
 
-let make = (~open_, ~onClose, ~className="", _children) => {
+let make = (~dbState, ~open_, ~onClose, ~className="", _children) => {
   ...component,
 
   initialState: () => {searchText: "", searchTextFieldRef: ref(None)},
@@ -118,22 +144,25 @@ let make = (~open_, ~onClose, ~className="", _children) => {
                 </Toolbar>
               </AppBar>
               <List>
-                {if (isEmpty) {
-                   <LonelyMessage text="No matching peers found." />;
-                 } else {
-                   let peerIdOfStringExn = str =>
-                     switch (PM.Peer.Id.ofString(str)) {
-                     | Some(peerId) => peerId
-                     | None => raise(Not_found)
-                     };
-                   <PeerRow
-                     peerId={peerIdOfStringExn("asdf")}
-                     signalState=Online
-                     inGroup=true
-                     connectionState=Connected
-                     alias="Carl Buchta"
-                   />;
-                 }}
+                {getMatchingPeers(
+                   ~peers=dbState |> PM.DbState.peers,
+                   self.state.searchText,
+                 )
+                 |> Array.map(peer => {
+                      let peerId = peer |> PM.Peer.id;
+                      <PeerRow
+                        key={peerId |> PM.Peer.Id.toString}
+                        peerId
+                        signalState=Online
+                        inGroup=true
+                        connectionState=Connected
+                        alias={peer |> PM.Peer.alias}
+                        onClick={_ => onClose(Ok(peerId))}
+                      />;
+                    })
+                 |> GuiUtils.elementArrayWithDefaultMsg(
+                      "No matching peers found.",
+                    )}
               </List>
             </div>
           </Dialog>

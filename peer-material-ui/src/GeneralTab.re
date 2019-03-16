@@ -65,6 +65,7 @@ let render = (~dbState, ~runtimeState, ~model, ~pushMsg) => {
             <ListItemText
               primary={"My identity" |> ReasonReact.string}
               secondary={thisPeerIdStr |> ReasonReact.string}
+              secondaryTypographyProps={"noWrap": true}
             />
           </ListItem>
           <ListItem

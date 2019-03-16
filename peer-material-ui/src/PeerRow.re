@@ -14,7 +14,7 @@ let useStyles =
     },
     {
       name: "statusIndicator",
-      styles: ReactDOMRe.Style.make(~marginLeft="-16px", ()),
+      styles: ReactDOMRe.Style.make(~marginLeft="-16px", ~flexShrink="0", ()),
     },
   ]);
 

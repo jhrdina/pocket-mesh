@@ -1,4 +1,5 @@
 open BlackTea;
+open Infix;
 
 // TYPES
 
@@ -6,8 +7,8 @@ open BlackTea;
 type screen =
   | Main(Route.mainTab, MainScreen.model)
   | Group(PM.PeersGroup.Id.t, GroupScreen.model)
-  | PeerInGroup(PM.PeersGroup.Id.t)
-  | Peer(PocketMeshPeer.Peer.Id.t, PeerScreen.model)
+  | PeerInGroup(PM.PeerInGroup.t, PM.PeersGroup.Id.t)
+  | Peer(PM.Peer.Id.t, PeerScreen.model)
   | ThisPeer
   | Loading;
 
@@ -41,7 +42,16 @@ let updateScreen =
       |> updateWith(m => Group(groupId, m))
     | (_, Group(groupId)) =>
       GroupScreen.init() |> updateWith(m => Group(groupId, m))
-    | (_, PeerInGroup(groupId)) => (PeerInGroup(groupId), Cmd.none)
+    | (_, PeerInGroup(peerId, groupId)) =>
+      switch (
+        dbState
+        |> PM.DbState.groups
+        |> PM.PeersGroups.findOpt(groupId)
+        |?> PM.PeersGroup.findPeerInGroupOpt(peerId)
+      ) {
+      | Some(peerInGroup) => (PeerInGroup(peerInGroup, groupId), Cmd.none)
+      | None => GroupScreen.init() |> updateWith(m => Group(groupId, m))
+      }
     | (Peer(_peerId, m), Peer(peerId)) =>
       PeerScreen.update(~peerId, msg, m) |> updateWith(m => Peer(peerId, m))
     | (_, Peer(peerId)) =>
@@ -75,7 +85,11 @@ let update = (~core, msg, model) => {
 
 module Styles = {
   open Css;
-  let wrapper = style([display(`flex), children([flex(1)])]);
+  let wrapper =
+    style([
+      display(`flex),
+      children([flex(1), maxWidth(`percent(100.0))]),
+    ]);
 };
 
 let useStyles =
@@ -115,7 +129,8 @@ let make =
                  />
                | Group(groupId, m) =>
                  <GroupScreen dbState groupId model=m pushMsg />
-               | PeerInGroup(groupId) => <PeerInGroupScreen groupId pushMsg />
+               | PeerInGroup(peerInGroup, groupId) =>
+                 <PeerInGroupScreen dbState groupId pushMsg peerInGroup />
                | Peer(peerId, m) =>
                  <PeerScreen peerId dbState runtimeState model=m pushMsg />
                | ThisPeer =>

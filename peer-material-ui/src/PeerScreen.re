@@ -5,7 +5,6 @@ open Infix;
 
 type model = {alias: string};
 type Msg.t +=
-  | ChangedAlias(string)
   | ClickedDelete;
 
 // UPDATE
@@ -24,7 +23,6 @@ let init = (~dbState, peerId) => (
 
 let update = (~peerId, msg, model: model) => {
   switch (msg) {
-  | ChangedAlias(alias) => ({...model, alias}, Cmd.none)
   | ClickedDelete => (
       model,
       Cmd.batch([
