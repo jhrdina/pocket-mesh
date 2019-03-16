@@ -1,6 +1,6 @@
 {
   "name": "pocket-mesh-signal-server",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Reason native project",
   "NOTE": "This package.json is just a duplication of the opam file. It's here so that you can try building this project with 'esy'.",
   "NOTE2": "  'esy' is not yet ready for widespread use, but including this package.json so that you can use esy instead of opam.",
