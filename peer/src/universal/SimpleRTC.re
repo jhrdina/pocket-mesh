@@ -126,6 +126,7 @@ let onChannelClose = _s =>
 
 let setupDataChannel = (s, ch) => {
   s.dataChannel = Some(ch);
+  RTCDataChannel.setBinaryType(ch, ArrayBuffer);
   RTCDataChannel.setOnMessage(ch, Some(e => s->onChannelMessage(e)));
   /* onbufferedamountlow */
   RTCDataChannel.setOnOpen(ch, Some(() => s->onChannelOpen));
