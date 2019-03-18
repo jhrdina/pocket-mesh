@@ -214,10 +214,11 @@ let update =
     | SignalChannel.GotMessage(
         Signed(
           signature,
-          PeerToPeer(src, _tg, KeyResponse(_srcKeyStr) as p2pMsg),
+          PeerToPeer(src, tg, KeyResponse(_srcKeyStr) as p2pMsg),
         ),
       )
-        when model |> isFetchingKeyForPeer(src) => (
+        when
+          model |> isFetchingKeyForPeer(src) && PeerId.equal(tg, thisPeer.id) => (
         model,
         verifyKeyMessageCmd(
           completedVerifyKeyResponse,
@@ -246,8 +247,9 @@ let update =
     /* Verify public key request */
 
     | SignalChannel.GotMessage(
-        Signed(signature, PeerToPeer(src, _tg, KeyRequest(_) as p2pMsg)),
-      ) => (
+        Signed(signature, PeerToPeer(src, tg, KeyRequest(_) as p2pMsg)),
+      )
+        when PeerId.equal(tg, thisPeer.id) => (
         model,
         verifyKeyMessageCmd(
           completedVerifyKeyRequest,
