@@ -38,7 +38,7 @@
     "bs-webapi": "^0.12.2",
     "bs-webapi-extra": "file:../bs-webapi-extra-0.2.0.tgz",
     "ocaml-diff": "^0.1.2",
-    "rex-json": "^1.4.0",
+    "rex-json": "github:jhrdina/rex-json#js-perf-hack",
     "wonka": "^2.0.0"
   }
 }
