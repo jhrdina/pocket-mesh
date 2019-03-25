@@ -7,6 +7,8 @@ type Msg.t +=
   | ClickedAddGroup
   | ClosedAddGroupDialog(AddGroupDialog.closeResult);
 
+module GuiMsg = Msg;
+
 // UPDATE
 
 let init = () => {addGroupDialogOpen: false};
@@ -79,6 +81,9 @@ let render =
                       alias={group |> GuiUtils.getPeerGroupVisibleName}
                       membersPreview
                       membersCount
+                      onOpenClick={_ =>
+                        pushMsg(GuiMsg.ClickedOpenGroup(groupId))
+                      }
                       onClick={_ =>
                         pushMsg(Route.ChangeRoute(Group(groupId)))
                       }

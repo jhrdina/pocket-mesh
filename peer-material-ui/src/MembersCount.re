@@ -36,13 +36,13 @@ module Styles = {
 
 let component = ReasonReact.statelessComponent("MembersCount");
 
-let make = (~count, _children) => {
+let make = (~count, ~className="", _children) => {
   ...component,
   render: _self =>
     <UseHook
       hook=useStyles
       render={classes =>
-        <div className=classes##wrapper>
+        <div className={[classes##wrapper, className] |> String.concat(" ")}>
           <Icons.Person classes=[Root(classes##icon)] />
           <MaterialUi.Typography
             color=`TextSecondary
