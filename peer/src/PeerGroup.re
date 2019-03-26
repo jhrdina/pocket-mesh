@@ -4,7 +4,7 @@ open Json.Infix;
   PeerGroup representation, manipulations and queries.
  */
 /* MODULES */
-module AM: Automerge.CommonAPI = Automerge.UniJs;
+module AM = Automerge.UniJs.Make(PeerId);
 
 module Id = {
   module Impl: {
@@ -57,13 +57,12 @@ type t = {
 
 /* CREATING */
 
-let make = (id, thisPeerId, alias, initContent) => {
-  let actorId = AM.ActorId.ofString(thisPeerId |> PeerId.toString);
+let make = (id, thisPeerId: PeerId.t, alias, initContent) => {
   {
     id,
     alias,
-    peers: AM.make(actorId),
-    content: AM.make(actorId) |> initContent,
+    peers: AM.make(thisPeerId),
+    content: AM.make(thisPeerId) |> initContent,
   };
 };
 

@@ -4,23 +4,6 @@ let defaultSignalServerUrl: string;
 
 /* MODULES */
 
-module Crdt: Automerge.CommonAPI;
-
-module InitConfig: {
-  type t = {
-    contentInitializer: Crdt.t => Crdt.t,
-    signalServerUrl: string,
-  };
-
-  let make:
-    (
-      ~contentInitializer: Crdt.t => Crdt.t=?,
-      ~signalServerUrl: string=?,
-      unit
-    ) =>
-    t;
-};
-
 module Peer: {
   module Id: {
     type t;
@@ -41,6 +24,23 @@ module Peers: {
   type t;
   let findOpt: (Peer.Id.t, t) => option(Peer.t);
   let fold: (('acc, Peer.t) => 'acc, 'acc, t) => 'acc;
+};
+
+module Crdt: Automerge.CommonAPI with type actorId = Peer.Id.t;
+
+module InitConfig: {
+  type t = {
+    contentInitializer: Crdt.t => Crdt.t,
+    signalServerUrl: string,
+  };
+
+  let make:
+    (
+      ~contentInitializer: Crdt.t => Crdt.t=?,
+      ~signalServerUrl: string=?,
+      unit
+    ) =>
+    t;
 };
 
 module PeersConnections: {
