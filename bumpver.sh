@@ -24,10 +24,14 @@ treeBurstPath="$dir/../tree-burst"
 
 OPTIND=1
 
-while getopts "h?icpt" opt; do
+while getopts "h?vicpt" opt; do
   case "$opt" in
   h|\?)
     echo "$usage"
+    exit
+    ;;
+  v)
+    grep '"version":' ./peer/package.json
     exit
     ;;
   i)
