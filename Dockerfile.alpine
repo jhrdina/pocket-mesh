@@ -1,0 +1,6 @@
+FROM alpine:latest
+RUN apk --no-cache add gmp openssl libc6-compat
+WORKDIR /root/
+COPY out .
+RUN ls -l
+CMD ["./out"]

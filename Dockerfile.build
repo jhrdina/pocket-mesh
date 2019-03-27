@@ -1,0 +1,26 @@
+FROM ocaml/opam2:ubuntu-18.04
+
+RUN opam update && \
+  opam switch 4.06 && \
+  eval $(opam env)
+
+RUN sudo apt-get -y update && \
+  sudo apt-get -y upgrade && \
+  sudo apt-get -y install m4 pkg-config libgmp-dev libssl-dev git
+
+RUN opam install dune nocrypto re reason websocket-lwt
+
+WORKDIR /home/opam
+RUN git clone https://github.com/jhrdina/ocaml-diff.git && \
+  cd ocaml-diff && \
+  opam install .
+  #opam pin
+
+#RUN opam update
+
+COPY . /home/opam/app
+RUN sudo chown -R opam:opam /home/opam/app
+WORKDIR /home/opam/app/signal-server
+RUN rm -rf _build
+RUN opam install .
+RUN eval $(opam env) && make
