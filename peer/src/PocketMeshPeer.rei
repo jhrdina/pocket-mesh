@@ -12,6 +12,9 @@ module Peer: {
     let toString: t => string;
     let ofString: string => option(t);
     let ofStringExn: string => t;
+
+    module Map: OcamlDiff.Map.S with type key = t;
+    module Set: OcamlDiff.Set.S with type elt = t;
   };
 
   type t;
