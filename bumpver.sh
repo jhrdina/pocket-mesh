@@ -5,10 +5,11 @@ Updates packages versions to VERSION and optionally installs the packages
 
 where:
     -h  Show this help text
+    -v  Print current version of peer package and exit
     -i  Also install the packages
     -t  Also update tree-burst demo project
-    -c  Creates version bump commit in Git
-    -p  Pushes tag and current branch to Git
+    -c  Create version bump commit in Git
+    -p  Push tag and current branch to Git
     "
 
 install=false
