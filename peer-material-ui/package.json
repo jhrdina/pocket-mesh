@@ -9,7 +9,7 @@
     "webpack": "webpack -w",
     "webpack:production": "NODE_ENV=production webpack --display-modules",
     "size-test": "NODE_ENV=production webpack --display-modules && brotli -kf build/Index.js && ( ls -l build/Index.js.br | cut -d\" \" -f5 )",
-    "server": "webpack-dev-server"
+    "server": "webpack-dev-server --port 8001"
   },
   "keywords": [
     "BuckleScript"
