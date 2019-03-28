@@ -106,6 +106,7 @@ module RuntimeState = {
   let signalChannel = t => t.RuntimeState.signalChannel;
   let peersConnections = t => t.RuntimeState.peersConnections;
   let peersStatuses = t => t.RuntimeState.peersStatuses;
+  let initConfig = t => t.RuntimeState.initConfig;
 };
 
 module State = {

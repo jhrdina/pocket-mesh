@@ -158,6 +158,7 @@ module RuntimeState: {
   let signalChannel: t => SignalChannel.t;
   let peersStatuses: t => PeersStatuses.t;
   let peersConnections: t => PeersConnections.t;
+  let initConfig: t => InitConfig.t;
 };
 
 module State: {
