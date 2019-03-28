@@ -23,11 +23,11 @@ let init = () => (
   Cmd.none,
 );
 
-let update = (msg, model) => {
+let update = (~contentInitializer, msg, model) => {
   let (peersListTab, peersListTabCmd) =
     PeersListTab.update(msg, model.peersListTab);
   let (groupsListTab, groupsListTabCmd) =
-    GroupsListTab.update(msg, model.groupsListTab);
+    GroupsListTab.update(~contentInitializer, msg, model.groupsListTab);
   (
     {
       generalTab: GeneralTab.update(msg, model.generalTab),

@@ -32,7 +32,12 @@ let updateScreen =
     switch (screen, reqRoute) {
     | (Main(_currentTab, model), Main(reqTab)) =>
       // Already on wanted screen
-      MainScreen.update(msg, model)
+      MainScreen.update(
+        ~contentInitializer=
+          PM.RuntimeState.initConfig(runtimeState).contentInitializer,
+        msg,
+        model,
+      )
       |> updateWith(model => Main(reqTab, model))
     | (_, Main(reqTab)) =>
       // Transitioning from different screen

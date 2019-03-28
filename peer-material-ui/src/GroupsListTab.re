@@ -1,26 +1,54 @@
 open BlackTea;
+open BsUuid;
 
 // TYPES
 
 type model = {addGroupDialogOpen: bool};
 type Msg.t +=
   | ClickedAddGroup
-  | ClosedAddGroupDialog(AddGroupDialog.closeResult);
+  | ClosedAddGroupDialog(AddGroupDialog.closeResult)
+  | GeneratedNewGroupId(Uuid.V4.t);
+
+let generatedNewGroupId = groupId => GeneratedNewGroupId(groupId);
 
 module GuiMsg = Msg;
+
+// HELPERS
+
+let genUuidCmd = uuidToMsg =>
+  Cmd.call(callbacks => callbacks^.enqueue(Uuid.V4.create() |> uuidToMsg));
 
 // UPDATE
 
 let init = () => {addGroupDialogOpen: false};
 
-let update = (msg, model) => {
+let update = (~contentInitializer, msg, model) => {
   switch (msg) {
   | ClosedAddGroupDialog(Cancel) => ({addGroupDialogOpen: false}, Cmd.none)
-  | ClosedAddGroupDialog(Ok(peerId)) => (
+  | ClosedAddGroupDialog(CreateNew) => (
+      {addGroupDialogOpen: false},
+      genUuidCmd(generatedNewGroupId),
+    )
+  | GeneratedNewGroupId(groupUuid) =>
+    let cmd =
+      switch (groupUuid |> Uuid.V4.toString |> PM.PeersGroup.Id.ofString) {
+      | Some(groupId) =>
+        Cmd.batch([
+          Cmd.msg(Route.ChangeRoute(Group(groupId))),
+          Cmd.msg(
+            Msg.ReqP2PMsg(PM.Msg.addGroup(groupId, "", contentInitializer)),
+          ),
+        ])
+      | None => Cmd.none
+      };
+    (model, cmd);
+  | ClosedAddGroupDialog(AddExisting(groupId)) => (
       {addGroupDialogOpen: false},
       Cmd.batch([
-        Cmd.msg(Route.ChangeRoute(Peer(peerId))),
-        Cmd.msg(Msg.ReqP2PMsg(PM.Msg.addPeer(peerId, ""))),
+        Cmd.msg(Route.ChangeRoute(Group(groupId))),
+        Cmd.msg(
+          Msg.ReqP2PMsg(PM.Msg.addGroup(groupId, "", contentInitializer)),
+        ),
       ]),
     )
   | ClickedAddGroup => ({addGroupDialogOpen: true}, Cmd.none)
