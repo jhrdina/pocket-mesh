@@ -289,6 +289,9 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
     /* TODO: Check signature (optional precaution) */
     switch (findPeer(state, src) |?> checkPeerSocket(srcSocket)) {
     | Some(_) =>
+      /* Add my watches */
+      updateWatchings(state, src, watch);
+
       /* Populate states of peers I'm interested in */
       let onlinePeersIds = watch |> PeerId.Set.filter(memPeer(state));
       let peerChanges =
@@ -297,6 +300,7 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
           onlinePeersIds,
           [],
         );
+
       [Emit(srcSocket, Unsigned(WatchedPeersChanged(peerChanges)))];
 
     | None => [Emit(srcSocket, Unsigned(Error(SourceNotOnline)))]
