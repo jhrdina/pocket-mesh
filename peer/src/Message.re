@@ -26,11 +26,20 @@ type key = string;
        | NODE A |                    | SIGNAL SERVER |                | NODE B |
        +--------+                    +---------------+                +--------+
            |                                |                                |
-           | Login([B]), sig_A, id_A        |                                |
+           | LoginReq(pub_A), sig_a, id_a   |                                |
+           |------------------------------->|                                |
+           |                  Challenge(ch1)|                                |
+           |<-------------------------------|                                |
+           | Login(ch1, [B]), sig_A, id_A   |                                |
            |------------------------------->|                                |
            |                         Ok([]) |                                |
-           |<-------------------------------|        Login([A]), sig_B, id_B |
+           |<-------------------------------|   LoginReq(pub_B), sig_B, id_B |
            |                                |<-------------------------------|
+           |                                | Challenge(ch2)                 |
+           |                                |------------------------------->|
+           |                                |   Login(ch2, [A]), sig_B, id_B |
+           |                                |<-------------------------------|
+           |                                |                                |
            |            WatchedPeersChanged | Ok([A])                        |
            |              ([[B, 'online']]) |------------------------------->|
            |<-------------------------------|                                |
@@ -56,10 +65,11 @@ type key = string;
  +-----------------------------------------------------------------------------+
            |                                |                                |
            |                                |                                |
-   */
+  */
 
 type peerToServerMsg =
-  | Login(key, /* Watched peers */ PeerId.Set.t)
+  | LoginReq(key)
+  | Login(/* Challenge */ string, /* Watched peers */ PeerId.Set.t)
   | Logoff
   | ChangeWatchedPeers(/* Watched peers */ PeerId.Set.t);
 
@@ -70,6 +80,7 @@ type peerToPeerMsg =
   | KeyResponse(key);
 
 type serverToPeerMsg =
+  | Challenge(string)
   | Error(error)
   | Ok(PeerId.Set.t)
   | WatchedPeersChanged(list(peerChange));
@@ -120,9 +131,14 @@ let encodePeerToPeerMsg = msg =>
 
 let encodePeerToServerMsg = msg =>
   switch (msg) {
-  | Login(key, watch) => [
-      "login" |> typeToJsonKeyVal,
+  | LoginReq(key) => [
+      "loginReq" |> typeToJsonKeyVal,
       ("key", Json.String(key)),
+    ]
+
+  | Login(challenge, watch) => [
+      "login" |> typeToJsonKeyVal,
+      ("challenge", Json.String(challenge)),
       (
         "watch",
         Array(
@@ -162,6 +178,11 @@ let encodeSignedMsg = msg =>
 let encodeServerToPeerMsg = msg =>
   Json.(
     switch (msg) {
+    | Challenge(challenge) => [
+        "challenge" |> typeToJsonKeyVal,
+        ("challenge", String(challenge)),
+      ]
+
     | WatchedPeersChanged(changes) => [
         "watchedPeersChanged" |> typeToJsonKeyVal,
         (
@@ -256,12 +277,18 @@ let decodePeerIdSet = json =>
       )
   );
 
+let decodeLoginReqMsg = json =>
+  switch (json |> Json.get("key") |?> Json.string) {
+  | Some(key) => Some(LoginReq(key))
+  | _ => None
+  };
+
 let decodeLoginMsg = json =>
   switch (
-    json |> Json.get("key") |?> Json.string,
+    json |> Json.get("challenge") |?> Json.string,
     json |> Json.get("watch") |?> decodePeerIdSet,
   ) {
-  | (Some(key), Some(watch)) => Some(Login(key, watch))
+  | (Some(challenge), Some(watch)) => Some(Login(challenge, watch))
   | _ => None
   };
 
@@ -285,6 +312,12 @@ let decodeAnswer = json =>
   switch (json |> decodeSdp) {
   | Some(sdp) => Some(Answer(sdp))
   | _ => None
+  };
+
+let decodeChallengeMsg = json =>
+  switch (json |> Json.get("challenge") |?> Json.string) {
+  | Some(challenge) => Some(Challenge(challenge))
+  | None => None
   };
 
 let decodeOkMsg: Json.t => option(serverToPeerMsg) =
@@ -384,6 +417,13 @@ let decode = json => {
     switch (json |> Json.get("type") |?> Json.string) {
     | Some(typeStr) =>
       switch (typeStr) {
+      | "loginReq" =>
+        json
+        |> decodeSignedMsg @@
+        decodePeerToServerMsg @@
+        decodeLoginReqMsg
+        |> msgOptToResult
+
       | "login" =>
         json
         |> decodeSignedMsg @@
@@ -408,6 +448,8 @@ let decode = json => {
         decodePeerToServerMsg @@
         decodeLogoffMsg
         |> msgOptToResult
+      | "challenge" =>
+        json |> decodeUnsignedMsg @@ decodeChallengeMsg |> msgOptToResult
       | "ok" => json |> decodeUnsignedMsg @@ decodeOkMsg |> msgOptToResult
       | "watchedPeersChanged" =>
         json

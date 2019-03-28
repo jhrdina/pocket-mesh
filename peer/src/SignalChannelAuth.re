@@ -5,14 +5,27 @@ type t =
   | SigningIn
   | SignedIn;
 
-let applyMsg = (msg, model) => {
+let applyMsg = (~thisPeer: ThisPeer.t, ~peers, msg, model) => {
   switch (msg, model) {
+  | (SignalChannel.GotMessage(Unsigned(Challenge(challenge))), SigningIn) => (
+      SigningIn,
+      Cmd.msg(
+        SignalVerifier.SignAndSendMsg(
+          PeerToServer(
+            thisPeer.id,
+            Login(challenge, peers |> Peers.getAllIds),
+          ),
+        ),
+      ),
+    )
   | (
-      SignalChannel.GotMessage(Unsigned(Ok(onlinePeers))),
+      SignalChannel.GotMessage(Unsigned(Ok(_onlinePeers))),
       SigningIn | SignedIn,
-    ) =>
-    SignedIn
-  | _ => model
+    ) => (
+      SignedIn,
+      Cmd.none,
+    )
+  | _ => (model, Cmd.none)
   };
 };
 
@@ -27,25 +40,24 @@ let update =
       msg,
       model,
     ) => {
-  let model = model |> applyMsg(msg);
-  switch (
-    signalChannel.connectionState,
-    thisPeerKeyExporter |> ThisPeerKeyExporter.getKey,
-    model,
-  ) {
-  | (Connected(_), Some(thisPeerKeyStr), WaitingForSignalChannel) => (
-      SigningIn,
-      Cmd.msg(
-        SignalVerifier.SignAndSendMsg(
-          PeerToServer(
-            thisPeer.id,
-            Login(thisPeerKeyStr, peers |> Peers.getAllIds),
+  let (model, cmd1) = model |> applyMsg(~thisPeer, ~peers, msg);
+  let (model, cmd2) =
+    switch (
+      signalChannel.connectionState,
+      thisPeerKeyExporter |> ThisPeerKeyExporter.getKey,
+      model,
+    ) {
+    | (Connected(_), Some(thisPeerKeyStr), WaitingForSignalChannel) => (
+        SigningIn,
+        Cmd.msg(
+          SignalVerifier.SignAndSendMsg(
+            PeerToServer(thisPeer.id, LoginReq(thisPeerKeyStr)),
           ),
         ),
-      ),
-    )
-  | (Connecting, _, _) => (WaitingForSignalChannel, Cmd.none)
-  | (Connected(_), None, WaitingForSignalChannel)
-  | (Connected(_), _, SigningIn | SignedIn) => (model, Cmd.none)
-  };
+      )
+    | (Connecting, _, _) => (WaitingForSignalChannel, Cmd.none)
+    | (Connected(_), None, WaitingForSignalChannel)
+    | (Connected(_), _, SigningIn | SignedIn) => (model, Cmd.none)
+    };
+  (model, Cmd.batch([cmd1, cmd2]));
 };

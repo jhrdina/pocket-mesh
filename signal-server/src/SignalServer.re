@@ -1,5 +1,8 @@
 open Json.Infix;
 
+/* CONSTANTS */
+let loginTimeoutSec = 30;
+
 /* MODULES */
 
 module WS: DreamWSType.T = DreamWSCohttp;
@@ -27,6 +30,7 @@ type client = {
 };
 
 type serverState = {
+  secretKey: SimpleCrypto.Symmetric.key,
   peers: Peers.t(client),
   /*
     TODO:
@@ -38,6 +42,7 @@ type serverState = {
   watchings: PeerWatchings.t(PeerWatching.t),
   watchingsByWatcher: PeerWatchings.Index.t(PeerWatching.t, PeerId.t),
   watchingsByWatched: PeerWatchings.Index.t(PeerWatching.t, PeerId.t),
+  peerKeys: Hashtbl.t(PeerId.t, SimpleCrypto.key),
 };
 
 type effect =
@@ -91,6 +96,11 @@ let findPeerBySocket = (s, socket) =>
 
 let memPeer = (s, id) => s.peers |> Peers.mem(id);
 
+/* Keys management */
+let addPeerKey = (s, peerId, key) => Hashtbl.add(s.peerKeys, peerId, key);
+let removePeerKey = (s, peerId) => Hashtbl.remove(s.peerKeys, peerId);
+let findPeerKey = (s, peerId) => Hashtbl.find_opt(s.peerKeys, peerId);
+
 /* Helpers */
 
 let makeNotificationsForInterestedPeers = (state, peerChange) => {
@@ -127,6 +137,7 @@ let init = () => {
     );
   let peersBySocket = Peers.Index.create(({socket, _}) => socket);
   {
+    secretKey: SimpleCrypto.Symmetric.generateKey(),
     peers: Peers.create(({id, _}) => id, [I(peersBySocket)]),
     peersBySocket,
     watchings:
@@ -136,6 +147,7 @@ let init = () => {
       ),
     watchingsByWatcher,
     watchingsByWatched,
+    peerKeys: Hashtbl.create(20),
   };
 };
 
@@ -144,7 +156,7 @@ let verifyMessageSignature = (srcPublicKey, signature, msg) =>
   |> Json.stringify
   |> SimpleCrypto.verify(srcPublicKey, signature);
 
-let verifyLoginMessage = (signature, src, srcKeyStr, watch) =>
+let verifyLoginReqMessage = (signature, src, srcKeyStr) =>
   srcKeyStr
   |> SimpleCrypto.stringToJwk
   |?> (
@@ -163,7 +175,7 @@ let verifyLoginMessage = (signature, src, srcKeyStr, watch) =>
             verifyMessageSignature(
               srcKey,
               signature,
-              PeerToServer(src, Login(srcKeyStr, watch)),
+              PeerToServer(src, LoginReq(srcKeyStr)),
             )
               ? Some(srcKey) : None
         )
@@ -173,43 +185,103 @@ let verifyLoginMessage = (signature, src, srcKeyStr, watch) =>
     }
   );
 
+let encodeChallenge = (timestamp, peerId) =>
+  Json.(
+    stringify(
+      Array([Number(timestamp), String(peerId |> PeerId.toString)]),
+    )
+  );
+
+let decodeChallenge = str =>
+  str
+  |> JsonUtils.parseOpt
+  |?> Json.array
+  |?> (
+    fun
+    | [timestampJson, peerIdJson] =>
+      switch (
+        timestampJson |> Json.number,
+        peerIdJson |> Json.string |?> PeerId.ofString,
+      ) {
+      | (Some(timestamp), Some(peerId)) => Some((timestamp, peerId))
+      | _ => None
+      }
+    | _ => None
+  );
+
 let handleMessage = (srcSocket, message: Message.t, state) =>
   switch (message) {
-  | Signed(signature, PeerToServer(src, Login(srcKeyStr, watch))) =>
-    switch (verifyLoginMessage(signature, src, srcKeyStr, watch)) {
+  | Signed(signature, PeerToServer(src, LoginReq(srcKeyStr))) =>
+    switch (verifyLoginReqMessage(signature, src, srcKeyStr)) {
     | Some(srcKey) =>
-      /* Existing peer */
-      switch (findPeer(state, src)) {
-      | Some(_) =>
-        /* There is already an existing connected peer with the same ID. */
-        /* ...Let's kick him out... */
-        /* TODO: Disconnect an existing connected peer */
-        ()
-      | None => ()
+      addPeerKey(state, src, srcKey);
+      let timestamp = Unix.time() |> floor;
+      let challengePlain = encodeChallenge(timestamp, src);
+      let challenge =
+        challengePlain |> SimpleCrypto.Symmetric.encrypt(state.secretKey);
+      [Emit(srcSocket, Unsigned(Challenge(challenge)))];
+    | None => []
+    }
+
+  | Signed(
+      signature,
+      PeerToServer(src, Login(challenge, watch)) as peerToServerMsg,
+    ) =>
+    switch (findPeerKey(state, src)) {
+    | Some(srcKey) =>
+      removePeerKey(state, src);
+      let signatureValid =
+        verifyMessageSignature(srcKey, signature, peerToServerMsg);
+
+      let challengeValid =
+        challenge
+        |> SimpleCrypto.Symmetric.decrypt(state.secretKey)
+        |?> decodeChallenge
+        |?>> (
+          ((timestamp, peerId)) =>
+            peerId == src
+            && (Unix.time() |> floor)
+            -. timestamp <= float_of_int(loginTimeoutSec)
+        )
+        |? false;
+
+      if (signatureValid && challengeValid) {
+        /* Existing peer */
+        switch (findPeer(state, src)) {
+        | Some(_) =>
+          /* There is already an existing connected peer with the same ID. */
+          /* ...Let's kick him out... */
+          /* TODO: Disconnect an existing connected peer */
+          ()
+        | None => ()
+        };
+
+        addPeer(
+          state,
+          {
+            socket: srcSocket,
+            isAuthenticated: false,
+            /* TODO: Support multiple protocol versions */
+            protocolVersion: 1,
+            id: src,
+            key: srcKey,
+          },
+        );
+
+        /* Add my watches */
+        updateWatchings(state, src, watch);
+
+        /* Populate states of peers I'm interested in */
+        let onlinePeers = watch |> PeerId.Set.filter(memPeer(state));
+        /* Notify others that are interested in my arrival */
+        let notifications =
+          makeNotificationsForInterestedPeers(state, WentOnline(src));
+
+        [Emit(srcSocket, Unsigned(Ok(onlinePeers))), ...notifications];
+      } else {
+        [];
       };
 
-      addPeer(
-        state,
-        {
-          socket: srcSocket,
-          isAuthenticated: false,
-          /* TODO: Support multiple protocol versions */
-          protocolVersion: 1,
-          id: src,
-          key: srcKey,
-        },
-      );
-
-      /* Add my watches */
-      updateWatchings(state, src, watch);
-
-      /* Populate states of peers I'm interested in */
-      let onlinePeers = watch |> PeerId.Set.filter(memPeer(state));
-      /* Notify others that are interested in my arrival */
-      let notifications =
-        makeNotificationsForInterestedPeers(state, WentOnline(src));
-
-      [Emit(srcSocket, Unsigned(Ok(onlinePeers))), ...notifications];
     | None => []
     }
 
@@ -258,7 +330,7 @@ let handleMessage = (srcSocket, message: Message.t, state) =>
     | None => []
     }
 
-  | Unsigned(Error(_) | Ok(_) | WatchedPeersChanged(_)) =>
+  | Unsigned(Error(_) | Ok(_) | WatchedPeersChanged(_) | Challenge(_)) =>
     /* [Emit(srcSocket, Ok)]; */
     Printf.eprintf(
       "Got message type that should be sent only from server to client\n",

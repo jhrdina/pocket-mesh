@@ -98,3 +98,72 @@ let verify = (publicKey, signatureBase64, strToVerify) => {
   | None => false
   };
 };
+
+module Symmetric = {
+  type key = Nocrypto.Cipher_block.AES.GCM.key;
+  let keySize = 16;
+
+  let generateKeyStr = () => {
+    Nocrypto.Rng.generate(keySize)
+    |> Nocrypto.Base64.encode
+    |> Cstruct.to_string;
+  };
+
+  let generateKey = () => {
+    Nocrypto.Rng.generate(keySize) |> Nocrypto.Cipher_block.AES.GCM.of_secret;
+  };
+
+  let keyOfString = keyStr => {
+    Cstruct.of_string(keyStr)
+    |> Nocrypto.Base64.decode
+    |?>> Nocrypto.Cipher_block.AES.GCM.of_secret;
+  };
+
+  let encrypt = (key, plainText) => {
+    let data = Cstruct.of_string(plainText);
+    let iv = Nocrypto.Rng.generate(12);
+    let ivSize = Cstruct.create(1);
+    Cstruct.set_uint8(ivSize, 0, Cstruct.len(iv));
+
+    let result = Nocrypto.Cipher_block.AES.GCM.encrypt(~key, ~iv, data);
+
+    let tagSize = Cstruct.create(1);
+    Cstruct.set_uint8(tagSize, 0, Cstruct.len(result.tag));
+
+    let finalBuf =
+      Cstruct.concat([ivSize, iv, tagSize, result.tag, result.message]);
+
+    finalBuf |> Nocrypto.Base64.encode |> Cstruct.to_string;
+  };
+
+  let decrypt = (key, cipherText) => {
+    cipherText
+    |> Cstruct.of_string
+    |> Nocrypto.Base64.decode
+    |?> (
+      wholeBuf =>
+        switch (
+          {
+            let ivSize = Cstruct.get_uint8(wholeBuf, 0);
+            let iv = Cstruct.sub(wholeBuf, 1, ivSize);
+            let tagSize = Cstruct.get_uint8(wholeBuf, 1 + ivSize);
+            let tag = Cstruct.sub(wholeBuf, 1 + ivSize + 1, tagSize);
+            let cipherText =
+              Cstruct.sub(
+                wholeBuf,
+                1 + ivSize + 1 + tagSize,
+                Cstruct.len(wholeBuf) - 1 - ivSize - 1 - tagSize,
+              );
+            let result =
+              Nocrypto.Cipher_block.AES.GCM.decrypt(~key, ~iv, cipherText);
+
+            Cstruct.equal(result.tag, tag)
+              ? Some(result.message |> Cstruct.to_string) : None;
+          }
+        ) {
+        | plainText => plainText
+        | exception (Invalid_argument(_)) => None
+        }
+    );
+  };
+};
