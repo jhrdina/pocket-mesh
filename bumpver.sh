@@ -1,5 +1,7 @@
 #!/bin/bash
 
+PKG_REPO="$HOME/npm-pkgs"
+
 usage="$(basename "$0") [[-h] | [-i | -c | -p] VERSION]
 Updates packages versions to VERSION and optionally installs the packages
 
@@ -97,7 +99,13 @@ if [ $install == true ]; then
   echo -e "Installing...\n"
 
   function npack {
-    npm pack && mv *.tgz ../
+    npm pack && mv *.tgz "$PKG_REPO/"
+  }
+  function bak {
+    cp package.json package.json.bak
+  }
+  function rest {
+    mv package.json.bak package.json
   }
 
   cd "$dir/peer"
@@ -106,7 +114,9 @@ if [ $install == true ]; then
 
   cd "$dir/peer-material-ui"
   npm i
-  npm i -f "../pocket-mesh-peer-$version.tgz"
+  bak
+  npm i -f pocket-mesh-peer
+  rest
   npm run clean
   npm run build
   peerMaterialUiBuildRes=$?
@@ -117,7 +127,9 @@ if [ $install == true ]; then
 
   if [ $updateTreeBurst = true ]; then
     cd "$treeBurstPath"
+    bak
     npm i -f pocket-mesh-peer pocket-mesh-peer-material-ui
+    rest
   fi
 
   echo

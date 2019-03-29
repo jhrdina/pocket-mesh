@@ -18,22 +18,22 @@
   "license": "MIT",
   "dependencies": {
     "@jsiebern/bs-material-ui": "^1.1.1",
-    "@material-ui/core": "^3.9.2",
+    "@material-ui/core": "^3.9.3",
     "@material-ui/icons": "^3.0.2",
     "@material-ui/styles": "^3.0.0-alpha.10",
     "bs-black-tea": "^0.2.0",
-    "bs-css": "^8.0.1",
+    "bs-css": "^8.0.3",
     "bs-uuid": "^0.3.1",
-    "pocket-mesh-peer": "file:../pocket-mesh-peer-0.5.2.tgz",
-    "react": "^16.2.0",
-    "react-dom": "^16.2.0",
-    "reason-react": ">=0.4.0"
+    "pocket-mesh-peer": "file://~/npm-pkgs/pocket-mesh-peer-0.5.2.tgz",
+    "react": "^16.8.6",
+    "react-dom": "^16.8.6",
+    "reason-react": ">=0.6.0"
   },
   "devDependencies": {
-    "bs-platform": "^4.0.18",
+    "bs-platform": "^5.0.0",
     "html-webpack-plugin": "^3.2.0",
-    "webpack": "^4.0.1",
-    "webpack-cli": "^3.1.1",
-    "webpack-dev-server": "^3.1.8"
+    "webpack": "^4.29.6",
+    "webpack-cli": "^3.3.0",
+    "webpack-dev-server": "^3.2.1"
   }
 }
