@@ -46,9 +46,7 @@ let update = (~contentInitializer, msg, model) => {
       {addGroupDialogOpen: false},
       Cmd.batch([
         Cmd.msg(Route.ChangeRoute(Group(groupId))),
-        Cmd.msg(
-          Msg.ReqP2PMsg(PM.Msg.addGroup(groupId, "", contentInitializer)),
-        ),
+        Cmd.msg(Msg.ReqP2PMsg(PM.Msg.addGroup(groupId, "", c => c))),
       ]),
     )
   | ClickedAddGroup => ({addGroupDialogOpen: true}, Cmd.none)
