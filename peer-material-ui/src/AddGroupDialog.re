@@ -132,6 +132,14 @@ let make = (~open_, ~onClose, _children) => {
                        }
                      }
                    />
+                   <Typography
+                     variant=`Body2
+                     style={ReactDOMRe.Style.make(~marginTop="8px", ())}>
+                     //  <Icons.Info />
+
+                       {"To fetch contents of the group, remember to add one or more members with write permissions. They will be used to obtain the initial replica."
+                        |> ReasonReact.string}
+                     </Typography>
                  </DialogContent>
                  <DialogActions>
                    <Button onClick={_ => handleClose(self, onClose, Cancel)}>

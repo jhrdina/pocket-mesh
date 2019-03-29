@@ -72,6 +72,12 @@ module Delete =
     external reactClass: ReasonReact.reactClass = "default";
   });
 
+module Info =
+  BuildIcon({
+    [@bs.module "@material-ui/icons/Info"]
+    external reactClass: ReasonReact.reactClass = "default";
+  });
+
 module MoreVert =
   BuildIcon({
     [@bs.module "@material-ui/icons/MoreVert"]
