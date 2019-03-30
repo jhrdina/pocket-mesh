@@ -3,11 +3,13 @@ open BlackTea;
 /* CONSTANTS */
 
 let defaultSignalServerUrl = "ws://localhost:7777";
+let defaultGroupAlias = "My group";
 
 /* MODULES */
 
 module InitConfig = {
   type t = {
+    defaultGroupAlias: string,
     contentInitializer: PeerGroup.AM.t => PeerGroup.AM.t,
     signalServerUrl: string,
   };
@@ -16,8 +18,10 @@ module InitConfig = {
       (
         ~contentInitializer=crdt => crdt,
         ~signalServerUrl=defaultSignalServerUrl,
+        ~defaultGroupAlias=defaultGroupAlias,
         (),
       ) => {
+    defaultGroupAlias,
     contentInitializer,
     signalServerUrl,
   };

@@ -18,6 +18,7 @@ let defaultGroupId = PeerGroup.Id.ofStringExn("aaa");
 type t = PeerGroup.Id.Map.t(PeerGroup.t);
 
 type Msgs.t +=
+  | GeneratedInitialGroupId(PeerGroup.Id.t)
   | AddGroup(PeerGroup.Id.t, string, (PeerGroup.AM.t => PeerGroup.AM.t))
   | UpdateGroupAlias(PeerGroup.Id.t, string)
   | UpdateGroupContent(PeerGroup.Id.t, PeerGroup.AM.t)
@@ -33,6 +34,7 @@ type Msgs.t +=
     )
   | RemovePeerFromGroup(PeerId.t, PeerGroup.Id.t);
 
+let generatedInitialGroupIdMsg = groupId => GeneratedInitialGroupId(groupId);
 let addGroupMsg = (groupId, alias, init) => AddGroup(groupId, alias, init);
 let updateGroupAliasMsg = (groupId, alias) =>
   UpdateGroupAlias(groupId, alias);
@@ -132,22 +134,24 @@ let decode = json =>
 
 /* UPDATE */
 
-let initDefaultPeersGroups = (thisPeerId, initContent) =>
-  empty
-  |> addPeerGroup(
-       /* TODO: Really a fixed ID? */
-       PeerGroup.make(defaultGroupId, thisPeerId, "aaa", initContent)
-       |> PeerGroup.addPeer({
-            id: thisPeerId,
-            permissions: WriteContent(WriteMembers),
-          }),
-     );
+let init = () => (
+  empty,
+  IdGenerator.generateGroupIdCmd(generatedInitialGroupIdMsg),
+);
 
-let init = (~thisPeer: ThisPeer.t, ~initContent) =>
-  initDefaultPeersGroups(thisPeer.id, initContent);
-
-let update = (~thisPeer: ThisPeer.t, msg, model) =>
+let update = (~thisPeer: ThisPeer.t, ~initContent, ~defaultAlias, msg, model) =>
   switch (msg) {
+  | GeneratedInitialGroupId(id) => (
+      model
+      |> addPeerGroup(
+           PeerGroup.make(id, thisPeer.id, defaultAlias, initContent)
+           |> PeerGroup.addPeer({
+                id: thisPeer.id,
+                permissions: WriteContent(WriteMembers),
+              }),
+         ),
+      Cmd.none,
+    )
   | AddGroup(id, alias, initContent) =>
     switch (model |> findOpt(id)) {
     | None => (

@@ -153,24 +153,34 @@ let saveDbStateIfChanged = (dbState: DbState.t, lastAllData, db) => {
   );
 };
 
-let initStateWithIdentity = (~allData, ~thisPeer, ~initContent) => {
-  // We need to detect state when some data has to be repaired
-  DbState.thisPeer,
-  peersGroups:
-    PeersGroups.(allData.peersGroups |? init(~thisPeer, ~initContent)),
-  peers: allData.peers |? Peers.init(),
+let initStateWithIdentity = (~allData, ~thisPeer) => {
+  let (peersGroups, peersGroupsCmd) =
+    allData.peersGroups
+    |?>> (peersGroups => (peersGroups, Cmd.none))
+    |? PeersGroups.init();
+  (
+    {
+      // We need to detect state when some data has to be repaired
+      DbState.thisPeer,
+      peersGroups,
+      peers: allData.peers |? Peers.init(),
+    },
+    peersGroupsCmd,
+  );
 };
 
 let allDataEmpty = {thisPeer: None, peersGroups: None, peers: None};
 
-let finishInit = (~db, ~allData, ~thisPeer, ~initContent) => {
-  let dbState = initStateWithIdentity(~allData, ~thisPeer, ~initContent);
+let finishInit = (~db, ~allData, ~thisPeer) => {
+  let (dbState, dbStateCmd) = initStateWithIdentity(~allData, ~thisPeer);
   (
     Loaded(db),
     Some(dbState),
     Cmd.batch([
       Cmds.log("My ID: " ++ (thisPeer.id |> PeerId.toString)),
+      // !! Keep initialization notification before dbStateCmd !!
       Cmd.msg(InitializationComplete(dbState)),
+      dbStateCmd,
     ]),
   );
 };
@@ -179,7 +189,7 @@ let finishInit = (~db, ~allData, ~thisPeer, ~initContent) => {
 
 let init = () => (Opening, open_(completedOpenDb));
 
-let update = (~dbState, ~initContent, msg, model) => {
+let update = (~dbState, msg, model) => {
   let (model, dbState, cmd) =
     switch (msg, model) {
     | (CompletedOpenDb(Ok(db)), Opening) => (
@@ -196,12 +206,7 @@ let update = (~dbState, ~initContent, msg, model) => {
     | (CompletedLoadDataFromDb(Ok(allData)), LoadingData(db)) =>
       switch (allData.thisPeer) {
       | Some(thisPeer) =>
-        finishInit(
-          ~db=WithDb(db, allData),
-          ~allData,
-          ~thisPeer,
-          ~initContent,
-        )
+        finishInit(~db=WithDb(db, allData), ~allData, ~thisPeer)
       | None => (
           GeneratingIdentity(WithDb(db, allData), allData),
           None,
@@ -222,8 +227,7 @@ let update = (~dbState, ~initContent, msg, model) => {
         GeneratingIdentity(mDb, allData),
       ) =>
       switch (thisPeerOfKeyPair(keyPair)) {
-      | Some(thisPeer) =>
-        finishInit(~db=mDb, ~allData, ~thisPeer, ~initContent)
+      | Some(thisPeer) => finishInit(~db=mDb, ~allData, ~thisPeer)
       | None => (FatalError(CannotCreateIdentity), None, Cmds.none)
       }
 

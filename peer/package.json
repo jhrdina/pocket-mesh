@@ -8,8 +8,7 @@
     "start": "bsb -make-world -w",
     "clean": "bsb -clean-world",
     "webpack": "webpack -w --config ./example/webpack.config.js",
-    "webpack:production": "NODE_ENV=production webpack --config ./example/webpack.config.js --display-modules",
-    "prepare": "npm link bs-platform"
+    "webpack:production": "NODE_ENV=production webpack --config ./example/webpack.config.js --display-modules"
   },
   "repository": {
     "type": "git",
@@ -34,6 +33,7 @@
     "base64-js": "^1.3.0",
     "bs-automerge": "file:~/npm-pkgs/bs-automerge-0.3.2.tgz",
     "bs-black-tea": "^0.2.0",
+    "bs-uuid": "^0.3.1",
     "bs-webapi": "^0.13.6",
     "bs-webapi-extra": "file:~/npm-pkgs/bs-webapi-extra-0.2.0.tgz",
     "ocaml-diff": "^0.1.2",

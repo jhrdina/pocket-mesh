@@ -6,20 +6,23 @@ type t = {
   peers: Peers.t,
 };
 
-let init = (~thisPeer, ~initContent) => {
+let init = (~thisPeer) => {
   let thisPeer = ThisPeer.init(thisPeer);
-  {
-    thisPeer,
-    peersGroups: PeersGroups.init(~thisPeer, ~initContent),
-    peers: Peers.init(),
-  };
+  let (peersGroups, peersGroupsCmd) = PeersGroups.init();
+  ({thisPeer, peersGroups, peers: Peers.init()}, peersGroupsCmd);
 };
 
-let update = (msg, model) => {
+let update = (~initContent, ~defaultGroupAlias, msg, model) => {
   let (thisPeer, thisPeerCmd) = ThisPeer.update(model.thisPeer, msg);
   let (peers, peersCmd) = Peers.update(model.peers, msg);
   let (peersGroups, peersGroupsCmd) =
-    PeersGroups.update(~thisPeer, msg, model.peersGroups);
+    PeersGroups.update(
+      ~thisPeer,
+      ~initContent,
+      ~defaultAlias=defaultGroupAlias,
+      msg,
+      model.peersGroups,
+    );
   (
     {thisPeer, peersGroups, peers},
     Cmd.batch([thisPeerCmd, peersCmd, peersGroupsCmd]),

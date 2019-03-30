@@ -32,29 +32,23 @@ let update = (model, msg) => {
   //   HasIdentity(db, newDbState, runtimeState)
 
   | (msg, HasIdentity(db, dbState, runtimeState)) =>
-    let (dbState, dbStateCmd) = DbState.update(msg, dbState);
+    let (dbState, dbStateCmd) =
+      DbState.update(
+        ~initContent=runtimeState.initConfig.contentInitializer,
+        ~defaultGroupAlias=runtimeState.initConfig.defaultGroupAlias,
+        msg,
+        dbState,
+      );
     let (runtimeState, runtimeStateCmd) =
       RuntimeState.update(dbState, msg, runtimeState);
-    let (db, dbCmd) =
-      Db.update(
-        ~dbState=Some(dbState),
-        ~initContent=runtimeState.initConfig.contentInitializer,
-        msg,
-        db,
-      );
+    let (db, dbCmd) = Db.update(~dbState=Some(dbState), msg, db);
     (
       HasIdentity(db, dbState, runtimeState),
       Cmd.batch([dbStateCmd, runtimeStateCmd, dbCmd]),
     );
 
   | (msg, WaitingForDbAndIdentity(db, initConfig, signalChannel)) =>
-    let (db, dbCmd) =
-      Db.update(
-        ~dbState=None,
-        ~initContent=initConfig.contentInitializer,
-        msg,
-        db,
-      );
+    let (db, dbCmd) = Db.update(~dbState=None, msg, db);
     let (signalChannel, signalChannelCmd) =
       SignalChannel.update(signalChannel, msg);
     (

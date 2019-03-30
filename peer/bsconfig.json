@@ -15,6 +15,7 @@
   "suffix": ".bs.js",
   "bs-dependencies": [
     "ocaml-diff",
+    "bs-uuid",
     "bs-webapi",
     "bs-webapi-extra",
     "bs-black-tea",
@@ -22,6 +23,7 @@
     "rex-json",
     "wonka"
   ],
+  // "bsc-flags": ["-bs-g"],
   "warnings": {
     "error": "+101"
   },

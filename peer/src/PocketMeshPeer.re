@@ -24,6 +24,8 @@ module Msg = {
   // let removeThisPeerAndAllData
 };
 
+module IdGenerator = IdGenerator;
+
 module Peer = {
   module Id = PeerId;
 

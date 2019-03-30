@@ -33,6 +33,7 @@ module Crdt: Automerge.CommonAPI with type actorId = Peer.Id.t;
 
 module InitConfig: {
   type t = {
+    defaultGroupAlias: string,
     contentInitializer: Crdt.t => Crdt.t,
     signalServerUrl: string,
   };
@@ -41,6 +42,7 @@ module InitConfig: {
     (
       ~contentInitializer: Crdt.t => Crdt.t=?,
       ~signalServerUrl: string=?,
+      ~defaultGroupAlias: string=?,
       unit
     ) =>
     t;
@@ -96,6 +98,13 @@ module PeersGroup: {
   let content: t => Crdt.t;
   let findPeerInGroupOpt: (Peer.Id.t, t) => option(PeerInGroup.t);
   let foldPeersInGroup: (('acc, PeerInGroup.t) => 'acc, 'acc, t) => 'acc;
+};
+
+module IdGenerator: {
+  let generate: unit => string;
+  let generateCmd: (string => 'msg) => BlackTea.Cmd.t('msg);
+  let generateGroupId: unit => PeerGroup.Id.t;
+  let generateGroupIdCmd: (PeerGroup.Id.t => 'msg) => BlackTea.Cmd.t('msg);
 };
 
 module PeersGroups: {
