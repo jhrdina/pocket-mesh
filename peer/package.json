@@ -31,9 +31,8 @@
     "webpack-cli": "^3.3.0"
   },
   "dependencies": {
-    "automerge": "^0.10.0",
     "base64-js": "^1.3.0",
-    "bs-automerge": "file:~/npm-pkgs/bs-automerge-0.3.1.tgz",
+    "bs-automerge": "file:~/npm-pkgs/bs-automerge-0.3.2.tgz",
     "bs-black-tea": "^0.2.0",
     "bs-webapi": "^0.13.6",
     "bs-webapi-extra": "file:~/npm-pkgs/bs-webapi-extra-0.2.0.tgz",
