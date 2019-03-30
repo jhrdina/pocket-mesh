@@ -44,6 +44,12 @@ let foldActiveConnections = (f, acc, t) =>
     acc,
   );
 
+let isPeerConnected = (peerId, t) =>
+  switch (PeerId.Map.findOpt(peerId, t)) {
+  | Some(Connected(_)) => true
+  | _ => false
+  };
+
 let getPeerConnectionState = (peerId, t) => PeerId.Map.findOpt(peerId, t);
 
 let diffGotConnected = diffRes =>

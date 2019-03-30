@@ -337,6 +337,84 @@ let init = (~peersGroups, ~peersConnections) => {
   derive(~peersGroups, ~peersConnections, model);
 };
 
+let addConnectedMembersIdsFromGroupToSet =
+    (~peersConnections: PeersConnections.t, group, set) =>
+  group
+  |> PeerGroup.foldPeersInGroup(
+       (ids, peerInGroup) =>
+         switch (peersConnections |> PeerId.Map.findOpt(peerInGroup.id)) {
+         | Some(Connected(_)) => ids |> PeerId.Set.add(peerInGroup.id)
+         | Some(_)
+         | None => ids
+         },
+       set,
+     );
+
+let maybeCreateIndependentChangesRequest:
+  (option(PeerGroup.groupPermissions), P2PMsg.groupStatus) =>
+  option(P2PMsg.groupChangesRequest) =
+  (oldPermissions, localGroupStatus) => {
+    let wantsContent =
+      switch (oldPermissions, localGroupStatus.permissions) {
+      | (None | Some(ReadContentAndMembers), WriteContent(_)) => true
+      | (_, _) => false
+      };
+
+    let wantsMembers =
+      switch (oldPermissions, localGroupStatus.permissions) {
+      | (
+          None | Some(ReadContentAndMembers | WriteContent(ReadMembers)),
+          WriteContent(WriteMembers),
+        ) =>
+        true
+      | (Some(WriteContent(WriteMembers)), WriteContent(WriteMembers))
+      | (_, WriteContent(ReadMembers))
+      | (_, ReadContentAndMembers) => false
+      };
+
+    switch (wantsContent, wantsMembers) {
+    | (true, true) =>
+      Some(
+        ContentAndMembers(
+          localGroupStatus.clock,
+          localGroupStatus.permissionsClock,
+        ),
+      )
+    | (true, false) => Some(Content(localGroupStatus.clock))
+    | (false, true) => Some(Members(localGroupStatus.permissionsClock))
+    | (false, false) => None
+    };
+  };
+
+let addGroupChangesRequests =
+    (~peersConnections, ~oldGroup, group, peersToBeRequestedChanges) =>
+  group
+  |> PeerGroup.foldPeersInGroup(
+       (peers, peerInGroup) =>
+         if (peersConnections
+             |> PeersConnections.isPeerConnected(peerInGroup.id)) {
+           getGroupStatusForPeer(peerInGroup.id, group)
+           |?> maybeCreateIndependentChangesRequest(
+                 oldGroup |?> PeerGroup.getPeerPermissions(peerInGroup.id),
+               )
+           |?>> (
+             request => {
+               let requestsForPeer =
+                 peers
+                 |> PeerId.Map.findOpt(peerInGroup.id)
+                 |? PeerGroup.Id.Map.empty
+                 |> PeerGroup.Id.Map.add(group |> PeerGroup.id, request);
+
+               peers |> PeerId.Map.add(peerInGroup.id, requestsForPeer);
+             }
+           )
+           |? peers;
+         } else {
+           peers;
+         },
+       peersToBeRequestedChanges,
+     );
+
 let update = (~peersGroups, ~peersConnections, msg, model) => {
   let (model, cmd) =
     switch (msg) {
@@ -354,38 +432,97 @@ let update = (~peersGroups, ~peersConnections, msg, model) => {
           offerChangesDebouncerMsg,
         );
       ({...model, offerChangesDebouncer}, offerChangesDebouncerCmd);
+
     | OfferChangesFromGroupsDebounced =>
-      //   PeerGroup.Id.Map.symmetric_diff(
-      //   model.lastPeersGroups,
-      //   peersGroups,
-      //   // TODO: <<<<< WRITE HERE
-      //   ~f=((groupId, diffRes), acc) =>
-      //     switch (diffRes) {
-      //     | Left(group) => acc
-      //     | Right()
-      //     },
-      //   ~veq=(===),
-      //   ~acc=(),
-      // );
+      let (peersToBeOfferedChanges, peersToBeRequestedChanges) =
+        PeerGroup.Id.Map.symmetric_diff(
+          model.lastPeersGroupsDebounced,
+          peersGroups,
+          ~f=
+            (
+              (_groupId, diffRes),
+              (peersToBeOfferedChanges, peersToBeRequestedChanges) as acc,
+            ) =>
+              switch (diffRes) {
+              | Left(_removedGroup) => acc
+
+              | Right(addedGroup) =>
+                // Simply notify all the members
+                let peersToBeOfferedChanges =
+                  addConnectedMembersIdsFromGroupToSet(
+                    ~peersConnections,
+                    addedGroup,
+                    peersToBeOfferedChanges,
+                  );
+
+                let peersToBeRequestedChanges =
+                  addGroupChangesRequests(
+                    ~peersConnections,
+                    ~oldGroup=None,
+                    addedGroup,
+                    peersToBeRequestedChanges,
+                  );
+
+                (peersToBeOfferedChanges, peersToBeRequestedChanges);
+
+              | Unequal(oldGroup, newGroup)
+                  when
+                    oldGroup.peers !== newGroup.peers
+                    || oldGroup.content !== newGroup.content =>
+                let peersToBeOfferedChanges =
+                  addConnectedMembersIdsFromGroupToSet(
+                    ~peersConnections,
+                    newGroup,
+                    peersToBeOfferedChanges,
+                  );
+
+                let peersToBeRequestedChanges =
+                  addGroupChangesRequests(
+                    ~peersConnections,
+                    ~oldGroup=Some(oldGroup),
+                    newGroup,
+                    peersToBeRequestedChanges,
+                  );
+
+                (peersToBeOfferedChanges, peersToBeRequestedChanges);
+
+              | Unequal(_, _) => acc
+              },
+          ~veq=(===),
+          ~acc=(PeerId.Set.empty, PeerId.Map.empty),
+        );
       let offerChangesCmd =
-        PeersConnections.foldActiveConnections(
-          (cmdList, peerId, _rtcConn) => {
+        PeerId.Set.fold(
+          (peerId, cmdList) => {
             Js.log("active connection to " ++ PeerId.toString(peerId));
             let groupsStatuses =
               getGroupsStatusesForPeer(peerId, peersGroups);
             let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
-            [
+            let sendOfferCmd =
               Cmd.msg(
                 PeersConnections.Send(
                   peerId,
                   String(msgForPeer |> P2PMsg.encode |> Json.stringify),
                 ),
-              ),
-              ...cmdList,
-            ];
+              );
+
+            let sendRequestCmd =
+              switch (peersToBeRequestedChanges |> PeerId.Map.findOpt(peerId)) {
+              | Some(requests) =>
+                let msgForPeer = P2PMsg.ChangesRequest(requests);
+                Cmd.msg(
+                  PeersConnections.Send(
+                    peerId,
+                    String(msgForPeer |> P2PMsg.encode |> Json.stringify),
+                  ),
+                );
+              | None => Cmd.none
+              };
+
+            [sendOfferCmd, sendRequestCmd, ...cmdList];
           },
+          peersToBeOfferedChanges,
           [],
-          peersConnections,
         )
         |> Cmds.batch;
       // let offerChangesCmd = Cmds.log("OfferChangesDebounced");
