@@ -4,12 +4,13 @@ open Lwt.Infix;
 
 module Socket = {
   type t = {
-    fileDescr: Lwt_unix.file_descr,
+    fileDescr: Cohttp.Connection.t,
     framesOutFn: Websocket.Frame.t => Lwt.t(unit),
     onMessage: (string, string) => unit,
     onDisconnect: unit => unit,
   };
-  let compare = (a, b) => compare(a.fileDescr, b.fileDescr);
+  let compare = (a, b) =>
+    Cohttp.Connection.compare(a.fileDescr, b.fileDescr);
   let emit = (socket, msg) =>
     socket.framesOutFn(Websocket.Frame.create(~content=msg, ()));
   let setOnMessage = (f, socket) => {...socket, onMessage: f};
@@ -42,46 +43,38 @@ module Server = {
     let rec inner = () => readFrame() >>= Lwt.wrap1(handlerFn) >>= inner;
     inner();
   };
-  let upgradeConnection = (request, conn, incomingHandler) => {
+  let upgradeConnection = (request, incomingHandler) => {
     let headers = Cohttp.Request.headers(request);
-    let key =
-      Websocket.Option.value_exn @@
-      Cohttp.Header.get(headers, "sec-websocket-key");
-    let hash =
-      key ++ Websocket.websocket_uuid |> Websocket.b64_encoded_sha1sum;
-    let responseHeaders =
-      Cohttp.Header.of_list([
-        ("Upgrade", "websocket"),
-        ("Connection", "Upgrade"),
-        ("Sec-WebSocket-Accept", hash),
-      ]);
-    let resp =
-      Cohttp.Response.make(
-        ~status=`Switching_protocols,
-        ~encoding=Cohttp.Transfer.Unknown,
-        ~headers=responseHeaders,
-        ~flush=true,
-        (),
-      );
-    let (framesOutStream, framesOutFn) = Lwt_stream.create();
-    let (bodyStream, _streamPush) = Lwt_stream.create();
-    switch (conn) {
-    | Conduit_lwt_unix.TCP(tcp) =>
-      let oc = Lwt_io.of_fd(~mode=Lwt_io.output, tcp.fd);
-      let ic = Lwt_io.of_fd(~mode=Lwt_io.input, tcp.fd);
-      Lwt.join([
-        /* input: data from the client is read from the input channel
-         * of the tcp connection; pass it to handler function */
-        readFrames(ic, oc, incomingHandler),
-        /* output: data for the client is written to the output
-         * channel of the tcp connection */
-        sendFrames(framesOutStream, oc),
-      ])
-      |> ignore;
-      let socket =
-        Socket.create(tcp.fd, Lwt.wrap1(f => framesOutFn(Some(f))));
-      Lwt.return((resp, Cohttp_lwt.Body.of_stream(bodyStream), socket));
-    | _ => Lwt.fail_with("expected TCP Websocket connection")
+    switch (Cohttp.Header.get(headers, "sec-websocket-key")) {
+    | None => Lwt.fail_with("Missing sec-websocket-key header")
+    | Some(key) =>
+      let hash =
+        key ++ Websocket.websocket_uuid |> Websocket.b64_encoded_sha1sum;
+      let responseHeaders =
+        Cohttp.Header.of_list([
+          ("Upgrade", "websocket"),
+          ("Connection", "Upgrade"),
+          ("Sec-WebSocket-Accept", hash),
+        ]);
+      let resp =
+        Cohttp.Response.make(
+          ~status=`Switching_protocols,
+          ~encoding=Cohttp.Transfer.Unknown,
+          ~headers=responseHeaders,
+          ~flush=true,
+          (),
+        );
+      let (framesOutStream, framesOutFn) = Lwt_stream.create();
+      let f = (ic, oc) =>
+        Lwt.join([
+          /* input: data from the client is read from the input channel
+           * of the tcp connection; pass it to handler function */
+          readFrames(ic, oc, incomingHandler),
+          /* output: data for the client is written to the output
+           * channel of the tcp connection */
+          sendFrames(framesOutStream, oc),
+        ]);
+      Lwt.return((`Expert((resp, f)), framesOutFn));
     };
   };
   let httpHandler =
@@ -102,7 +95,7 @@ module Server = {
     )  /*)*/
     >>= (
       () =>
-        upgradeConnection(req, fst(conn), f =>
+        upgradeConnection(req, f =>
           switch (f.opcode) {
           | Websocket.Frame.Opcode.Close =>
             switch (socket^) {
@@ -122,9 +115,11 @@ module Server = {
         )
     )
     >>= (
-      ((resp, body, newSocket)) => {
+      ((resp, framesOutFn)) => {
+        let newSocket =
+          Socket.create(snd(conn), Lwt.wrap1(f => framesOutFn(Some(f))));
         socket := Some(onConnection(newSocket));
-        Lwt.return((resp, (body :> Cohttp_lwt.Body.t)));
+        Lwt.return(resp);
       }
     );
   };
@@ -153,7 +148,7 @@ module Server = {
           };
         Cohttp_lwt_unix.Server.create(
           ~mode,
-          Cohttp_lwt_unix.Server.make(
+          Cohttp_lwt_unix.Server.make_response_action(
             ~callback=httpHandler(onConnection),
             ~conn_closed=onServerConnectionClosed,
             (),

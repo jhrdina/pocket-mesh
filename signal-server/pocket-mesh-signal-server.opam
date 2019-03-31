@@ -1,5 +1,6 @@
 opam-version: "1.2"
 name: "pocket-mesh-signal-server"
+description: "Signal server for Pocket Mesh project"
 version: "0.5.3"
 maintainer: "Jan Hrdina <jan.hrdka@gmail.com>"
 authors: [
@@ -20,6 +21,6 @@ depends: [
   "ocaml-diff" {>= "0.1.2"}
   "re"
   "reason"  {>= "3.4.0"}
-  "websocket-lwt"
+  "websocket-lwt" {>= "2.12"}
 ]
 available: [ ocaml-version >= "4.02" & ocaml-version < "4.07" ]
