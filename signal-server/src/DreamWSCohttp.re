@@ -22,6 +22,11 @@ module Socket = {
   };
 };
 
+type tlsConfig = {
+  cert: string,
+  key: string,
+};
+
 module Server = {
   let sendFrames = (stream, oc) => {
     let buf = Buffer.create(128);
@@ -128,20 +133,35 @@ module Server = {
       "[SERV] connection %s closed\n%!",
       Sexplib.Sexp.to_string_hum(Conduit_lwt_unix.sexp_of_flow(ch)),
     );
-  let startServer = (~port, ~onConnection) =>
+  let startServer = (~port, ~tls, ~onConnection) =>
     Lwt_io.eprintf("[SERV] Listening on port %d\n%!", port)
     >>= (
-      () =>
+      () => {
+        let mode =
+          switch (tls) {
+          | None =>
+            Printf.printf("TCP mode started\n%!");
+            `TCP(`Port(port));
+          | Some({cert, key}) =>
+            Printf.printf("TLS mode started\n%!");
+            `TLS((
+              `Crt_file_path(cert),
+              `Key_file_path(key),
+              `No_password,
+              `Port(port),
+            ));
+          };
         Cohttp_lwt_unix.Server.create(
-          ~mode=`TCP(`Port(port)),
+          ~mode,
           Cohttp_lwt_unix.Server.make(
             ~callback=httpHandler(onConnection),
             ~conn_closed=onServerConnectionClosed,
             (),
           ),
-        )
+        );
+      }
     );
 };
 
-let run = (~port, ~onConnection) =>
-  Lwt_main.run(Server.startServer(~port, ~onConnection));
+let run = (~port, ~tls=None, ~onConnection, ()) =>
+  Lwt_main.run(Server.startServer(~port, ~tls, ~onConnection));

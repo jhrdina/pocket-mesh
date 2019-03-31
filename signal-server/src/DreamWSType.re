@@ -6,5 +6,18 @@ module type T = {
     let setOnMessage: ((string, string) => unit, t) => t;
     let setOnDisconnect: (unit => unit, t) => t;
   };
-  let run: (~port: int, ~onConnection: Socket.t => Socket.t) => unit;
+
+  type tlsConfig = {
+    cert: string,
+    key: string,
+  };
+
+  let run:
+    (
+      ~port: int,
+      ~tls: option(tlsConfig)=?,
+      ~onConnection: Socket.t => Socket.t,
+      unit
+    ) =>
+    unit;
 };

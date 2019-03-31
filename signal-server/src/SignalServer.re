@@ -375,17 +375,53 @@ let handleEffect =
     ignore(WS.Socket.emit(socket, msg |> Message.encode |> Json.stringify))
   | Db(newState) => state := newState;
 
+type initConfig = {
+  port: int,
+  tls: option(WS.tlsConfig),
+};
+
+let parseArgs = () => {
+  let port = ref(7777);
+  let cert = ref("");
+  let key = ref("");
+  let specList =
+    Arg.align([
+      ("--cert", Arg.Set_string(cert), " cert file"),
+      ("--key", Arg.Set_string(key), " key file"),
+    ]);
+  let anonFun = s =>
+    switch (int_of_string_opt(s)) {
+    | None => invalid_arg("argument must be a port number")
+    | Some(p) => port := p
+    };
+  let usageMsg = "Usage: " ++ Sys.argv[0] ++ " <options> port\nOptions are:";
+  Arg.parse(specList, anonFun, usageMsg);
+  let tls =
+    switch (cert^, key^) {
+    | ("", _)
+    | (_, "") => None
+    | (cert, key) => Some({WS.cert, key})
+    };
+  {port: port^, tls};
+};
+
+let initConfig = parseArgs();
+
 WS.run(
-  ~port=7777,
-  ~onConnection=socket => {
-    open WS;
-    Printf.eprintf("Got a connection!\n%!");
-    socket
-    |> Socket.setOnMessage((_, msg) =>
-         handleStringMessage(socket, msg, state^) |> List.iter(handleEffect)
-       )
-    |> Socket.setOnDisconnect(() =>
-         handleDisconnect(socket, state^) |> List.iter(handleEffect)
-       );
-  },
+  ~port=initConfig.port,
+  ~tls=initConfig.tls,
+  ~onConnection=
+    socket => {
+      open WS;
+      Printf.eprintf("Got a connection!\n%!");
+      socket
+      |> Socket.setOnMessage((_, msg) =>
+           handleStringMessage(socket, msg, state^)
+           |> List.iter(handleEffect)
+         )
+      |> Socket.setOnDisconnect(() =>
+           handleDisconnect(socket, state^) |> List.iter(handleEffect)
+         );
+    },
+  (),
 );

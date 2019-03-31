@@ -1,3 +1,8 @@
+type tlsConfig = {
+  cert: string,
+  key: string,
+};
+
 module Socket: {
   type t;
   let compare: (t, t) => int;
@@ -6,4 +11,11 @@ module Socket: {
   let setOnDisconnect: (unit => unit, t) => t;
 };
 
-let run: (~port: int, ~onConnection: Socket.t => Socket.t) => unit;
+let run:
+  (
+    ~port: int,
+    ~tls: option(tlsConfig)=?,
+    ~onConnection: Socket.t => Socket.t,
+    unit
+  ) =>
+  unit;
