@@ -27,7 +27,7 @@
     "pocket-mesh-peer": "file://~/npm-pkgs/pocket-mesh-peer-0.5.3.tgz",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
-    "reason-react": ">=0.6.0"
+    "reason-react": "~0.5.3"
   },
   "devDependencies": {
     "bs-platform": "^5.0.0",
