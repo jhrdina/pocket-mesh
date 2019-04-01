@@ -38,7 +38,7 @@ let make = (~settings: settings, ~open_, ~onClose, _children) => {
   },
 
   didUpdate: ({oldSelf, newSelf}) =>
-    if (oldSelf.retainedProps.settings !== newSelf.retainedProps.settings) {
+    if (oldSelf.retainedProps.settings != newSelf.retainedProps.settings) {
       newSelf.send(ChangedSettingsInProps(newSelf.retainedProps.settings));
     },
   render: self =>
