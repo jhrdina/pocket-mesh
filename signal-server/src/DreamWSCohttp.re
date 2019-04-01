@@ -6,7 +6,7 @@ module Socket = {
   type t = {
     fileDescr: Cohttp.Connection.t,
     framesOutFn: Websocket.Frame.t => Lwt.t(unit),
-    onMessage: (string, string) => unit,
+    onMessage: string => unit,
     onDisconnect: unit => unit,
   };
   let compare = (a, b) =>
@@ -18,7 +18,7 @@ module Socket = {
   let create = (fileDescr, framesOutFn) => {
     fileDescr,
     framesOutFn,
-    onMessage: (_, _) => (),
+    onMessage: _ => (),
     onDisconnect: () => (),
   };
 };
@@ -40,7 +40,17 @@ module Server = {
   };
   let readFrames = (ic, oc, handlerFn) => {
     let readFrame = WS.make_read_frame(~mode=Server, ic, oc);
-    let rec inner = () => readFrame() >>= Lwt.wrap1(handlerFn) >>= inner;
+    let rec inner = () =>
+      (
+        switch (readFrame()) {
+        | readFrame => readFrame
+        | exception _ =>
+          Printf.eprintf("Catched exception in read_frame\n%!");
+          Lwt.fail_with("Exception in read_frame");
+        }
+      )
+      >>= Lwt.wrap1(handlerFn)
+      >>= inner;
     inner();
   };
   let upgradeConnection = (request, incomingHandler) => {
@@ -105,7 +115,7 @@ module Server = {
             }
           | _ =>
             switch (socket^) {
-            | Some(s) => s.onMessage("", f.content)
+            | Some(s) => s.onMessage(f.content)
             | None =>
               Printf.eprintf(
                 "Weird, receiving message before onConnection...",

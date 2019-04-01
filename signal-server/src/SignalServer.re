@@ -415,7 +415,7 @@ WS.run(
       open WS;
       Printf.eprintf("Got a connection!\n%!");
       socket
-      |> Socket.setOnMessage((_, msg) =>
+      |> Socket.setOnMessage(msg =>
            handleStringMessage(socket, msg, state^)
            |> List.iter(handleEffect)
          )
