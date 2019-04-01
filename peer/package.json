@@ -35,7 +35,7 @@
     "bs-black-tea": "^0.2.0",
     "bs-uuid": "^0.3.1",
     "bs-webapi": "^0.13.6",
-    "bs-webapi-extra": "file:~/npm-pkgs/bs-webapi-extra-0.2.0.tgz",
+    "bs-webapi-extra": "file:~/npm-pkgs/bs-webapi-extra-0.3.0.tgz",
     "ocaml-diff": "^0.1.2",
     "rex-json": "github:jhrdina/rex-json#js-perf-hack",
     "wonka": "^2.0.1"

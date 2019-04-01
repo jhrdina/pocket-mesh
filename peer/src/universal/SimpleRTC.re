@@ -115,7 +115,7 @@ let onChannelMessage = (s, e) =>
   };
 
 let onChannelOpen = s => {
-  /* TODO: Do magic to workaround https://github.com/js-platform/node-webrtc/issues/339 */
+  // TODO: Do magic to workaround https://github.com/js-platform/node-webrtc/issues/339
   s.connected = true;
   s->emitConnect;
 };
@@ -318,8 +318,7 @@ let create = options => {
   switch (s.role) {
   | Initiator =>
     let channelName = "somenamehere";
-    let options =
-      RTCDataChannel.makeOptions(~ordered=true, ~maxPacketLifeTime=3000);
+    let options = RTCDataChannel.makeOptions(~ordered=true, ());
     /* let channelName = randombytes(20).toString('hex') */
     s->setupDataChannel(
       RTCPeerConnection.createDataChannel(c, ~channelName, ~options),
