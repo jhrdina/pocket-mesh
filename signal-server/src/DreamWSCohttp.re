@@ -158,6 +158,7 @@ module Server = {
           };
         Cohttp_lwt_unix.Server.create(
           ~mode,
+          ~on_exn=e => Printf.eprintf("Hey, exn!\n%!"),
           Cohttp_lwt_unix.Server.make_response_action(
             ~callback=httpHandler(onConnection),
             ~conn_closed=onServerConnectionClosed,
