@@ -4,6 +4,10 @@ module PM = PocketMeshPeer;
 
 /* Store.create() |> ignore; */
 
+/* CONSTANTS */
+
+let signalServerUrl = "ws://localhost:7777";
+
 /* TYPES */
 
 type model = {
@@ -163,8 +167,8 @@ let viewPeer = (~peersGroups, ~peersStatuses, ~peersConnections, peer) => {
   let id = peer |> PM.Peer.id;
   let alias =
     (
-      peer |> PM.Peer.alias == "" ?
-        {js|– no alias –|js} : peer |> PM.Peer.alias
+      peer |> PM.Peer.alias == ""
+        ? {js|– no alias –|js} : peer |> PM.Peer.alias
     )
     |> txt;
   let signalStatusStr =
@@ -174,8 +178,8 @@ let viewPeer = (~peersGroups, ~peersStatuses, ~peersConnections, peer) => {
     };
 
   let inGroupStr =
-    peersGroups |> PM.PeersGroups.isPeerInAGroup(id) ?
-      "in group" : "not in group";
+    peersGroups |> PM.PeersGroups.isPeerInAGroup(id)
+      ? "in group" : "not in group";
 
   let p2pConnStatusStr =
     switch (
@@ -498,7 +502,8 @@ let contentInitializer = crdt =>
      );
 
 let init = () => {
-  let p2pConfig = PM.InitConfig.make(~contentInitializer, ());
+  let p2pConfig =
+    PM.InitConfig.make(~contentInitializer, ~signalServerUrl, ());
   let (p2p, p2pCmd) = PM.init(p2pConfig);
 
   (
