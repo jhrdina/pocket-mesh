@@ -1,8 +1,9 @@
 FROM ocaml/opam2:ubuntu-18.04
 
-RUN opam update && \
-  opam switch 4.06 && \
-  eval $(opam env)
+RUN opam switch 4.06 && \
+  eval $(opam env) && \
+  git pull && \
+  opam update
 
 RUN sudo apt-get -y update && \
   sudo apt-get -y upgrade && \
