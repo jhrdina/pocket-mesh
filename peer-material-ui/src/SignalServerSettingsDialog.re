@@ -25,11 +25,11 @@ let make = (~settings: settings, ~open_, ~onClose, _children) => {
 
   initialState: () => settings,
 
-  reducer: (action, s) =>
+  reducer: (action, _s) =>
     ReasonReact.Update(
       switch (action) {
       | ChangedSettingsInProps(s) => s
-      | ChangedUrl(url) => {...s, url}
+      | ChangedUrl(url) => {url: url}
       },
     ),
 
@@ -70,7 +70,8 @@ let make = (~settings: settings, ~open_, ~onClose, _children) => {
                 {"Cancel" |> ReasonReact.string}
               </Button>
               <Button
-                onClick={_ => onClose(Ok({url: "TODO"}))} color=`Secondary>
+                onClick={_ => onClose(Ok({url: self.state.url}))}
+                color=`Secondary>
                 {"Apply" |> ReasonReact.string}
               </Button>
             </DialogActions>

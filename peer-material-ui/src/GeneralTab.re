@@ -1,3 +1,5 @@
+open BlackTea;
+
 type model = {signalServerDialogOpen: bool};
 
 type Msg.t +=
@@ -21,14 +23,19 @@ let init = () => {signalServerDialogOpen: false};
 
 let update = (msg, model) =>
   switch (msg) {
-  | ClosedSignalServerSettingsDialog(Cancel) => {
-      signalServerDialogOpen: false,
-    }
-  | ClosedSignalServerSettingsDialog(Ok(settings)) =>
-    // TODO: Handle settings changes
-    {signalServerDialogOpen: false}
-  | ClickedOpenSignalServerSettings => {signalServerDialogOpen: true}
-  | _ => model
+  | ClosedSignalServerSettingsDialog(Cancel) => (
+      {signalServerDialogOpen: false},
+      Cmd.none,
+    )
+  | ClosedSignalServerSettingsDialog(Ok(settings)) => (
+      {signalServerDialogOpen: false},
+      Cmd.msg(Msg.ReqP2PMsg(PM.Msg.updateSignalServerUrl(settings.url))),
+    )
+  | ClickedOpenSignalServerSettings => (
+      {signalServerDialogOpen: true},
+      Cmd.none,
+    )
+  | _ => (model, Cmd.none)
   };
 
 let render = (~dbState, ~runtimeState, ~model, ~pushMsg) => {

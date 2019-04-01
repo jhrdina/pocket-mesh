@@ -28,13 +28,10 @@ let update = (~contentInitializer, msg, model) => {
     PeersListTab.update(msg, model.peersListTab);
   let (groupsListTab, groupsListTabCmd) =
     GroupsListTab.update(~contentInitializer, msg, model.groupsListTab);
+  let (generalTab, generalTabCmd) = GeneralTab.update(msg, model.generalTab);
   (
-    {
-      generalTab: GeneralTab.update(msg, model.generalTab),
-      peersListTab,
-      groupsListTab,
-    },
-    Cmd.batch([peersListTabCmd, groupsListTabCmd]),
+    {generalTab, peersListTab, groupsListTab},
+    Cmd.batch([peersListTabCmd, groupsListTabCmd, generalTabCmd]),
   );
 };
 
@@ -154,13 +151,15 @@ let make = (~activeTab, ~dbState, ~runtimeState, ~model, ~pushMsg, _children) =>
                  ~pushMsg,
                )
              }}
-            {let renderer =
-               switch (activeTab) {
-               | Groups => GroupsListTab.renderFab(~pushMsg)
-               | Peers => PeersListTab.renderFab(~pushMsg)
-               | General => GeneralTab.renderFab
-               }
-             renderer(~className=classes##fab)}
+            {
+              let renderer =
+                switch (activeTab) {
+                | Groups => GroupsListTab.renderFab(~pushMsg)
+                | Peers => PeersListTab.renderFab(~pushMsg)
+                | General => GeneralTab.renderFab
+                };
+              renderer(~className=classes##fab);
+            }
           </div>
         }
       />
