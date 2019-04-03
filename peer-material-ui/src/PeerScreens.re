@@ -133,7 +133,7 @@ let make =
                    pushMsg
                  />
                | Group(groupId, m) =>
-                 <GroupScreen dbState groupId model=m pushMsg />
+                 <GroupScreen dbState runtimeState groupId model=m pushMsg />
                | PeerInGroup(peerInGroup, groupId) =>
                  <PeerInGroupScreen dbState groupId pushMsg peerInGroup />
                | Peer(peerId, m) =>

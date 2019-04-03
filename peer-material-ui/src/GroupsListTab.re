@@ -64,62 +64,47 @@ let render =
   MaterialUi.(
     <>
       <List>
-        {PM.(
-           dbState
-           |> DbState.groups
-           |> PeersGroups.fold(
-                (arr, group) => {
-                  let groupId = group |> PeersGroup.id;
+        PM.(
+          dbState
+          |> DbState.groups
+          |> PeersGroups.fold(
+               (arr, group) => {
+                 let groupId = group |> PeersGroup.id;
 
-                  let (membersPreview, membersCount) =
-                    group
-                    |> PeersGroup.foldPeersInGroup(
-                         ((members, count), peerInGroup) => {
-                           let peerId = peerInGroup |> PeerInGroup.id;
-                           let peerIdStr = peerId |> Peer.Id.toString;
-                           let displayedName =
-                             switch (
-                               dbState
-                               |> DbState.peers
-                               |> Peers.findOpt(peerId)
-                             ) {
-                             | Some(peer) =>
-                               GuiUtils.getPeerVisibleName(
-                                 ~idMaxChars=6,
-                                 peer,
-                               )
-                             | None =>
-                               Js.log(
-                                 "Weird: member "
-                                 ++ peerIdStr
-                                 ++ " is missing in peers",
-                               );
-                               peerIdStr |> GuiUtils.truncate(6);
-                             };
-                           ([displayedName, ...members], count + 1);
-                         },
-                         ([], 0),
-                       );
+                 let (membersPreview, membersCount) =
+                   group
+                   |> PeersGroup.foldPeersInGroup(
+                        ((members, count), peerInGroup) => {
+                          let displayedName =
+                            GuiUtils.getPeerVisibleName(
+                              ~idMaxChars=6,
+                              ~dbState,
+                              peerInGroup |> PeerInGroup.id,
+                            );
+                          ([displayedName, ...members], count + 1);
+                        },
+                        ([], 0),
+                      );
 
-                  let groupRowEl =
-                    <GroupRow
-                      key={groupId |> PeersGroup.Id.toString}
-                      alias={group |> GuiUtils.getPeerGroupVisibleName}
-                      membersPreview
-                      membersCount
-                      onOpenClick={_ =>
-                        pushMsg(GuiMsg.ClickedOpenGroup(groupId))
-                      }
-                      onClick={_ =>
-                        pushMsg(Route.ChangeRoute(Group(groupId)))
-                      }
-                    />;
-                  Js.Array.concat(arr, [|groupRowEl|]);
-                },
-                [||],
-              )
-           |> GuiUtils.elementArrayWithDefaultMsg("No groups added.")
-         )}
+                 let groupRowEl =
+                   <GroupRow
+                     key={groupId |> PeersGroup.Id.toString}
+                     alias={group |> GuiUtils.getPeerGroupVisibleName}
+                     membersPreview
+                     membersCount
+                     onOpenClick={_ =>
+                       pushMsg(GuiMsg.ClickedOpenGroup(groupId))
+                     }
+                     onClick={_ =>
+                       pushMsg(Route.ChangeRoute(Group(groupId)))
+                     }
+                   />;
+                 Js.Array.concat(arr, [|groupRowEl|]);
+               },
+               [||],
+             )
+          |> GuiUtils.elementArrayWithDefaultMsg("No groups added.")
+        )
       </List>
       <AddGroupDialog
         open_={model.addGroupDialogOpen}

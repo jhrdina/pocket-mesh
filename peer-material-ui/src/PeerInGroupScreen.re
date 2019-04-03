@@ -252,16 +252,9 @@ let make =
       | WriteContent(WriteMembers) => (true, true)
       };
 
-    let maybePeer = dbState |> PM.DbState.peers |> PM.Peers.findOpt(peerId);
-    let peerAlias =
-      maybePeer
-      |?>> GuiUtils.getPeerVisibleName
-      |? (peerId |> PM.Peer.Id.toString);
-
+    let peerAlias = peerId |> GuiUtils.getPeerVisibleName(~dbState);
     let peerAliasShort =
-      maybePeer
-      |?>> GuiUtils.getPeerVisibleName(~idMaxChars=6)
-      |? (peerId |> PM.Peer.Id.toString |> GuiUtils.truncate(6));
+      peerId |> GuiUtils.getPeerVisibleName(~idMaxChars=6, ~dbState);
 
     let groupAlias =
       dbState

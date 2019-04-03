@@ -76,7 +76,8 @@ let setSearchTextFieldRef = (theRef, {ReasonReact.state}) => {
 
 let component = ReasonReact.reducerComponent("PeerSearchScreen");
 
-let make = (~dbState, ~open_, ~onClose, ~className="", _children) => {
+let make =
+    (~dbState, ~runtimeState, ~open_, ~onClose, ~className="", _children) => {
   ...component,
 
   initialState: () => {searchText: "", searchTextFieldRef: ref(None)},
@@ -150,13 +151,11 @@ let make = (~dbState, ~open_, ~onClose, ~className="", _children) => {
                  )
                  |> Array.map(peer => {
                       let peerId = peer |> PM.Peer.id;
-                      <PeerRow
+                      <PeerRowWithData
                         key={peerId |> PM.Peer.Id.toString}
                         peerId
-                        signalState=Online
-                        inGroup=true
-                        connectionState=Connected
-                        alias={peer |> PM.Peer.alias}
+                        dbState
+                        runtimeState
                         onClick={_ => onClose(Ok(peerId))}
                       />;
                     })

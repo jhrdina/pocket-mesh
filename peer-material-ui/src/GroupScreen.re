@@ -112,7 +112,7 @@ let useStyles =
 
 let component = ReasonReact.statelessComponent("GroupScreen");
 
-let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
+let make = (~groupId, ~dbState, ~runtimeState, ~model, ~pushMsg, _children) => {
   ...component,
 
   render: _self => {
@@ -123,49 +123,47 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
       |?>> PM.PeersGroup.alias
       |? "";
 
-    let isEmpty = true;
     MaterialUi.(
       <UseHook
         hook=useStyles
         render={classes =>
           <div className=classes##wrapper>
             <AppBar position=`Static className={classes##appBar}>
-
-                <Toolbar variant=`Dense className=classes##toolbar>
+              <Toolbar variant=`Dense className=classes##toolbar>
+                <IconButton
+                  color=`Inherit
+                  className={classes##toolbarLeftBtn}
+                  onClick={_ => pushMsg(Route.ChangeRoute(Main(Groups)))}>
+                  <Icons.ArrowBack />
+                </IconButton>
+                <InputBase
+                  placeholder="Group name"
+                  className=classes##titleInput
+                  value={`String(groupAliasStr)}
+                  onChange={e =>
+                    pushMsg(
+                      Msg.ReqP2PMsg(
+                        PM.Msg.updateGroupAlias(
+                          groupId,
+                          e->ReactEvent.Form.target##value,
+                        ),
+                      ),
+                    )
+                  }
+                />
+                <div>
                   <IconButton
                     color=`Inherit
-                    className={classes##toolbarLeftBtn}
-                    onClick={_ => pushMsg(Route.ChangeRoute(Main(Groups)))}>
-                    <Icons.ArrowBack />
+                    onClick={_ => {
+                      pushMsg(Msg.ReqP2PMsg(PM.Msg.removeGroup(groupId)));
+                      pushMsg(Route.ChangeRoute(Main(Groups)));
+                    }}>
+                    <Icons.Delete />
                   </IconButton>
-                  <InputBase
-                    placeholder="Group name"
-                    className=classes##titleInput
-                    value={`String(groupAliasStr)}
-                    onChange={e =>
-                      pushMsg(
-                        Msg.ReqP2PMsg(
-                          PM.Msg.updateGroupAlias(
-                            groupId,
-                            e->ReactEvent.Form.target##value,
-                          ),
-                        ),
-                      )
-                    }
-                  />
-                  <div>
-                    <IconButton
-                      color=`Inherit
-                      onClick={_ => {
-                        pushMsg(Msg.ReqP2PMsg(PM.Msg.removeGroup(groupId)));
-                        pushMsg(Route.ChangeRoute(Main(Groups)));
-                      }}>
-                      <Icons.Delete />
-                    </IconButton>
-                  </div>
-                </Toolbar>
-              </AppBar>
-              // <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
+                </div>
+              </Toolbar>
+            </AppBar>
+            // <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
             <SectionTitle text="Group ID" />
             <IdBox id={groupId |> PM.PeersGroup.Id.toString} />
             <SectionTitle text="Members" />
@@ -179,15 +177,7 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
                           let peerId = peerInGroup |> PeerInGroup.id;
                           let peerIdStr = peerId |> Peer.Id.toString;
                           let displayedName =
-                            dbState
-                            |> DbState.peers
-                            |> Peers.findOpt(peerId)
-                            |?> (
-                              peer =>
-                                peer |> Peer.alias != "" ?
-                                  Some(peer |> Peer.alias) : None
-                            )
-                            |? peerIdStr;
+                            GuiUtils.getPeerVisibleName(~dbState, peerId);
 
                           let permissionsText =
                             switch (peerInGroup |> PeerInGroup.permissions) {
@@ -243,6 +233,7 @@ let make = (~groupId, ~dbState, ~model, ~pushMsg, _children) => {
             </Fab>
             <PeerSearchScreen
               dbState
+              runtimeState
               open_={model.peerSearchDialogOpen}
               onClose={res => pushMsg(ClosedPeerSearchDialog(res))}
             />
