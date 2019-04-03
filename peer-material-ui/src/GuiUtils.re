@@ -17,10 +17,7 @@ let getPeerVisibleName = (~idMaxChars=0, ~dbState, peerId) =>
     | Some(peer) when peer |> Peer.alias != "" => peer |> Peer.alias
     | Some(_) => peerId |> Peer.Id.toString |> truncate(idMaxChars)
     | None when peerId == (dbState |> DbState.thisPeer |> ThisPeer.id) => "This peer"
-    | None =>
-      let idStr = peerId |> Peer.Id.toString;
-      Js.log("Weird: member " ++ idStr ++ " is missing in peers");
-      idStr |> truncate(idMaxChars);
+    | None => peerId |> Peer.Id.toString |> truncate(idMaxChars)
     }
   );
 
