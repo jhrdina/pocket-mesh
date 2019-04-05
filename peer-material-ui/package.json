@@ -1,6 +1,6 @@
 {
   "name": "pocket-mesh-peer-material-ui",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "scripts": {
     "build": "bsb -make-world",
     "start": "bsb -make-world -w",
@@ -24,7 +24,7 @@
     "bs-black-tea": "^0.2.0",
     "bs-css": "^8.0.3",
     "bs-uuid": "^0.3.1",
-    "pocket-mesh-peer": "file://~/npm-pkgs/pocket-mesh-peer-0.6.0.tgz",
+    "pocket-mesh-peer": "file://~/npm-pkgs/pocket-mesh-peer-0.6.1.tgz",
     "react": "^16.8.6",
     "react-dom": "^16.8.6",
     "reason-react": "~0.5.3"
