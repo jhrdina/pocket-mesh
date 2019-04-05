@@ -27,7 +27,6 @@
   "namespace": true,
   "bs-dependencies": [
     "bs-black-tea",
-    "bs-uuid",
     "reason-react",
     "@jsiebern/bs-material-ui",
     "bs-css",
