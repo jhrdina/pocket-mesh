@@ -195,7 +195,6 @@ let handleRTCSubMsg =
 
   | (Some(GotData(data)), _) =>
     /* DEBUG */
-    /* TODO: Remove me */
     let logCmd =
       switch (data) {
       | String(strData) =>

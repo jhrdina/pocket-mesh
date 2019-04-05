@@ -17,11 +17,9 @@ let base64ToArrayBuffer = base64string =>
   Base64Js.toByteArray(base64string)->Js.Typed_array.Uint8Array.buffer;
 
 let stringToArrayBuffer = str =>
-  /* TODO: Polyfill */
   Dom.TextEncoder.create()
   ->Dom.TextEncoder.encode(str)
   ->Js.Typed_array.Uint8Array.buffer;
 
 let arrayBufferToString = buffer =>
-  /* TODO: Polyfill */
   Dom.TextDecoder.create()->Dom.TextDecoder.decode(buffer);

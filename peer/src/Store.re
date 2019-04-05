@@ -1,4 +1,4 @@
-/* TODO: Remove for production */
+/* DEBUG */
 [%%debugger.chrome];
 
 open BlackTea;

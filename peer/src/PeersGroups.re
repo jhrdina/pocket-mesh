@@ -4,11 +4,6 @@ open BlackTea;
 /**
   - Container for storing and querying groups of peers
   - Controller that handles PeersGroups-related global messages:
-    - handles PeersGroups changes
-    - logic that negotiates/applies changes with different peers
-    - ensures changes are saved to IDB
-
-  TODO: Separate?
  */
 
 /* CONSTANTS */
@@ -197,11 +192,11 @@ let update = (~thisPeer: ThisPeer.t, ~initContent, ~defaultAlias, msg, model) =>
     )
 
   | RemoveGroup(id) => (model |> removeGroup(id), Cmd.none)
-  | AddPeerToGroup(peerId, groupId, perms) =>
-    /* TODO: Check if the peer is in the friends list */
-    (model |> addPeerToGroupWithPerms(peerId, groupId, perms), Cmd.none)
+  | AddPeerToGroup(peerId, groupId, perms) => (
+      model |> addPeerToGroupWithPerms(peerId, groupId, perms),
+      Cmd.none,
+    )
   | UpdatePeerPermissions(peerId, groupId, perms) =>
-    /* TODO: Check if the peer is in the friends list */
     switch (model |> findOpt(groupId) |?>> PeerGroup.containsPeer(peerId)) {
     | Some(true) => (
         model |> addPeerToGroupWithPerms(peerId, groupId, perms),

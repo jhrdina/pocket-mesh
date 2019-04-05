@@ -170,9 +170,8 @@ let decodePeer = crdtPeerMap =>
     }
   );
 
-/* TODO: Handle conflicts */
-
 let findPeerInGroupOpt = (peerId, t) =>
+  /* TODO: Handle conflicts */
   AM.Json.(
     t.peers
     |> AM.root

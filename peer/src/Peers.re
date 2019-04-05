@@ -4,10 +4,6 @@ open Json.Infix;
   - Container for storing and querying peers list
   - Controller that handles Peers list related global messages
     - handles peers list CRUD
-    - ensures changes are saved to IDB
-    - transforms particular global messages to Peer messages
-
-  TODO: Separate?
  */
 
 type t = {byId: PeerId.Map.t(Peer.t)};
