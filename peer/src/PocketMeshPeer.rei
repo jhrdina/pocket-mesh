@@ -103,8 +103,8 @@ module PeersGroup: {
 module IdGenerator: {
   let generate: unit => string;
   let generateCmd: (string => 'msg) => BlackTea.Cmd.t('msg);
-  let generateGroupId: unit => PeerGroup.Id.t;
-  let generateGroupIdCmd: (PeerGroup.Id.t => 'msg) => BlackTea.Cmd.t('msg);
+  let generateGroupId: unit => PeersGroup.Id.t;
+  let generateGroupIdCmd: (PeersGroup.Id.t => 'msg) => BlackTea.Cmd.t('msg);
 };
 
 module PeersGroups: {
