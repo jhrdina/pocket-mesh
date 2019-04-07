@@ -47,12 +47,25 @@ let webSocketSource = url =>
       observer.next(Some(Received(event->MessageEvent.data)))
     );
 
-    t->WebSocket.setOnClose(_ => {
+    let onDisconnect = () => {
       observer.next(None);
       observer.complete();
-    });
+    };
 
-    (.) => t->WebSocket.close;
+    let onOffline = _ => {
+      t->WebSocket.close;
+      onDisconnect();
+    };
+
+    t->WebSocket.setOnClose(_ => onDisconnect());
+
+    // TODO: Make this optional
+    Webapi.Dom.window |> addOfflineEventListener(onOffline);
+
+    (.) => {
+      t->WebSocket.close;
+      Webapi.Dom.window |> removeOfflineEventListener(onOffline);
+    };
   });
 
 let send = (str, conn) => str |> conn->WebapiExtra.Dom.WebSocket.sendString;
@@ -63,9 +76,7 @@ let fromWebsocketWithRetry = (url, f) =>
   webSocketSource(url) |> StreamOps.retryWhen(f);
 
 let sub = (key, url, delayStrategy, wsStateToMsg) =>
-  Subs.ofStream(
-    key,
-    () =>
-      fromWebsocketWithRetry(url, delayStrategy)
-      |> Wonka.map((. s) => s |> wsStateToMsg)
+  Subs.ofStream(key, () =>
+    fromWebsocketWithRetry(url, delayStrategy)
+    |> Wonka.map((. s) => s |> wsStateToMsg)
   );
