@@ -159,8 +159,31 @@ let make =
     ) => {
   ...component,
 
-  render: _self =>
-    <div className={classes([Styles.wrapper, className])}>
+  render: _self => {
+    let textDesc =
+      switch (signalState, inGroup, connectionState) {
+      | (Online, false, Offline) => "Online, not in any group, therefore no reason to connect"
+      | (signalState, inGroup, connectionState) =>
+        let signalStateStr =
+          switch (signalState, connectionState) {
+          | (Online, _)
+          | (Offline, Connected | ConnectedTransferring) => "online"
+          | (Offline, _) => "offline"
+          };
+
+        let inGroupStr = inGroup ? "in 1 or more groups" : "not in any group";
+
+        let connState =
+          switch (connectionState) {
+          | Offline => "P2P connection NOT established"
+          | Connecting => "trying to establish P2P connection..."
+          | Connected => "P2P connection established"
+          | ConnectedTransferring => "connected, transferring data..."
+          };
+
+        [signalStateStr, inGroupStr, connState] |> String.concat(", ");
+      };
+    <div className={classes([Styles.wrapper, className])} title=textDesc>
       <div
         className={classes(
           Styles.[
@@ -190,12 +213,14 @@ let make =
         className={classes(
           Styles.[
             point,
-            switch (signalState) {
-            | Online => pointOnline
-            | Offline => ""
+            switch (signalState, connectionState) {
+            | (Online, _)
+            | (Offline, Connected | ConnectedTransferring) => pointOnline
+            | (Offline, _) => ""
             },
           ],
         )}
       />
-    </div>,
+    </div>;
+  },
 };

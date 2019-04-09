@@ -24,34 +24,36 @@ let init = () => {
 
 let update = (model, msg) => {
   switch (msg) {
-  | P2PMsg(p2pMsg) =>
+  | P2PMsg(p2pMsg)
+  // Handle cases when PMGui wants to send a msg to PM
+  | P2PGuiMsg(PMGui.Msg.ReqP2PMsg(p2pMsg)) =>
     // Js.log(p2pMsg);
-    let (p2p, cmd) = PM.update(model.p2p, p2pMsg);
-    ({...model, p2p}, cmd |> Cmd.map(p2PMsg));
-  | P2PGuiMsg(p2pGuiMsg) =>
-    // Handle cases when PMGui wants to send a msg to PM
-    let (p2p, p2pCmd) =
-      switch (p2pGuiMsg) {
-      | PMGui.Msg.ReqP2PMsg(p2pMsg) =>
-        // Js.log(p2pMsg);
-        PM.update(model.p2p, p2pMsg)
-      | _ => (model.p2p, Cmd.none)
-      };
+    let (p2p, p2pCmd) = PM.update(model.p2p, p2pMsg);
 
     let (p2pGui, p2pGuiCmd) =
       PMGui.PeerScreens.update(
         ~core=p2p |> PM.State.classify,
-        p2pGuiMsg,
+        PMGui.Msg.Noop,
         model.p2pGui,
       );
 
     (
-      {...model, p2p, p2pGui},
+      {p2p, p2pGui},
       Cmd.batch([
-        p2pGuiCmd |> Cmd.map(p2PGuiMsg),
         p2pCmd |> Cmd.map(p2PMsg),
+        p2pGuiCmd |> Cmd.map(p2PGuiMsg),
       ]),
     );
+
+  | P2PGuiMsg(p2pGuiMsg) =>
+    let (p2pGui, p2pGuiCmd) =
+      PMGui.PeerScreens.update(
+        ~core=model.p2p |> PM.State.classify,
+        p2pGuiMsg,
+        model.p2pGui,
+      );
+
+    ({...model, p2pGui}, p2pGuiCmd |> Cmd.map(p2PGuiMsg));
   };
 };
 

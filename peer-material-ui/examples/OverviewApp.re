@@ -34,20 +34,20 @@ let make = _children => {
           {ReasonReact.string("PocketMesh GUI Showcase")}
         </MUI.Typography>
         {renderComponentTitle("Global Icon")}
-        <div>
-          <MUI.IconButton>
-            <GlobalIcon signalState=Connected peerState=Online />
-          </MUI.IconButton>
-          <MUI.IconButton>
-            <GlobalIcon signalState=Connecting peerState=Offline />
-          </MUI.IconButton>
-          <MUI.IconButton>
-            <GlobalIcon signalState=Connected peerState=Loading />
-          </MUI.IconButton>
-          <MUI.IconButton>
-            <GlobalIcon signalState=Connected peerState=OnlineNoDoc />
-          </MUI.IconButton>
-        </div>
+        <div
+          // <MUI.IconButton>
+          //   <GlobalIcon signalState=Connected peerState=Online />
+          // </MUI.IconButton>
+          // <MUI.IconButton>
+          //   <GlobalIcon signalState=Connecting peerState=Offline />
+          // </MUI.IconButton>
+          // <MUI.IconButton>
+          //   <GlobalIcon signalState=Connected peerState=Loading />
+          // </MUI.IconButton>
+          // <MUI.IconButton>
+          //   <GlobalIcon signalState=Connected peerState=OnlineNoDoc />
+          // </MUI.IconButton>
+        />
         {renderComponentTitle("PeerStatusIndicator")}
         <div className=Styles.inlineChildren>
           <PeerStatusIndicatorDemo />

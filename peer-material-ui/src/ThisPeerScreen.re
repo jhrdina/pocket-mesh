@@ -102,7 +102,10 @@ let make = (~thisPeer, ~pushMsg, _children) => {
             <Button
               variant=`Contained
               color=`Primary
-              className=classes##removeAllButton>
+              className=classes##removeAllButton
+              onClick={_ =>
+                pushMsg(Msg.ReqP2PMsg(PM.Msg.removeThisPeerAndAllData))
+              }>
               {"Remove identity and all data in this peer"
                |> ReasonReact.string}
             </Button>

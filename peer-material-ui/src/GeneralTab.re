@@ -43,7 +43,6 @@ let render = (~dbState, ~runtimeState, ~model, ~pushMsg) => {
   let signalServerUrl = signalChannel |> PM.SignalChannel.url;
   let signalServerConnState =
     signalChannel |> PM.SignalChannel.connectionState;
-  let peerState: GlobalIcon.peerState = Online;
 
   let signalStateStr =
     switch (signalServerConnState) {
@@ -64,8 +63,8 @@ let render = (~dbState, ~runtimeState, ~model, ~pushMsg) => {
             <ListItemIcon className=classes##listItemIcon>
               <GlobalIcon
                 className=classes##icon
-                signalState=signalServerConnState
-                peerState
+                dbState
+                runtimeState
                 highlight=ThisPeer
               />
             </ListItemIcon>
@@ -80,9 +79,9 @@ let render = (~dbState, ~runtimeState, ~model, ~pushMsg) => {
             onClick={_ => pushMsg(ClickedOpenSignalServerSettings)}>
             <ListItemIcon className=classes##listItemIcon>
               <GlobalIcon
+                dbState
+                runtimeState
                 className=classes##icon
-                signalState=signalServerConnState
-                peerState
                 highlight=SignalServer
               />
             </ListItemIcon>
