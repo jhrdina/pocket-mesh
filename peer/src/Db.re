@@ -80,6 +80,17 @@ let getAll = db =>
        )
   );
 
+let recreateDb = (resultToMsg, oldDb) => {
+  Cmds.fromPromise(
+    () => {
+      IDBPromise.close(oldDb);
+      IDBPromise.deleteDatabase(dbName)
+      |> Js.Promise.then_(() => IDBPromise.open_(dbName, "all"));
+    },
+    resultToMsg,
+  );
+};
+
 let setThisPeer = (thisPeer: ThisPeer.t, db) =>
   IDBPromise.setKey(thisPeerKey, thisPeer, db);
 
@@ -104,14 +115,14 @@ let writeRequestToPromise = (request, setter, db) =>
 let saveDbStateIfChanged = (dbState: DbState.t, lastAllData, db) => {
   let writeRequests = {
     thisPeer:
-      !someEqual(lastAllData.thisPeer, dbState.thisPeer) ?
-        Some(dbState.thisPeer) : None,
+      !someEqual(lastAllData.thisPeer, dbState.thisPeer)
+        ? Some(dbState.thisPeer) : None,
     peersGroups:
-      !someEqual(lastAllData.peersGroups, dbState.peersGroups) ?
-        Some(dbState.peersGroups) : None,
+      !someEqual(lastAllData.peersGroups, dbState.peersGroups)
+        ? Some(dbState.peersGroups) : None,
     peers:
-      !someEqual(lastAllData.peers, dbState.peers) ?
-        Some(dbState.peers) : None,
+      !someEqual(lastAllData.peers, dbState.peers)
+        ? Some(dbState.peers) : None,
   };
 
   let writeNeeded =
@@ -197,7 +208,9 @@ let update = (~dbState, msg, model) => {
         None,
         getAll(db, completedLoadDataFromDb),
       )
-    | (CompletedOpenDb(Error(_exn)), Opening | LoadingData(_)) => (
+
+    | (Msgs.RemoveThisPeerAndAllData, Loaded(WithoutDb))
+    | (CompletedOpenDb(Error(_)), Opening | LoadingData(_)) => (
         GeneratingIdentity(WithoutDb, allDataEmpty),
         None,
         CryptoCmds.generateKeyPair(completedKeyPairGeneration),
@@ -230,6 +243,12 @@ let update = (~dbState, msg, model) => {
       | Some(thisPeer) => finishInit(~db=mDb, ~allData, ~thisPeer)
       | None => (FatalError(CannotCreateIdentity), None, Cmds.none)
       }
+
+    | (Msgs.RemoveThisPeerAndAllData, Loaded(WithDb(db, _))) => (
+        Opening,
+        None,
+        db |> recreateDb(completedOpenDb),
+      )
 
     | (CompletedKeyPairGeneration(Error(exn)), LoadingData(_)) => (
         FatalError(exn),

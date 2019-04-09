@@ -36,6 +36,20 @@ let open_ = (dbName, objectStoreName) =>
     });
   });
 
+let deleteDatabase = dbName =>
+  Js.Promise.make((~resolve, ~reject) => {
+    let req = Dom.indexedDB |> Dom.IDBFactory.deleteDatabase(dbName);
+    req->Dom.IDBOpenDBRequest.setOnSuccess(_ => {
+      let s = ();
+      resolve(. s);
+    });
+    req->Dom.IDBOpenDBRequest.setOnError(_evt => reject(. RequestError));
+    req->Dom.IDBOpenDBRequest.setOnBlocked(evt => {
+      Js.log(evt);
+      reject(. DatabaseAlreadyOpen);
+    });
+  });
+
 exception KeyStoreNotOpen;
 exception TransactionError;
 exception TransactionAbort;
@@ -79,8 +93,4 @@ let getKey = (id, t) =>
       => reject(. RequestError));
   });
 
-let close = (successToMsg, t) =>
-  Cmd.call(callbacks => {
-    t.db |> Dom.IDBDatabase.close;
-    callbacks^.enqueue(successToMsg());
-  });
+let close = t => t.db |> Dom.IDBDatabase.close;

@@ -21,7 +21,8 @@ module Msg = {
   let updateGroupContent = PeersGroups.updateGroupContentMsg;
   let updateGroupAlias = PeersGroups.updateGroupAliasMsg;
   let addGroup = PeersGroups.addGroupMsg;
-  // let removeThisPeerAndAllData
+
+  let removeThisPeerAndAllData = Msgs.removeThisPeerAndAllData;
 };
 
 module IdGenerator = IdGenerator;

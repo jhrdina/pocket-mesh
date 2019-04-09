@@ -31,6 +31,19 @@ let update = (model, msg) => {
   // | (Db.Changed(newDbState), HasIdentity(db, dbState, runtimeState)) =>
   //   HasIdentity(db, newDbState, runtimeState)
 
+  | (msg, WaitingForDbAndIdentity(db, initConfig, signalChannel))
+  | (
+      Msgs.RemoveThisPeerAndAllData as msg,
+      HasIdentity(db, _, {signalChannel, initConfig, _}),
+    ) =>
+    let (db, dbCmd) = Db.update(~dbState=None, msg, db);
+    let (signalChannel, signalChannelCmd) =
+      SignalChannel.update(signalChannel, msg);
+    (
+      WaitingForDbAndIdentity(db, initConfig, signalChannel),
+      Cmd.batch([dbCmd, signalChannelCmd]),
+    );
+
   | (msg, HasIdentity(db, dbState, runtimeState)) =>
     let (dbState, dbStateCmd) =
       DbState.update(
@@ -45,15 +58,6 @@ let update = (model, msg) => {
     (
       HasIdentity(db, dbState, runtimeState),
       Cmd.batch([dbStateCmd, runtimeStateCmd, dbCmd]),
-    );
-
-  | (msg, WaitingForDbAndIdentity(db, initConfig, signalChannel)) =>
-    let (db, dbCmd) = Db.update(~dbState=None, msg, db);
-    let (signalChannel, signalChannelCmd) =
-      SignalChannel.update(signalChannel, msg);
-    (
-      WaitingForDbAndIdentity(db, initConfig, signalChannel),
-      Cmd.batch([dbCmd, signalChannelCmd]),
     );
   };
 };

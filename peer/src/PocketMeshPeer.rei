@@ -152,7 +152,7 @@ module Msg: {
 
   /* Others */
   let updateSignalServerUrl: string => t;
-  // let removeThisPeerAndAllData: t;
+  let removeThisPeerAndAllData: t;
 };
 
 module DbState: {

@@ -163,6 +163,15 @@ let vKeyVal = (key, value) =>
     ],
   );
 
+let vDestroyButton =
+  hace(
+    btn,
+    [],
+    "removeEverythingBtn",
+    [("click", PMMsg(PM.Msg.removeThisPeerAndAllData))],
+    [txt("Remove everything")],
+  );
+
 let viewPeer = (~peersGroups, ~peersStatuses, ~peersConnections, peer) => {
   let id = peer |> PM.Peer.id;
   let alias =
@@ -469,7 +478,7 @@ let p2pView = (m: PM.DbState.t, r: PM.RuntimeState.t) => {
     div,
     [(cls, "sections")],
     [
-      vSection("This peer", [vKeyVal("ID", thisPeerId)]),
+      vSection("This peer", [vKeyVal("ID", thisPeerId), vDestroyButton]),
       vSection(
         "Signal Server",
         [
