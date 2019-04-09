@@ -53,6 +53,14 @@ module PeersConnections = {
     | CreatingSdpAnswer(_)
     | WaitingForInitiator(_) => AcceptingConnection
     | Connected(_) => Connected;
+
+  let fold = (f, acc, t) =>
+    PeerId.Map.fold(
+      (peerId, connState, acc) =>
+        f(acc, peerId, connState |> classifyConnectionState),
+      t,
+      acc,
+    );
 };
 
 module PeersStatuses = PeersStatuses;

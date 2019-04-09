@@ -60,6 +60,9 @@ module PeersConnections: {
   let classifyConnectionState: connectionState => taggedConnectionState;
 
   let getPeerConnectionState: (Peer.Id.t, t) => option(connectionState);
+
+  let fold:
+    (('acc, Peer.Id.t, taggedConnectionState) => 'acc, 'acc, t) => 'acc;
 };
 
 module PeersStatuses: {
