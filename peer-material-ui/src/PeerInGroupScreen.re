@@ -334,7 +334,7 @@ let make =
                 />
                 {renderChannelDiagram(
                    ~label="Content",
-                   ~peerAcceptState=Some(false),
+                   ~peerAcceptState=Some(true),
                    ~peerSendState=Some(true),
                    ~thisPeerAcceptState=acceptsContent,
                    ~classes,
@@ -358,7 +358,7 @@ let make =
                  )}
                 {renderChannelDiagram(
                    ~label="Members list",
-                   ~peerAcceptState=Some(false),
+                   ~peerAcceptState=Some(true),
                    ~peerSendState=Some(true),
                    ~thisPeerAcceptState=acceptsMembers,
                    ~classes,
