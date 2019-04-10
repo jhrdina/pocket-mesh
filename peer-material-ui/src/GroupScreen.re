@@ -107,6 +107,30 @@ let useStyles =
             (),
           ),
       },
+      {
+        name: "membersHeader",
+        styles:
+          ReactDOMRe.Style.make(
+            ~display="flex",
+            ~padding="16px 16px 0 16px",
+            ~color=
+              MaterialUi.Theme.(
+                theme
+                |> Theme.paletteGet
+                |> Palette.textGet
+                |> TypeText.secondaryGet
+              ),
+            (),
+          ),
+      },
+      {
+        name: "membersHeaderFlex",
+        styles: ReactDOMRe.Style.make(~flex="1", ()),
+      },
+      {
+        name: "membersHeaderRight",
+        styles: ReactDOMRe.Style.make(~textAlign="right", ()),
+      },
     ]
   );
 
@@ -166,7 +190,20 @@ let make = (~groupId, ~dbState, ~runtimeState, ~model, ~pushMsg, _children) => {
             // <IconButton color=`Inherit> <Icons.MoreVert /> </IconButton>
             <SectionTitle text="Group ID" />
             <IdBox id={groupId |> PM.PeersGroup.Id.toString} />
-            <SectionTitle text="Members" />
+            <div className=classes##membersHeader>
+              <Typography
+                variant=`Subtitle2
+                color=`Inherit
+                className=classes##membersHeaderFlex>
+                {"Members" |> ReasonReact.string}
+              </Typography>
+              <Typography
+                variant=`Subtitle2
+                color=`Inherit
+                className=classes##membersHeaderRight>
+                {"content / members list" |> ReasonReact.string}
+              </Typography>
+            </div>
             <List>
               {PM.(
                  dbState
