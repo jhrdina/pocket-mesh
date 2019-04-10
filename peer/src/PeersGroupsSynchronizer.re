@@ -494,7 +494,6 @@ let update = (~peersGroups, ~peersConnections, msg, model) => {
       let offerChangesCmd =
         PeerId.Set.fold(
           (peerId, cmdList) => {
-            Js.log("active connection to " ++ PeerId.toString(peerId));
             let groupsStatuses =
               getGroupsStatusesForPeer(peerId, peersGroups);
             let msgForPeer = P2PMsg.ChangesOffer(groupsStatuses);
