@@ -40,6 +40,7 @@ let webSocketSource = url =>
   Wonka.make((. observer: Wonka_types.observerT(option(msg))) => {
     open WebapiExtra.Dom;
     let t = WebSocket.create(url);
+    let completed = ref(false);
 
     t->WebSocket.setOnOpen(_ => observer.next(Some(Connected(t))));
 
@@ -47,12 +48,16 @@ let webSocketSource = url =>
       observer.next(Some(Received(event->MessageEvent.data)))
     );
 
-    let onDisconnect = () => {
-      observer.next(None);
-      observer.complete();
-    };
+    let onDisconnect = () =>
+      if (! completed^) {
+        completed := true;
+        observer.next(None);
+        observer.complete();
+      };
 
     let onOffline = _ => {
+      // After calling close(), there is a 60s timeout after which onClose is
+      // fired and resources are released (onDisconnect are called twice)
       t->WebSocket.close;
       onDisconnect();
     };
