@@ -5,3 +5,4 @@ _build
 .jenga
 *.bs.js
 .bsb.lock
+/docs
