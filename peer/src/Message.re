@@ -90,7 +90,8 @@ type signedMsg =
   | PeerToPeer(PeerId.t, PeerId.t, peerToPeerMsg);
 
 type t =
-  | Signed(string, signedMsg)
+  | /** Signed(signature, signedMsg) */
+    Signed(string, signedMsg)
   | Unsigned(serverToPeerMsg);
 
 type parsingResult('a) =
