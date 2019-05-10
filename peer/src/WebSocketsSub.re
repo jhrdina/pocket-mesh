@@ -28,7 +28,8 @@ let signMsg = (msg: Message.signedMsg, privateKey) =>
 
 let signAndSendMsg = (msg: Message.signedMsg, privateKey, t: conn) =>
   /* TODO: Sort fields */
-  /* TODO: Can Websocket.send throw or does it only fire onError event? */
+  /*
+   : Can Websocket.send throw or does it only fire onError event? */
   signMsg(msg, privateKey)
   |> Js.Promise.then_(signedMsg => send(signedMsg, t) |> Js.Promise.resolve)
   |> Js.Promise.catch(e => {
@@ -37,41 +38,51 @@ let signAndSendMsg = (msg: Message.signedMsg, privateKey, t: conn) =>
      });
 
 let webSocketSource = url =>
-  Wonka.make((. observer: Wonka_types.observerT(option(msg))) => {
-    open WebapiExtra.Dom;
-    let t = WebSocket.create(url);
-    let completed = ref(false);
+  Wonka.make((. observer: Wonka_types.observerT(option(msg))) =>
+    WebapiExtra.Dom.(
+      switch (WebSocket.create(url)) {
+      | t =>
+        let completed = ref(false);
 
-    t->WebSocket.setOnOpen(_ => observer.next(Some(Connected(t))));
+        t->WebSocket.setOnOpen(_ => observer.next(Some(Connected(t))));
 
-    t->WebSocket.setOnMessage(event =>
-      observer.next(Some(Received(event->MessageEvent.data)))
-    );
+        t->WebSocket.setOnMessage(event =>
+          observer.next(Some(Received(event->MessageEvent.data)))
+        );
 
-    let onDisconnect = () =>
-      if (! completed^) {
-        completed := true;
+        let onDisconnect = () =>
+          if (! completed^) {
+            completed := true;
+            observer.next(None);
+            observer.complete();
+          };
+
+        let onOffline = _ => {
+          // After calling close(), there is a 60s timeout after which onClose is
+          // fired and resources are released (onDisconnect are called twice)
+          t->WebSocket.close;
+          onDisconnect();
+        };
+
+        t->WebSocket.setOnClose(_ => onDisconnect());
+
+        // TODO: Make this optional
+        Webapi.Dom.window |> addOfflineEventListener(onOffline);
+
+        (
+          (.) => {
+            t->WebSocket.close;
+            Webapi.Dom.window |> removeOfflineEventListener(onOffline);
+          }
+        );
+      | exception (Js.Exn.Error(_)) =>
+        // Probably invalid URL Address...
         observer.next(None);
         observer.complete();
-      };
-
-    let onOffline = _ => {
-      // After calling close(), there is a 60s timeout after which onClose is
-      // fired and resources are released (onDisconnect are called twice)
-      t->WebSocket.close;
-      onDisconnect();
-    };
-
-    t->WebSocket.setOnClose(_ => onDisconnect());
-
-    // TODO: Make this optional
-    Webapi.Dom.window |> addOfflineEventListener(onOffline);
-
-    (.) => {
-      t->WebSocket.close;
-      Webapi.Dom.window |> removeOfflineEventListener(onOffline);
-    };
-  });
+        ((.) => ());
+      }
+    )
+  );
 
 let send = (str, conn) => str |> conn->WebapiExtra.Dom.WebSocket.sendString;
 
