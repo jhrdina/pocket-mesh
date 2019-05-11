@@ -1,32 +1,5 @@
 open BlackTea;
 
-/* CONSTANTS */
-
-let defaultSignalServerUrl = "ws://localhost:7777";
-let defaultGroupAlias = "My group";
-
-/* MODULES */
-
-module InitConfig = {
-  type t = {
-    defaultGroupAlias: string,
-    contentInitializer: PeerGroup.AM.t => PeerGroup.AM.t,
-    signalServerUrl: string,
-  };
-
-  let make =
-      (
-        ~contentInitializer=crdt => crdt,
-        ~signalServerUrl=defaultSignalServerUrl,
-        ~defaultGroupAlias=defaultGroupAlias,
-        (),
-      ) => {
-    defaultGroupAlias,
-    contentInitializer,
-    signalServerUrl,
-  };
-};
-
 // TYPES
 
 type t = {
@@ -181,5 +154,8 @@ let subscriptions = model =>
   Sub.batch([
     SignalChannel.subscriptions(model.signalChannel),
     ThisPeerKeyExporter.subscriptions(model.thisPeerKeyExporter),
-    PeersConnections.subscriptions(model.peersConnections),
+    PeersConnections.subscriptions(
+      ~initConfig=model.initConfig,
+      model.peersConnections,
+    ),
   ]);

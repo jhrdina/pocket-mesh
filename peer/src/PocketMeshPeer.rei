@@ -1,10 +1,5 @@
 /** Library for implementing the peer node. Contains all the important P2P functionality. */;
 
-/* CONSTANTS */
-
-/** Default signal server (probably localhost:7777) that is used if no signal server is specified in {!InitConfig.make}. */
-let defaultSignalServerUrl: string;
-
 /* MODULES */
 
 /** Represents one peer in the list of peers (friends), see {!Peers}. */
@@ -62,6 +57,20 @@ module Crdt: Automerge.CommonAPI with type actorId = Peer.Id.t;
 
 /** Initial configuration of the library that is passed into the {! init} function. */
 module InitConfig: {
+  /** Default signal server (probably localhost:7777) that is used if no signal server is specified in {!make}. */
+  let defaultSignalServerUrl: string;
+  let defaultGroupAlias: string;
+
+  type iceCredentials = {
+    username: string,
+    credential: string,
+  };
+
+  /** Type representing one ICE server connection parameters. */
+  type iceServer =
+    | Basic(string)
+    | WithCredentials(string, iceCredentials);
+
   type t = {
     /** Alias for the group that is automatically created on the first start. */
     defaultGroupAlias: string,
@@ -69,6 +78,8 @@ module InitConfig: {
     contentInitializer: Crdt.t => Crdt.t,
     /** Default URL address of a WebSocket signal server. */
     signalServerUrl: string,
+    /** List of ICE servers (STUN, TURN, ...) */
+    iceServers: list(iceServer),
   };
 
   /** Creates a new configuration. See {! t} for description of the fields. If [contentInitializer] is missing, content of a newly created groups is left empty. If [signalServerUrl] is missing, default server specified in {!defaultSignalServerUrl} constant is used. If [defaultGroupAlias] is not specified, "My group" is used. */
@@ -77,6 +88,7 @@ module InitConfig: {
       ~contentInitializer: Crdt.t => Crdt.t=?,
       ~signalServerUrl: string=?,
       ~defaultGroupAlias: string=?,
+      ~iceServers: list(iceServer)=?,
       unit
     ) =>
     t;

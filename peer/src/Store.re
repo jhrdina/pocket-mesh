@@ -6,12 +6,12 @@ open BlackTea;
 /* TYPES */
 
 type t =
-  | WaitingForDbAndIdentity(Db.t, RuntimeState.InitConfig.t, SignalChannel.t)
+  | WaitingForDbAndIdentity(Db.t, InitConfig.t, SignalChannel.t)
   | HasIdentity(Db.t, DbState.t, RuntimeState.t);
 
 /* UPDATE */
 
-let init = (initConfig: RuntimeState.InitConfig.t) => {
+let init = (initConfig: InitConfig.t) => {
   let (db, dbCmd) = Db.init();
   let signalChannel = SignalChannel.init(initConfig.signalServerUrl);
   (WaitingForDbAndIdentity(db, initConfig, signalChannel), dbCmd);
@@ -83,7 +83,7 @@ let subscriptions = model => {
 let create = () => {
   /* let stateLogger = StateLogger.create(); */
   let initConfig =
-    RuntimeState.InitConfig.make(
+    InitConfig.make(
       ~contentInitializer=
         crdt =>
           crdt

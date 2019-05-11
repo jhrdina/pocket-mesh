@@ -1,5 +1,7 @@
 open WebapiExtra.Dom;
 
+// TYPES
+
 /* TODO: Move somewhere else */
 let unsafeDescFromString: string => RTCSessionDescription.t = [%bs.raw
   msg => "{return JSON.parse(msg);}"
@@ -8,6 +10,15 @@ let unsafeDescFromString: string => RTCSessionDescription.t = [%bs.raw
 type role =
   | Initiator
   | Acceptor;
+
+type iceCredentials = {
+  username: string,
+  credential: string,
+};
+
+type iceServer =
+  | Basic(string)
+  | WithCredentials(string, iceCredentials);
 
 type data =
   RTCMessageEvent.data =
@@ -283,13 +294,24 @@ let send = (s, msg) =>
     s->emitError("Cannot send data: Data channel doesn't exist yet.")
   };
 
-let create = options => {
+let create = (~role, ~iceServers) => {
   let s = {
-    role: options.role,
+    role,
     connection:
-      RTCPeerConnection.createWithConfig({
-        "iceServers": [|{urls: "stun:stun.l.google.com:19302"}|],
-      }),
+      RTCPeerConnection.createWithConfig(
+        RTCConfiguration.make(
+          ~iceServers=
+            Array.of_list(iceServers)
+            |> Array.map(iceServer =>
+                 switch (iceServer) {
+                 | WithCredentials(urls, {credential, username}) =>
+                   RTCIceServer.make(~urls, ~username, ~credential, ())
+                 | Basic(urls) => RTCIceServer.make(~urls, ())
+                 }
+               ),
+          (),
+        ),
+      ),
     connected: false,
     iceComplete: false,
     dataChannel: None,

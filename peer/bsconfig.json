@@ -1,7 +1,7 @@
 {
   "name": "pocket-mesh-peer",
   "sources": [
-    { "dir": "example" },
+    { "dir": "example", "type": "dev" },
     {
       "dir": "src",
       "subdirs": true,

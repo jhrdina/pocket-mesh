@@ -1,11 +1,11 @@
 /* CONSTANTS */
 
-let defaultSignalServerUrl = RuntimeState.defaultSignalServerUrl;
+let defaultSignalServerUrl = InitConfig.defaultSignalServerUrl;
 
 /* MODULES */
 
 module Crdt = PeerGroup.AM;
-module InitConfig = RuntimeState.InitConfig;
+module InitConfig = InitConfig;
 
 module Msg = {
   type t = Msgs.t;

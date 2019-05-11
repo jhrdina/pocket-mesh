@@ -299,13 +299,19 @@ let waitingTimeoutSub = (peerId, myRole: RTCSub.role) => {
 let rtcSub = attempt =>
   RTCSub.sub("PeersConnections/" ++ string_of_int(attempt));
 
-let subscriptions = model =>
+let subscriptions = (~initConfig: InitConfig.t, model) =>
   PeerId.Map.fold(
     (peerId, connState, subs) =>
       switch (connState) {
       | CreatingSdpOffer(a)
       | WaitingForAcceptor(_, a) => [
-          rtcSub(a, peerId, Initiator, rtcMsg),
+          rtcSub(
+            a,
+            peerId,
+            ~role=Initiator,
+            ~iceServers=initConfig.iceServers,
+            rtcMsg,
+          ),
           switch (connState) {
           | WaitingForAcceptor(_, _) => waitingTimeoutSub(peerId, Initiator)
           | _ => Sub.none
@@ -314,14 +320,24 @@ let subscriptions = model =>
         ]
       | CreatingSdpAnswer(sdp)
       | WaitingForInitiator(sdp, _) => [
-          rtcSub(0, peerId, Acceptor, ~initSignal=sdp, rtcMsg),
+          rtcSub(
+            0,
+            peerId,
+            ~role=Acceptor,
+            ~iceServers=initConfig.iceServers,
+            ~initSignal=sdp,
+            rtcMsg,
+          ),
           switch (connState) {
           | WaitingForInitiator(_, _) => waitingTimeoutSub(peerId, Acceptor)
           | _ => Sub.none
           },
           ...subs,
         ]
-      | Connected(_, role, a) => [rtcSub(a, peerId, role, rtcMsg), ...subs]
+      | Connected(_, role, a) => [
+          rtcSub(a, peerId, ~role, ~iceServers=initConfig.iceServers, rtcMsg),
+          ...subs,
+        ]
       },
     model,
     [],

@@ -24,10 +24,10 @@ let sdpTypeSentByRole =
   | SimpleRTC.Initiator => Offer
   | Acceptor => Answer;
 
-let rtcSource = (~initSignal, role) =>
+let rtcSource = (~initSignal, ~role, ~iceServers) =>
   Wonka.make((. observer: Wonka_types.observerT(option(msg))) => {
     let t = {
-      simpleRtc: SimpleRTC.create({role: role}),
+      simpleRtc: SimpleRTC.create(~role, ~iceServers),
       chunkerState: SimpleRTCChunker.make(),
     };
     t.simpleRtc
@@ -63,10 +63,10 @@ let stringOfRole =
   | SimpleRTC.Initiator => "init"
   | Acceptor => "accept";
 
-let sub = (key, peerId, ~initSignal=?, role, rtcMsgToMsg) => {
+let sub = (key, peerId, ~role, ~iceServers, ~initSignal=?, rtcMsgToMsg) => {
   Subs.ofStream(
     key ++ "/" ++ stringOfRole(role) ++ "/" ++ (peerId |> PeerId.toString), () =>
-    rtcSource(~initSignal, role)
+    rtcSource(~initSignal, ~role, ~iceServers)
     |> StreamOps.retryWhen(Retry.getTimeoutMs)
     |> Wonka.map((. s) => rtcMsgToMsg(peerId, s))
   );

@@ -10,11 +10,18 @@ type role =
   | Initiator
   | Acceptor;
 
-type options = {role};
+type iceCredentials = {
+  username: string,
+  credential: string,
+};
+
+type iceServer =
+  | Basic(string)
+  | WithCredentials(string, iceCredentials);
 
 /* FUNCTIONS */
 
-let create: options => t;
+let create: (~role: role, ~iceServers: list(iceServer)) => t;
 
 let send: (t, data) => unit;
 let signal: (t, string) => unit;

@@ -8,6 +8,10 @@ module PM = PocketMeshPeer;
 
 let signalServerUrl = "ws://localhost:7777";
 
+let iceServers: list(PM.InitConfig.iceServer) = [
+  Basic("stun:stun.l.google.com:19302"),
+];
+
 /* TYPES */
 
 type model = {
@@ -512,7 +516,12 @@ let contentInitializer = crdt =>
 
 let init = () => {
   let p2pConfig =
-    PM.InitConfig.make(~contentInitializer, ~signalServerUrl, ());
+    PM.InitConfig.make(
+      ~contentInitializer,
+      ~signalServerUrl,
+      ~iceServers,
+      (),
+    );
   let (p2p, p2pCmd) = PM.init(p2pConfig);
 
   (
