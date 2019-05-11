@@ -1,3 +1,4 @@
+(* This file was taken from https://github.com/jaredly/reason-websocket *)
 (*
  * Copyright (c) 2006-2009 Citrix Systems Inc.
  * Copyright (c) 2010 Thomas Gazagnaire <thomas@gazagnaire.com>

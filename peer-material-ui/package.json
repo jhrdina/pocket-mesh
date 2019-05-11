@@ -15,7 +15,7 @@
     "BuckleScript"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "dependencies": {
     "@jsiebern/bs-material-ui": "^1.1.1",
     "@material-ui/core": "^3.9.3",

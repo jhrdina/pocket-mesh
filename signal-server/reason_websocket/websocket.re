@@ -1,3 +1,4 @@
+// This file was taken from https://github.com/jaredly/reason-websocket
 /*
  * Copyright (c) 2012-2016 Vincent Bernardoff <vb@luminar.eu.org>
  *

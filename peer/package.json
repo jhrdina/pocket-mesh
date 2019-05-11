@@ -22,7 +22,7 @@
     "replication"
   ],
   "author": "",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "devDependencies": {
     "bs-platform": "^5.0.0",
     "webpack": "^4.29.6",
