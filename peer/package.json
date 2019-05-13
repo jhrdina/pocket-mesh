@@ -1,7 +1,7 @@
 {
   "name": "pocket-mesh-peer",
-  "version": "0.8.3",
-  "description": "",
+  "version": "0.8.4",
+  "description": "Framework for creating collaborative P2P webapps - Peer library",
   "main": "index.js",
   "scripts": {
     "build": "bsb -make-world",
@@ -19,7 +19,9 @@
   "keywords": [
     "reason",
     "bucklescript",
-    "replication"
+    "replication",
+    "p2p",
+    "crdt"
   ],
   "author": "",
   "license": "AGPL-3.0-or-later",
