@@ -6,9 +6,9 @@ Native websockets-based signal server for Pocket Mesh framework written in Reaso
 
 - Keep track of connected peers and their IDs (fingerprints of their public keys)
 - Notify on changes of selected peers state (going online/offline)
-- Forward SDP packets for WebRTC connection establishment
+- Forwards SDP and key-exchange messages for WebRTC connection establishment
+- TLS support
 - [not implemented] Verification of connected peers using signatures
-- [not implemented] TLS support
 
 [`Reason`](http://reasonml.github.io/) project for native compilation:
 
@@ -51,30 +51,6 @@ or
   docs](https://reasonml.github.io/docs/en/editor-plugins.html) about setting
   up your editor. Just remember to _not_ install `reason-cli` when using
   `opam`.
-
-## Preliminary Esy Support
-
-You may alternatively use [`esy`](http://esy.sh/) to build and develop this
-project. (`esy` is like "npm for native"). This is preferable for people who
-want to build native Reason projects using existing opam packages, but with a
-more familiar and sandboxed workflow. This is experimental and not stable yet.
-Please report any issues to [the esy repo](https://github.com/esy/esy).
-
-**Build**:
-
-```sh
-npm install -g esy@latest
-esy install
-esy build
-```
-
-**Run**:
-
-Use `esy x` ("esy execute") command to run the binary.
-
-```sh
-esy x reason-native-bin
-```
 
 **Develop**:
 

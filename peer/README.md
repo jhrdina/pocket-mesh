@@ -1,5 +1,7 @@
 # Pocket Mesh Peer
 
+![version](https://img.shields.io/npm/v/pocket-mesh-peer.svg?style=flat-square)
+
 Peer library for Pocket Mesh framework written in ReasonML and compiled to JavaScript using BuckleScript.
 
 ## Installation

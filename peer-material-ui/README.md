@@ -1,5 +1,7 @@
 # Pocket Mesh Peer Material UI
 
+![version](https://img.shields.io/npm/v/pocket-mesh-peer-material-ui.svg?style=flat-square)
+
 This library contains pre-built ReasonReact GUI components for common tasks such as groups management, rendering a list of friends, setting permissions and other functionality implemented in the [peer library](../peer).
 
 ## Installation

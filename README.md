@@ -1,5 +1,7 @@
 # Pocket Mesh
 
+![version](https://img.shields.io/npm/v/pocket-mesh-peer.svg?style=flat-square)
+
 Pocket Mesh is a framework for creating collaborative P2P webapps.
 
 [**Website**](https://pocket-mesh.hrdinajan.cz) &nbsp;&nbsp;&nbsp; [Getting started](https://pocket-mesh.hrdinajan.cz/getting-started) &nbsp;&nbsp;&nbsp; [API Docs](https://pocket-mesh.hrdinajan.cz/api)
