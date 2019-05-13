@@ -1,6 +1,6 @@
 #!/bin/bash
 
-PKG_REPO="$HOME/npm-pkgs"
+source scripts-common.sh
 
 usage="$(basename "$0") [[-h] | [-i | -c | -p] VERSION]
 Updates packages versions to VERSION and optionally installs the packages
@@ -66,29 +66,17 @@ fi
 # Update versions
 # ============================================
 
-function replaceVersionInPackageJson {
-  sed -ri "s/(^\s*\"version\"\s*:\s*\")[^\"]*(\"\s*,\s*$)/\1$1\2/g" $2
-}
+npmReplaceVersion "$version" ./peer/package.json
 
-function replaceVersionInOpam {
-  sed -ri "s/(^\s*version\s*:\s*\")[^\"]*(\"\s*$)/\1$1\2/g" $2
-}
+npmReplaceVersion "$version" ./peer-material-ui/package.json
+npmDepReplaceVersion pocket-mesh-peer "$version" ./peer-material-ui/package.json
 
-function replaceDepVersionInPackageJson {
-  sed -ri "s/(^\s*\"$1\"\s*:\s*\"[^ ]*-)[^\"-]+(\.tgz\"\s*,\s*$)/\1$2\2/g" $3
-}
-
-replaceVersionInPackageJson "$version" ./peer/package.json
-
-replaceVersionInPackageJson "$version" ./peer-material-ui/package.json
-replaceDepVersionInPackageJson pocket-mesh-peer "$version" ./peer-material-ui/package.json
-
-replaceVersionInPackageJson "$version" ./signal-server/package.json
-replaceVersionInOpam "$version" ./signal-server/pocket-mesh-signal-server.opam
+npmReplaceVersion "$version" ./signal-server/package.json
+opamReplaceVersion "$version" ./signal-server/pocket-mesh-signal-server.opam
 
 if [ $updateTreeBurst = true ]; then
-  replaceDepVersionInPackageJson pocket-mesh-peer "$version" "$treeBurstPath/package.json"
-  replaceDepVersionInPackageJson pocket-mesh-peer-material-ui "$version" "$treeBurstPath/package.json"
+  npmDepReplaceVersion pocket-mesh-peer "$version" "$treeBurstPath/package.json"
+  npmDepReplaceVersion pocket-mesh-peer-material-ui "$version" "$treeBurstPath/package.json"
 fi
 
 # ============================================
@@ -98,38 +86,22 @@ fi
 if [ $install == true ]; then
   echo -e "Installing...\n"
 
-  function npack {
-    npm pack && mv *.tgz "$PKG_REPO/"
-  }
-  function bak {
-    cp package.json package.json.bak
-  }
-  function rest {
-    mv package.json.bak package.json
-  }
-
   cd "$dir/peer"
-  npm i
-  npack
+  npmInstallAndPublishLocal
 
   cd "$dir/peer-material-ui"
-  npm i
-  bak
-  npm i -f pocket-mesh-peer
-  rest
-  npm run clean
-  npm run build
+  npmInstallPkgs pocket-mesh-peer
+  npmInstall
+  npmCleanBuild
   peerMaterialUiBuildRes=$?
-  npack
+  npmPublishLocal
 
   cd "$dir/signal-server"
   opam install .
 
   if [ $updateTreeBurst = true ]; then
     cd "$treeBurstPath"
-    bak
-    npm i -f pocket-mesh-peer pocket-mesh-peer-material-ui
-    rest
+    npmInstallPkgs pocket-mesh-peer pocket-mesh-peer-material-ui
   fi
 
   echo
