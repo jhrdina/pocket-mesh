@@ -21,6 +21,6 @@ depends: [
   "ocaml-diff" {>= "0.1.2"}
   "re"
   "reason"  {>= "3.4.0"}
-  "websocket-lwt" {>= "2.12"}
+  "websocket-lwt-unix" {= "2.13"}
 ]
 available: [ ocaml-version >= "4.02" & ocaml-version < "4.07" ]

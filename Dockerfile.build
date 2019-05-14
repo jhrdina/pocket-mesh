@@ -9,7 +9,7 @@ RUN sudo apt-get -y update && \
   sudo apt-get -y upgrade && \
   sudo apt-get -y install m4 pkg-config libgmp-dev libssl-dev git
 
-RUN opam install dune nocrypto re reason websocket-lwt
+RUN opam install dune nocrypto re reason websocket-lwt-unix
 
 WORKDIR /home/opam
 RUN git clone https://github.com/jhrdina/ocaml-diff.git && \

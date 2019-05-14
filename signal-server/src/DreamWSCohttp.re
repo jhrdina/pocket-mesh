@@ -1,6 +1,6 @@
 // Some parts based on https://github.com/vbmithr/ocaml-websocket/blob/master/test/upgrade_connection.ml and https://github.com/vbmithr/ocaml-websocket/blob/master/lwt/websocket_cohttp_lwt.ml
 
-module WS = Websocket.IO(Cohttp_lwt_unix.IO);
+module WS = Websocket.Make(Cohttp_lwt_unix.IO);
 
 open Lwt.Infix;
 
