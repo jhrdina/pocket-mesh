@@ -1,0 +1,10 @@
+{
+  "docs": {
+    "Peer Library": ["getting-started", "core-usage"],
+    "GUI Components": ["gui-install", "gui-usage", "gui-components"],
+    "Signal Server": ["sigserv-install", "sigserv-config"]
+  },
+  "docs-other": {
+    "First Category": []
+  }
+}

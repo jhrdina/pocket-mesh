@@ -1,0 +1,111 @@
+/* your custom css */
+.homeContainer {
+  background-color: #f3f3f3;
+}
+
+/* .blockElement a */
+a {
+  color: #539a08;
+}
+
+.button {
+  color: #7bb241;
+  border-color: #7bb241;
+}
+
+.button:hover {
+  color: white;
+  border-color: #669237;
+  background-color: #669237;
+}
+
+.button--primary {
+  color: white;
+  border-color: #7bb241;
+  background-color: #7bb241;
+}
+
+.img-border {
+  border: 1px solid #ddd;
+}
+
+@media only screen and (min-device-width: 360px) and (max-device-width: 736px) {
+}
+
+@media only screen and (min-width: 1024px) {
+}
+
+@media only screen and (max-width: 1023px) {
+}
+
+@media only screen and (min-width: 1400px) {
+}
+
+@media only screen and (min-width: 1500px) {
+}
+
+
+/* The following styles were taken from https://github.com/BuckleScript/bucklescript.github.io/blob/source/website/static/css/reason.css */
+
+/* Below are styles that should be global to all Reason-ecosystem sites
+ but which we have no current plans to upstream to Docusaurus. */
+
+/* 1. Custom code block styling */
+.hljs {
+  /* this -15px margin offsets the usual margin given to a page. This way it looks like this:
+      |        |
+    | myCode     |
+      |        |
+    instead of:
+      |        |
+      | myCode |
+      |        |
+    might not be clear as ascii comment, but the **code words inside the code
+    block** are aligned with the page's boundaries; previously the code block
+    itself starts at the boundary, then has extra padding. Now the code words
+    themselves are aligned with the rest of the page's paragraphs' starting
+    point
+   */
+  margin-left: -15px;
+  margin-right: -15px;
+  border: 1px solid #eee;
+  border-radius: 6px;
+  padding: 15px;
+  /* font-size: 15px; */
+
+  /* respect the section's max width, from .mainContainer .wrapper p */
+  max-width: 50rem;
+}
+.hljs.javascript {
+  background-color: rgba(247, 223, 30, 0.03);
+}
+table .hljs {
+  border: none;
+  background: none;
+}
+@media (max-width: 736px) {
+  .hljs {
+    margin-left: -20px;
+    margin-right: -20px;
+    padding: 20px;
+    /* on small screens, the code block completely occupies the width of the
+      view. No need for left/right borders */
+    border-radius: 0;
+    border-left: none;
+    border-right: none;
+  }
+}
+
+/* tweaks to syntax highlighting, assuming atom-one-light theme */
+.hljs-operator {
+  color: #a626a4;
+}
+.hljs-character {
+  color: #50a14f;
+}
+.hljs-module-identifier {
+  color: #4078f2;
+}
+.hljs-constructor {
+  color: #e45649;
+}
