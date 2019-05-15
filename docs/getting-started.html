@@ -1,0 +1,95 @@
+<!DOCTYPE html><html lang="en"><head><meta charSet="utf-8"/><meta http-equiv="X-UA-Compatible" content="IE=edge"/><title>Getting started · PocketMesh</title><meta name="viewport" content="width=device-width"/><meta name="generator" content="Docusaurus"/><meta name="description" content="&lt;p&gt;PocketMesh is a framework for building webapps with P2P real-time collaboration support. It is built upon&lt;/p&gt;
+"/><meta name="docsearch:language" content="en"/><meta property="og:title" content="Getting started · PocketMesh"/><meta property="og:type" content="website"/><meta property="og:url" content="https://pocket-mesh.hrdinajan.cz/"/><meta property="og:description" content="&lt;p&gt;PocketMesh is a framework for building webapps with P2P real-time collaboration support. It is built upon&lt;/p&gt;
+"/><meta name="twitter:card" content="summary"/><link rel="shortcut icon" href="/img/favicon.ico"/><link rel="stylesheet" href="//cdnjs.cloudflare.com/ajax/libs/highlight.js/9.12.0/styles/atom-one-light.min.css"/><script type="text/javascript" src="https://buttons.github.io/buttons.js"></script><link rel="stylesheet" href="/css/main.css"/><script src="/js/codetabs.js"></script></head><body class="sideNavVisible separateOnPageNav"><div class="fixedHeaderContainer"><div class="headerWrapper wrapper"><header><a href="/"><img class="logo" src="/img/pocketmesh_white_transparent.svg" alt="PocketMesh"/><h2 class="headerTitleWithLogo">PocketMesh</h2></a><div class="navigationWrapper navigationSlider"><nav class="slidingNav"><ul class="nav-site nav-site-internal"><li class="siteNavGroupActive siteNavItemActive"><a href="/docs/getting-started" target="_self">Docs</a></li><li class=""><a href="/api" target="_blank">API</a></li><li class=""><a href="https://github.com/jhrdina/pocket-mesh" target="_blank">GitHub</a></li><li class=""><a target="_self"></a></li></ul></nav></div></header></div></div><div class="navPusher"><div class="docMainWrapper wrapper"><div class="container docsNavContainer" id="docsNav"><nav class="toc"><div class="toggleNav"><section class="navWrapper wrapper"><div class="navBreadcrumb wrapper"><div class="navToggle" id="navToggler"><div class="hamburger-menu"><div class="line1"></div><div class="line2"></div><div class="line3"></div></div></div><h2><i>›</i><span>Peer Library</span></h2><div class="tocToggler" id="tocToggler"><i class="icon-toc"></i></div></div><div class="navGroups"><div class="navGroup"><h3 class="navGroupCategoryTitle">Peer Library</h3><ul class=""><li class="navListItem navListItemActive"><a class="navItem" href="/docs/getting-started">Getting Started</a></li><li class="navListItem"><a class="navItem" href="/docs/core-usage">Usage</a></li></ul></div><div class="navGroup"><h3 class="navGroupCategoryTitle">GUI Components</h3><ul class=""><li class="navListItem"><a class="navItem" href="/docs/gui-install">Installation</a></li><li class="navListItem"><a class="navItem" href="/docs/gui-usage">Usage</a></li><li class="navListItem"><a class="navItem" href="/docs/gui-components">Available Components</a></li></ul></div><div class="navGroup"><h3 class="navGroupCategoryTitle">Signal Server</h3><ul class=""><li class="navListItem"><a class="navItem" href="/docs/sigserv-install">Installation</a></li><li class="navListItem"><a class="navItem" href="/docs/sigserv-config">Configuration and Running</a></li></ul></div></div></section></div><script>
+            var coll = document.getElementsByClassName('collapsible');
+            var checkActiveCategory = true;
+            for (var i = 0; i < coll.length; i++) {
+              var links = coll[i].nextElementSibling.getElementsByTagName('*');
+              if (checkActiveCategory){
+                for (var j = 0; j < links.length; j++) {
+                  if (links[j].classList.contains('navListItemActive')){
+                    coll[i].nextElementSibling.classList.toggle('hide');
+                    coll[i].childNodes[1].classList.toggle('rotate');
+                    checkActiveCategory = false;
+                    break;
+                  }
+                }
+              }
+
+              coll[i].addEventListener('click', function() {
+                var arrow = this.childNodes[1];
+                arrow.classList.toggle('rotate');
+                var content = this.nextElementSibling;
+                content.classList.toggle('hide');
+              });
+            }
+
+            document.addEventListener('DOMContentLoaded', function() {
+              createToggler('#navToggler', '#docsNav', 'docsSliderActive');
+              createToggler('#tocToggler', 'body', 'tocActive');
+
+              const headings = document.querySelector('.toc-headings');
+              headings && headings.addEventListener('click', function(event) {
+                if (event.target.tagName === 'A') {
+                  document.body.classList.remove('tocActive');
+                }
+              }, false);
+
+              function createToggler(togglerSelector, targetSelector, className) {
+                var toggler = document.querySelector(togglerSelector);
+                var target = document.querySelector(targetSelector);
+
+                if (!toggler) {
+                  return;
+                }
+
+                toggler.onclick = function(event) {
+                  event.preventDefault();
+
+                  target.classList.toggle(className);
+                };
+              }
+            });
+        </script></nav></div><div class="container mainContainer"><div class="wrapper"><div class="post"><header class="postHeader"><h1 class="postHeaderTitle">Getting started</h1></header><article><div><span><p>PocketMesh is a framework for building webapps with P2P real-time collaboration support. It is built upon</p>
+<ul>
+<li><strong>WebRTC</strong> - protocol that enables direct P2P connection between two browsers</li>
+<li><strong>CRDT</strong> (conflict-free replicated datatypes) - datatypes that can ensure seamless merging of changes across replicas and provides eventual consistency</li>
+<li><strong>TEA</strong> - The Elm Architecture - architecture for managing global state</li>
+</ul>
+<p>The easiest way to create a new project that uses the framework is to use the <a href="https://github.com/jhrdina/tree-burst">TreeBurst</a> example project. To fetch it and install all its dependencies simply run</p>
+<pre><code class="hljs css language-sh">git <span class="hljs-built_in">clone</span> --depth=1 https://github.com/jhrdina/tree-burst.git my-project
+<span class="hljs-built_in">cd</span> my-project
+npm install
+</code></pre>
+<h2><a class="anchor" aria-hidden="true" id="initial-config"></a><a href="#initial-config" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Initial config</h2>
+<p>Application's basic configuration is located in the <code>src/Config.re</code> file. You can use it to set the signal server URL and WebRTC ICE servers</p>
+<pre><code class="hljs css language-reason"><span class="hljs-comment">/* src/Config.re */</span>
+<span class="hljs-keyword">let</span> signalServerUrl = <span class="hljs-string">"wss://example.com:6421"</span>;
+<span class="hljs-keyword">let</span> iceServers: list(<span class="hljs-module-identifier">PM</span>.<span class="hljs-module-identifier">InitConfig</span>.iceServer) = <span class="hljs-literal">[</span>
+  <span class="hljs-constructor">Basic</span>(<span class="hljs-string">"stun:stun.l.google.com:19302"</span>),
+  <span class="hljs-constructor">WithCredentials</span>(
+    <span class="hljs-string">"turn:example.com"</span>,
+    {credential: <span class="hljs-string">"somePassword"</span>, username: <span class="hljs-string">"someUsername"</span>},
+  ),
+<span class="hljs-literal">]</span>;
+</code></pre>
+<p>or you can use the default configuration (Google's STUN server and a local signal server at port 7777) using:</p>
+<pre><code class="hljs css language-sh">mv src/Config.re.default src/Config.re
+</code></pre>
+<h2><a class="anchor" aria-hidden="true" id="running-the-compiler"></a><a href="#running-the-compiler" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a>Running the compiler</h2>
+<p>Now can run the BuckleScript compiler that watches your <code>.re</code> files and compiles corresponding JS files as soon as you change them:</p>
+<pre><code class="hljs css language-sh">npm start
+</code></pre>
+<p>and in a new terminal tab run a live-reload webpack server</p>
+<pre><code class="hljs css language-sh">npm run server
+</code></pre>
+<p>Finally, if you visit <a href="http://localhost:8000">http://localhost:8000</a>, you should be able to see the TreeBurst demo app.</p>
+<h2><a class="anchor" aria-hidden="true" id="_advanced-_-manual-installation"></a><a href="#_advanced-_-manual-installation" aria-hidden="true" class="hash-link"><svg class="hash-link-icon" aria-hidden="true" height="16" version="1.1" viewBox="0 0 16 16" width="16"><path fill-rule="evenodd" d="M4 9h1v1H4c-1.5 0-3-1.69-3-3.5S2.55 3 4 3h4c1.45 0 3 1.69 3 3.5 0 1.41-.91 2.72-2 3.25V8.59c.58-.45 1-1.27 1-2.09C10 5.22 8.98 4 8 4H4c-.98 0-2 1.22-2 2.5S3 9 4 9zm9-3h-1v1h1c1 0 2 1.22 2 2.5S13.98 12 13 12H9c-.98 0-2-1.22-2-2.5 0-.83.42-1.64 1-2.09V6.25c-1.09.53-2 1.84-2 3.25C6 11.31 7.55 13 9 13h4c1.45 0 3-1.69 3-3.5S14.5 6 13 6z"></path></svg></a><em>Advanced:</em> Manual installation</h2>
+<p>If, for some reason, you want to install PocketMesh Peer Library from scratch to your existing project, you can do so by running</p>
+<pre><code class="hljs css language-sh">npm install pocket-mesh-peer
+</code></pre>
+<p>and by adding the library into your <code>bsconfig.json</code>:</p>
+<pre><code class="hljs css language-json">"bs-dependencies": ["pocket-mesh-peer"],
+</code></pre>
+<p>Head to the <a href="core-usage">next section</a> for instructions on how to include it to your project or browse through the <a href="https://github.com/jhrdina/tree-burst">TreeBurst source code</a>.</p>
+</span></div></article></div><div class="docLastUpdate"><em>Last updated on 15. 5. 2019</em></div><div class="docs-prevnext"><a class="docs-next button" href="/docs/core-usage"><span>Usage</span><span class="arrow-next"> →</span></a></div></div></div><nav class="onPageNav"><ul class="toc-headings"><li><a href="#initial-config">Initial config</a></li><li><a href="#running-the-compiler">Running the compiler</a></li><li><a href="#_advanced-_-manual-installation"><em>Advanced:</em> Manual installation</a></li></ul></nav></div><footer class="nav-footer" id="footer"><section class="copyright">Copyright © 2019 Jan Hrdina</section></footer></div></body></html>
