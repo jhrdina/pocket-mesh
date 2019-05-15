@@ -65,4 +65,4 @@ Immediately after the first start of your application a **new local identity** (
 
 ## Interacting with the library
 
-For all information about all the model structure and available fields of the peer library, see the [API Reference](api) and sources of [TreeBurst](https://github.com/jhrdina/tree-burst) example project.
+For all information about all the model structure and available fields of the peer library, see the [API Reference](/api) and sources of [TreeBurst](https://github.com/jhrdina/tree-burst) example project.

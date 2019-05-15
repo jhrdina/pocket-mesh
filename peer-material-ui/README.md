@@ -20,7 +20,7 @@ and add a corresponding item to the `bsconfig.json`:
 
 ## Usage
 
-[**Getting Started**](https://pocket-mesh.hrdinajan.cz/getting-started)&nbsp;&nbsp;&nbsp;&nbsp; [Reference Guide](https://pocket-mesh.hrdinajan.cz/api)&nbsp;&nbsp;&nbsp;&nbsp; [Demo project](https://github.com/jhrdina/tree-burst)
+[**Getting Started**](https://pocket-mesh.hrdinajan.cz/docs/getting-started)&nbsp;&nbsp;&nbsp;&nbsp; [Reference Guide](https://pocket-mesh.hrdinajan.cz/api)&nbsp;&nbsp;&nbsp;&nbsp; [Demo project](https://github.com/jhrdina/tree-burst)
 
 ## Run Project
 

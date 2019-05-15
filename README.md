@@ -4,7 +4,7 @@
 
 Pocket Mesh is a framework for creating collaborative P2P webapps.
 
-[**Website**](https://pocket-mesh.hrdinajan.cz) &nbsp;&nbsp;&nbsp; [Getting started](https://pocket-mesh.hrdinajan.cz/getting-started) &nbsp;&nbsp;&nbsp; [API Docs](https://pocket-mesh.hrdinajan.cz/api)
+[**Website**](https://pocket-mesh.hrdinajan.cz) &nbsp;&nbsp;&nbsp; [Getting started](https://pocket-mesh.hrdinajan.cz/docs/getting-started) &nbsp;&nbsp;&nbsp; [API Docs](https://pocket-mesh.hrdinajan.cz/api)
 
 It is written completely in ReasonML and consists of three subprojects:
 

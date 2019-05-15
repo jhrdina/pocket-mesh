@@ -68,7 +68,9 @@ module InitConfig: {
 
   /** Type representing one ICE server connection parameters. */
   type iceServer =
+    /** [Basic(url)] represents ICE server at URL [url] with no auth. */
     | Basic(string)
+    /** [WithCredentials(url, iceCredentials)] represents ICE server at URL [url] with specified credentials. */
     | WithCredentials(string, iceCredentials);
 
   type t = {

@@ -43,7 +43,7 @@ const siteConfig = {
   // For no header links in the top nav bar -> headerLinks: [],
   headerLinks: [
     {doc: 'getting-started', label: 'Docs'},
-    {page: 'test', label: 'API'},
+    {page: 'api', label: 'API', external: true},
     {href: 'https://github.com/jhrdina/pocket-mesh', external: true,  label: 'GitHub'},
     {search: true}
   ],
@@ -90,6 +90,8 @@ const siteConfig = {
       hljs.registerLanguage('reason', reasonHighlightJs)
     }
   },
+
+  separateCss: ['static/api'],
 
   // Add custom scripts here that would be placed in <script> tags.
   scripts: ['https://buttons.github.io/buttons.js'],
